@@ -1,0 +1,94 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local worktrees
+.worktrees/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Sensitive or large research data
+data/**
+!data/**/
+!data/**/.gitkeep
+!data/README.md
+datasets/
+recordings/
+
+# Generated audio
+/audio/
+outputs/
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Model checkpoints and experiment artifacts
+artifacts/
+checkpoints/**
+!checkpoints/**/
+!checkpoints/**/.gitkeep
+!checkpoints/README.md
+runs/
+wandb/
+mlruns/
+lightning_logs/
+events.out.tfevents.*
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.tflite
+*.mlmodel
+*.mlpackage/
+
+# Native / embedded / IoT build outputs
+CMakeFiles/
+cmake-build-*/
+CMakeCache.txt
+compile_commands.json
+.pio/
+*.elf
+*.hex
+*.uf2
+*.map
