@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "project": "KoF5-TTS-delirium",
+  "scope": {
+    "source": "src/kof5_tts",
+    "configs": "configs",
+    "scripts": "scripts",
+    "generated": "architecture/generated"
+  },
+  "pipeline": [
+    {
+      "id": "preprocessing",
+      "label": "전처리",
+      "input": "data/raw/wav",
+      "output": "data/interim/flac + data/processed"
+    },
+    {
+      "id": "training",
+      "label": "파인튜닝",
+      "input": "data/processed",
+      "output": "checkpoints/finetuned"
+    },
+    {
+      "id": "optimization",
+      "label": "프루닝·양자화",
+      "input": "checkpoints/finetuned",
+      "output": "checkpoints/optimized"
+    },
+    {
+      "id": "inference",
+      "label": "추론·평가",
+      "input": "checkpoints/finetuned 또는 optimized",
+      "output": "runs + 평가 문서"
+    }
+  ],
+  "python": {
+    "modules": []
+  },
+  "configs": [],
+  "scripts": [],
+  "limitations": [
+    "Python의 정적 import만 분석합니다.",
+    "동적 import와 런타임 모델 연결은 수동 검토가 필요합니다.",
+    "데이터와 체크포인트 내용은 안전을 위해 읽거나 목록화하지 않습니다."
+  ]
+}

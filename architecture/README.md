@@ -46,3 +46,26 @@ flowchart LR
 ## 결정 기록
 
 기술 선택은 [decisions/README.md](decisions/README.md)의 ADR 형식으로 기록합니다. 첫 ADR은 TTS 기준 모델이나 목표 하드웨어처럼 비교가 필요한 결정이 생겼을 때 작성합니다.
+
+## 자동 생성 구조도
+
+`yai-web`의 아키텍처 지식 맵 방식을 이 프로젝트의 초기 구조에 맞게 단순화해 적용합니다. 생성기는 `src/kof5_tts/`의 Python 모듈과 내부 import, `configs/`의 설정 파일, `scripts/`의 실행 도구, 프로젝트의 데이터·모델 흐름을 읽어 다음 파일을 만듭니다.
+
+- `generated/catalog.json`: 도구가 읽을 수 있는 전체 카탈로그
+- `generated/project-map.md`: 사람이 읽는 프로젝트 구조와 모듈 목록
+- `generated/project-map.mmd`: 별도로 렌더링할 수 있는 Mermaid 원본
+
+생성:
+
+```bash
+python3 scripts/generate_architecture.py
+```
+
+커밋된 결과가 현재 구조와 같은지 확인:
+
+```bash
+python3 scripts/generate_architecture.py --check
+python3 -m unittest scripts/test_generate_architecture.py
+```
+
+`architecture/generated/` 파일은 직접 수정하지 않습니다. 코드·설정이나 생성기를 변경한 뒤 다시 생성합니다. 현재 생성기는 초기 버전이라 정적 Python import와 정해진 폴더 경계만 다루며, 학습 프레임워크가 확정되면 모델·설정 관계와 체크포인트 메타데이터 분석을 확장합니다.
