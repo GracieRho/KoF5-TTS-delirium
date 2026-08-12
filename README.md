@@ -39,7 +39,7 @@
 └── AGENTS.md              # 저장소에서 작업할 때의 기본 원칙
 ```
 
-폴더별 역할과 팀 작업 흐름은 [docs/repository-layout.md](docs/repository-layout.md), 문서 작성 규칙은 [docs/README.md](docs/README.md), 초기 아키텍처 방향은 [architecture/README.md](architecture/README.md)에서 확인할 수 있습니다.
+폴더별 역할과 팀 작업 흐름은 [docs/repository-layout.md](docs/repository-layout.md), 워크트리·PR 방식은 [docs/contributing.md](docs/contributing.md), 문서 작성 규칙은 [docs/README.md](docs/README.md), 초기 아키텍처 방향은 [architecture/README.md](architecture/README.md)에서 확인할 수 있습니다.
 
 ## 시작하기
 
