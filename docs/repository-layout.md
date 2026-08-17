@@ -5,6 +5,7 @@
 ```text
 .
 ├── data/
+│   ├── raw/aihub/               # AI Hub key별 다운로드 원본
 │   ├── raw/wav/                 # 전달받은 원본 WAV
 │   ├── interim/flac/            # WAV에서 무손실 변환한 FLAC
 │   └── processed/
@@ -38,8 +39,8 @@
 
 ## 데이터 전달 흐름
 
-1. 원본 WAV는 `data/raw/wav/`에 두고 수정하지 않습니다.
-2. WAV→FLAC 변환 결과는 `data/interim/flac/`에 저장합니다.
+1. AI Hub 원본은 `data/raw/aihub/<dataset-key>/`, 별도 원본 WAV는 `data/raw/wav/`에 두고 수정하지 않습니다.
+2. WAV→24 kHz mono 16-bit FLAC 변환 결과는 `data/interim/flac/`에 저장합니다.
 3. 파인튜닝에 추가 분할·정규화가 필요하면 결과를 `data/processed/audio/`에 저장합니다.
 4. 오디오 경로, 텍스트, 화자 등 학습 입력 목록은 `data/processed/manifests/`에 저장합니다.
 5. 파인튜닝 설정은 `configs/finetuning/`, 결과 체크포인트는 `checkpoints/finetuned/`에 둡니다.
@@ -56,7 +57,7 @@
 
 ## 팀 작업 경계
 
-- 전처리 담당: `src/kof5_tts/preprocessing/`, `configs/preprocessing/`, `data/raw/` → `data/interim/`
+- 전처리 담당: `src/kof5_tts/preprocessing/`, `scripts/download_aihub.py`, `scripts/run_preprocessing_pipeline.py`, `data/raw/` → `data/interim/`
 - 파인튜닝 담당: `src/kof5_tts/training/`, `configs/finetuning/`, `data/processed/` → `checkpoints/finetuned/`
 - 경량화 담당: `src/kof5_tts/optimization/`, `configs/optimization/`, `checkpoints/finetuned/` → `checkpoints/optimized/`
 - 평가 담당: `src/kof5_tts/evaluation/`, 평가 설정과 `docs/`의 결과 요약

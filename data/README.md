@@ -2,9 +2,12 @@
 
 이 디렉터리는 로컬 데이터 작업 공간입니다. 실제 데이터 파일은 Git에 커밋되지 않습니다.
 
-- `raw/wav/`: 전달받은 원본 WAV. 변경하지 않고 보존합니다.
+- `raw/aihub/`: AI Hub CLI가 데이터셋 key별로 내려받고 압축 해제한 원본.
+- `raw/wav/`: 별도로 전달받은 원본 WAV. 변경하지 않고 보존합니다.
 - `interim/flac/`: WAV에서 변환한 FLAC.
 - `processed/audio/`: 분할, 정규화 등 학습 전처리를 마친 오디오.
 - `processed/manifests/`: 학습용 경로와 텍스트 등의 메타데이터.
 
 환자 식별정보나 실제 임상 데이터는 승인된 저장소와 절차가 정해지기 전까지 이 경로에도 두지 않는 것을 원칙으로 합니다.
+
+AI Hub 다운로드와 24 kHz mono 16-bit FLAC 변환 방법은 [`docs/data-preprocessing.md`](../docs/data-preprocessing.md)를 따릅니다. 원본과 변환 결과는 모두 `.gitignore` 대상입니다.
