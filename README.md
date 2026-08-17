@@ -13,7 +13,7 @@
 
 ## 현재 범위
 
-현재 저장소에는 상세 구현 대신 프로젝트 문서 구조, 데이터·체크포인트 경로와 기본 저장소 정책을 마련했습니다. 아래 항목은 후속 요구사항이 정해진 뒤 확정합니다.
+현재 저장소에는 프로젝트 문서 구조, 데이터·체크포인트 경로와 AI Hub 다운로드·오디오 전처리 도구를 마련했습니다. 아래 항목은 후속 요구사항이 정해진 뒤 확정합니다.
 
 - 대상 사용 시나리오와 임상 콘텐츠
 - TTS 모델 및 학습·추론 프레임워크
@@ -43,7 +43,18 @@
 
 ## 시작하기
 
-구현 기술과 실행 명령은 아직 확정하지 않았습니다. 상세 요구사항이 정해지면 이 섹션에 개발 환경 구성, 테스트, 학습·추론 방법을 추가합니다.
+AI Hub 데이터셋 key와 선택 file key를 확인한 뒤 다운로드부터 24 kHz mono 16-bit FLAC 변환까지 실행할 수 있습니다.
+
+```bash
+cp -n .env.example .env
+# .env의 AIHUB_APIKEY 값을 로컬에서만 입력
+python3 scripts/run_preprocessing_pipeline.py \
+  --dataset-key <DATASET_KEY> \
+  --file-key <FILE_KEY> \
+  --jobs 4
+```
+
+AI Hub 승인, macOS CLI 설치, 선택 다운로드와 변환 재실행 방법은 [전처리 가이드](docs/data-preprocessing.md)를 따릅니다.
 
 ## 안전 및 데이터 원칙
 

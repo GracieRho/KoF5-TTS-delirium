@@ -25,9 +25,15 @@ GENERATED_FILENAMES = ("catalog.json", "project-map.md", "project-map.mmd")
 CONFIG_SUFFIXES = {".json", ".toml", ".yaml", ".yml"}
 PIPELINE_STAGES = (
     {
+        "id": "acquisition",
+        "label": "AI Hub 다운로드",
+        "input": "승인된 dataset/file key",
+        "output": "data/raw/aihub",
+    },
+    {
         "id": "preprocessing",
         "label": "전처리",
-        "input": "data/raw/wav",
+        "input": "data/raw/aihub + data/raw/wav",
         "output": "data/interim/flac + data/processed",
     },
     {
@@ -80,10 +86,12 @@ def module_layer(name: str) -> str:
     return parts[1] if len(parts) > 1 else "root"
 
 
-def resolve_import_from(current: str, imported: str | None, level: int) -> str:
+def resolve_import_from(
+    current: str, imported: str | None, level: int, *, current_is_package: bool = False
+) -> str:
     if level == 0:
         return imported or ""
-    current_package = current.split(".")[:-1]
+    current_package = current.split(".") if current_is_package else current.split(".")[:-1]
     keep = max(0, len(current_package) - level + 1)
     parts = current_package[:keep]
     if imported:
@@ -99,7 +107,12 @@ def parse_python_module(path: Path, source_root: Path = SOURCE_ROOT) -> dict[str
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names if alias.name.startswith("kof5_tts"))
         elif isinstance(node, ast.ImportFrom):
-            imported = resolve_import_from(name, node.module, node.level)
+            imported = resolve_import_from(
+                name,
+                node.module,
+                node.level,
+                current_is_package=path.name == "__init__.py",
+            )
             if imported.startswith("kof5_tts"):
                 imports.add(imported)
     return {
@@ -143,7 +156,7 @@ def executable_scripts(scripts_root: Path = SCRIPTS_ROOT) -> list[str]:
     return [
         f"scripts/{path.name}"
         for path in sorted(scripts_root.glob("*.py"))
-        if not path.name.startswith("test_") and path.name != Path(__file__).name
+        if not path.name.startswith(("_", "test_")) and path.name != Path(__file__).name
     ]
 
 
@@ -186,7 +199,10 @@ def markdown_table(headers: list[str], rows: Iterable[list[str]]) -> str:
 def render_mermaid(catalog: dict[str, Any]) -> str:
     lines = [
         "flowchart LR",
-        '  raw["원본 WAV"] --> preprocess["전처리"]',
+        '  aihub["승인된 AI Hub 데이터"] --> download["aihubshell 다운로드"]',
+        '  download --> raw["AI Hub 원본 WAV"]',
+        '  local["별도 원본 WAV"] --> preprocess["전처리"]',
+        '  raw --> preprocess',
         '  preprocess --> flac["중간 FLAC"]',
         '  preprocess --> processed["학습 데이터·manifest"]',
         '  processed --> finetune["파인튜닝"]',

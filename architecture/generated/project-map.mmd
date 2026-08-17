@@ -1,5 +1,8 @@
 flowchart LR
-  raw["원본 WAV"] --> preprocess["전처리"]
+  aihub["승인된 AI Hub 데이터"] --> download["aihubshell 다운로드"]
+  download --> raw["AI Hub 원본 WAV"]
+  local["별도 원본 WAV"] --> preprocess["전처리"]
+  raw --> preprocess
   preprocess --> flac["중간 FLAC"]
   preprocess --> processed["학습 데이터·manifest"]
   processed --> finetune["파인튜닝"]
@@ -8,3 +11,8 @@ flowchart LR
   optimize --> device["온디바이스 후보"]
   tuned --> evaluate["품질·성능 평가"]
   device --> evaluate
+
+  subgraph code["코드 레이어"]
+    layer_preprocessing["preprocessing (3)"]
+    layer_root["root (1)"]
+  end

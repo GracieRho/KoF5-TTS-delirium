@@ -29,6 +29,14 @@ class ArchitectureGeneratorTests(unittest.TestCase):
             "kof5_tts.utils",
         )
 
+    def test_package_relative_import_is_resolved(self) -> None:
+        self.assertEqual(
+            MODULE.resolve_import_from(
+                "kof5_tts.preprocessing", "audio", 1, current_is_package=True
+            ),
+            "kof5_tts.preprocessing.audio",
+        )
+
     def test_python_module_finds_internal_imports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "kof5_tts"
@@ -43,6 +51,15 @@ class ArchitectureGeneratorTests(unittest.TestCase):
             record["imports"],
             ["kof5_tts.evaluation", "kof5_tts.preprocessing"],
         )
+
+    def test_package_init_finds_relative_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "kof5_tts"
+            path = root / "preprocessing" / "__init__.py"
+            path.parent.mkdir(parents=True)
+            path.write_text("from .audio import convert\n", encoding="utf-8")
+            record = MODULE.parse_python_module(path, root)
+        self.assertEqual(record["imports"], ["kof5_tts.preprocessing.audio"])
 
     def test_generated_outputs_are_deterministic(self) -> None:
         catalog = MODULE.build_catalog()
