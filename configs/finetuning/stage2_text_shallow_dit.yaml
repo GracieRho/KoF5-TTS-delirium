@@ -1,0 +1,19 @@
+run_name: s2-text-shallow-dit
+dataset_name: ko_pilot
+vocab_path: data/processed/manifests/ko_pilot/vocab.txt
+trainable_groups:
+  - text_embedding
+  - text_encoder
+  - dit_blocks:0-5
+learning_rate: 2.0e-5
+epochs: 40
+num_warmup_updates: 1000
+save_per_updates: 2500
+last_per_updates: 2500
+keep_last_n_checkpoints: 4
+batch_size_per_gpu: 6400
+batch_size_type: frame
+max_samples: 32
+grad_accumulation_steps: 4
+max_grad_norm: 1.0
+logger: tensorboard
