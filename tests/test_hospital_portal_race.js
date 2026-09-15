@@ -183,6 +183,27 @@ async function run() {
   assert.equal(elements['registration-name'].value, '', 'logout clears the pending patient name');
 
   latePost = null;
+  postStatus = 201;
+  elements.email.value = 'staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await submit();
+  lateReadiness = pending();
+  elements['registration-number'].value = 'TEST-SNAPSHOT';
+  elements['registration-name'].value = '가상 A 환자';
+  elements['registration-birth'].value = '1940-01-01';
+  const snapshot = register();
+  await pause();
+  for (const id of ['registration-hospital', 'registration-number', 'registration-name', 'registration-birth'])
+    assert.equal(elements[id].disabled, true, `${id} is locked while approval is pending`);
+  elements['registration-birth'].value = '2000-02-02'; // Simulate an out-of-band draft change despite the real UI lock.
+  lateReadiness.resolve(reply(200, [{ hospital_ref: 'TEST-H1', ready: true }]));
+  await snapshot;
+  assert.deepEqual(registrationPosts.at(-1).payload, {
+    hospital_ref: 'TEST-H1', ehr_patient_ref: 'TEST-SNAPSHOT', staff_display_name: '가상 A 환자', birth_date: '1940-01-01',
+  }, 'all registration fields come from the same submit snapshot');
+  assert.equal(elements['registration-birth'].disabled, false, 'completion unlocks the form');
+  elements.logout.handlers.click();
+
   lateReadiness = pending();
   elements.email.value = 'staff@example.invalid';
   elements.password.value = 'synthetic';

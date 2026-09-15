@@ -111,6 +111,8 @@
     const state = { config: null, token: null, generation: 0, request: 0,
       registrationRequest: 0, patients: [], selected: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
+    const registrationFields = ['registration-hospital', 'registration-number', 'registration-name', 'registration-birth'];
+    const lockRegistration = locked => registrationFields.forEach(id => { $(id).disabled = locked; });
     const encounter = patient => patient.encounter_id ?
       `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
     const delivery = { pending: '전달 대기', delivered: '전달됨', cancelled: '취소됨' };
@@ -131,6 +133,7 @@
       $('registration-number').value = '';
       $('registration-name').value = '';
       $('registration-birth').value = '';
+      lockRegistration(false);
       $('registration-button').disabled = false;
       $('email').value = '';
       $('password').value = '';
@@ -312,6 +315,7 @@
       const hospital = $('registration-hospital').value;
       const patientRef = $('registration-number').value.trim();
       const name = $('registration-name').value.trim();
+      const birthDate = $('registration-birth').value;
       if (!state.token || $('registration-card').hidden || $('registration-button').disabled
           || !state.readyHospitals.includes(hospital) || !patientRef || !name) return;
       const generation = state.generation;
@@ -320,6 +324,7 @@
       const current = () => generation === state.generation && request === state.registrationRequest
         && token === state.token;
       $('registration-button').disabled = true;
+      lockRegistration(true);
       $('registration-status').textContent = '등록 권한과 기관 승인을 다시 확인하고 있습니다.';
       try {
         const readiness = await supabase('/rest/v1/hospital_registration_ready?select=hospital_ref,ready', token, generation);
@@ -330,7 +335,7 @@
           return;
         }
         const payload = { hospital_ref: hospital, ehr_patient_ref: patientRef, staff_display_name: name };
-        if ($('registration-birth').value) payload.birth_date = $('registration-birth').value;
+        if (birthDate) payload.birth_date = birthDate;
         const response = await fetch(state.config.url + '/rest/v1/hospital_patient_registration', {
           method: 'POST',
           headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`,
@@ -361,7 +366,10 @@
       } catch (_) {
         if (current()) $('registration-status').textContent = '등록을 완료하지 못했습니다. 연결과 권한을 다시 확인하세요.';
       } finally {
-        if (current()) $('registration-button').disabled = false;
+        if (current()) {
+          $('registration-button').disabled = false;
+          lockRegistration(false);
+        }
       }
     });
     $('registration-hospital').addEventListener('change', () => {
