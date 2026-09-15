@@ -12,7 +12,7 @@ import wave
 
 import httpx
 
-from kof5_tts.companion import ConversationSession, UNVERIFIED_SCHEDULE_REPLY, policy_reply
+from kof5_tts.companion import ConversationSession, MEDICATION_WORD_PATTERN, UNVERIFIED_SCHEDULE_REPLY, policy_reply
 
 
 @dataclass(frozen=True)
@@ -289,8 +289,8 @@ def run_synthetic_text_pipeline(
     if reply is None:
         if namespace == "hospital_context":
             # Approved non-medical hospital wording is read unchanged; never let an LLM rewrite a schedule.
-            safe_fact = not search(r"약|복용|처방|진단|먹으세요|먹어도|치료하세요|괜찮아|안전합니다", known_fact)
-            safe_question = not search(r"결과|진단|치료|약|괜찮아|안전해", transcript)
+            safe_fact = not search(rf"{MEDICATION_WORD_PATTERN}|복용|처방|진단|먹으세요|먹어도|치료하세요|괜찮아|안전합니다", known_fact)
+            safe_question = not search(rf"결과|진단|치료|{MEDICATION_WORD_PATTERN}|괜찮아|안전해", transcript)
             reply = known_fact if hospital_fact_question(transcript) and safe_question and 1 <= len(known_fact) <= 200 and safe_fact else \
                 "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
         elif not known_fact.strip() or _unsupported_fact_question(transcript, known_fact):

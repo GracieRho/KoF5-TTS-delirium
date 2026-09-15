@@ -17,6 +17,7 @@ RISK_PHRASES = (
     "통증이 심", "넘어졌", "낙상했", "너무 어지러워", "살려줘",
 )
 UNVERIFIED_SCHEDULE_REPLY = "그 시간은 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
+MEDICATION_WORD_PATTERN = r"(?<![가-힣A-Za-z0-9])약(?:을|은|이|물|\s|$)"
 WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
 
@@ -98,7 +99,7 @@ def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
     if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
         return "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
     if any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹", "약 먹어야")) or re.search(
-        r"(?:약|퇴원|수술|검사|치료).{0,24}(?:먹어도|해도|받아도|받아야|해야|괜찮아|필요해|좋아)",
+        rf"(?:{MEDICATION_WORD_PATTERN}|퇴원|수술|검사|치료).{{0,24}}(?:먹어도|해도|받아도|받아야|해야|괜찮아|필요해|좋아)",
         transcript,
     ):
         return "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."

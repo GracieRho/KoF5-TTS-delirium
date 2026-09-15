@@ -145,6 +145,14 @@ class CloudPrototypeTests(unittest.TestCase):
                 client, "수민아 CT 검사는 몇 시야?", "DIRECTED", approved, credentials,
                 namespace="hospital_context",
             ), (approved, b"synthetic-mp3"))
+            for question, reserved in (
+                ("수민아 CT 검사 예약은 몇 시야?", "CT 검사 예약은 오늘 오후 4시입니다."),
+                ("수민아 면회 예약은 몇 시야?", "수민이 면회 예약은 오늘 오후 4시입니다."),
+            ):
+                self.assertEqual(run_synthetic_text_pipeline(
+                    client, question, "DIRECTED", reserved, credentials,
+                    namespace="hospital_context",
+                ), (reserved, b"synthetic-mp3"))
             family_question, _ = run_synthetic_text_pipeline(
                 client, "우리 제주도 언제 갔었어?", "DIRECTED", approved, credentials,
                 namespace="hospital_context",
@@ -160,7 +168,7 @@ class CloudPrototypeTests(unittest.TestCase):
                 namespace="hospital_context",
             )
             self.assertIn("확인된 정보가 없어서", result_question)
-        self.assertEqual(hosts, ["api.elevenlabs.io"] * 4)
+        self.assertEqual(hosts, ["api.elevenlabs.io"] * 6)
 
     def test_llm_extra_hospital_or_date_claim_does_not_reach_tts(self) -> None:
         for invented in ("내일 CT 검사를 받으러 가.", "2027년 5월에 제주도 갔었어.",

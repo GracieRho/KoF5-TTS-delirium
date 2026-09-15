@@ -378,6 +378,43 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 403)
             self.assertEqual(pipeline.call_count, 3, "withdrawal blocks the provider")
 
+    def test_paired_visit_reservation_reaches_exact_hospital_reply(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {
+            "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+            "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {
+            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+            "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
+        }
+        approved = "수민이 면회 예약은 오늘 오후 4시입니다."
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            self.assertTrue(request.url.path.endswith("/patient_hospital_turn_context"))
+            return httpx.Response(200, json=[{"authorized": True, "facts": [{
+                "category": "visit_schedule", "content": approved,
+                "verified_at": "2026-09-16T01:00:00Z", "valid_until": None,
+            }]}])
+
+        async_client_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"mp3"), patch(
+            "kof5_tts.cloud_prototype.generate_short_reply",
+            side_effect=AssertionError("approved hospital fact must not reach LLM"),
+        ):
+            result = self.client.post(path, json={
+                "transcript": "수민아 면회 예약은 몇 시야?", "label": "DIRECTED",
+            }, headers=headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["reply"], approved)
+
     def test_due_hospital_message_voices_only_atomic_approved_original(self) -> None:
         message_id = "00000000-0000-4000-8000-000000000123"
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/message/{message_id}/audio"
