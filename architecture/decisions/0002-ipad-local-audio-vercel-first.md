@@ -23,6 +23,7 @@
 
 ## 결과와 남은 검증
 
-- VAD만으로 DIRECTED와 AMBIENT를 구분할 수 없다. 로컬 STT·활성화가 충분한지 측정하기 전에는 후보 오디오 일부가 hosted STT로 일시 전송될 수 있다. 실제 환자 시험 전에 안전 게이트 Gate 3의 전송·폐기·고지 절차와 제공업체 정책을 확정한다.
+- 작업 전용 iPad 앱은 로컬 PCM 후보를 Apple Speech의 기기 내 한국어 인식에만 넘기는 경로를 컴파일했다. [Apple Speech 요청 설정](https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition)에 따라 해당 언어·기기가 `supportsOnDeviceRecognition`을 보고해야 전사를 켜고 `requiresOnDeviceRecognition`을 적용한다. 실제 iPad의 한국어 지원·정확도는 미검증이다.
+- VAD와 전사만으로 DIRECTED와 AMBIENT 또는 환자·의료진·TV 화자를 구분할 수 없다. 로컬 활성화가 충분한지 측정하기 전에는 수동 자가 음성 시험의 후보 오디오가 hosted STT로 일시 전송될 수 있다. 실제 환자 시험 전에 안전 게이트 Gate 3의 전송·폐기·고지 절차와 제공업체 정책을 확정한다.
 - Vercel은 배포 선호이며 운영 검증을 통과한 확정 인프라가 아니다. 임상 데이터 저장·권한·지역·장애 대응과 WebSocket 재연결 상태를 별도 검증한다.
 - 이 ADR은 실제 환자 대상 시험을 승인하지 않는다. ADR-0001의 네 안전 게이트와 기관 검토가 계속 적용된다.

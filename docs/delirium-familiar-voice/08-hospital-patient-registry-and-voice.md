@@ -46,7 +46,7 @@ FHIR는 교환 형식의 기준이며 위 테이블은 **이 제품이 필요한
 
 ### iPad 화자 판정 구현 전 검증
 
-[Apple Speech](https://developer.apple.com/documentation/speech/)는 전사·VAD 기능을, [Sound Analysis](https://developer.apple.com/documentation/SoundAnalysis)는 소리 분류와 사용자 모델 경로를 문서화한다. 이 문서들만으로 **등록한 특정 환자와 발화자의 일치 판정**이 제공된다고 볼 수 없다. [SpeechBrain ECAPA-TDNN](https://github.com/speechbrain/speechbrain/blob/develop/speechbrain/inference/speaker.py)은 16 kHz 음성의 임베딩·유사도 비교 후보지만, 공개 [VoxCeleb 평가](https://github.com/speechbrain/speechbrain/blob/develop/recipes/VoxCeleb/SpeakerRec/README.md)를 한국어 고령 환자·병실 소음·짧은 발화 성능으로 그대로 옮길 수 없다. [Apple Core ML Tools](https://github.com/apple/coremltools/)는 PyTorch 모델 변환 경로를 제공하지만, 해당 화자 모델의 변환 성공·iPad 지연·전력·정확도는 별도 실측이 필요하다. 따라서 모델·임계값·클라우드/기기 내 특징 생성 위치는 현 단계에서 확정하지 않는다.
+[Apple Speech](https://developer.apple.com/documentation/speech/)는 전사를, [Sound Analysis](https://developer.apple.com/documentation/SoundAnalysis)는 소리 분류와 사용자 모델 경로를 문서화한다. 현재 iPad 내부 시험의 에너지 기반 VAD와 Apple Speech의 기기 내 전사는 **등록한 특정 환자와 발화자의 일치 판정**을 제공하지 않는다. 한국어 기기 내 전사 지원도 실제 iPad에서 확인해야 한다. [SpeechBrain ECAPA-TDNN](https://github.com/speechbrain/speechbrain/blob/develop/speechbrain/inference/speaker.py)은 16 kHz 음성의 임베딩·유사도 비교 후보지만, 공개 [VoxCeleb 평가](https://github.com/speechbrain/speechbrain/blob/develop/recipes/VoxCeleb/SpeakerRec/README.md)를 한국어 고령 환자·병실 소음·짧은 발화 성능으로 그대로 옮길 수 없다. [Apple Core ML Tools](https://github.com/apple/coremltools/)는 PyTorch 모델 변환 경로를 제공하지만, 해당 화자 모델의 변환 성공·iPad 지연·전력·정확도는 별도 실측이 필요하다. 따라서 모델·임계값·클라우드/기기 내 특징 생성 위치는 현 단계에서 확정하지 않는다.
 
 ## 병원 화면과 접근 경계
 

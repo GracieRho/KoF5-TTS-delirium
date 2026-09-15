@@ -43,7 +43,7 @@
 
 폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR 목록](architecture/decisions/README.md)에서 확인할 수 있습니다. 병원 환자 등록·화자 특징의 최소 컬럼은 [병원 등록 설계](docs/delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)에 정리했습니다.
 
-iPad의 기기 내 발화 후보 감지와 수동 자가 음성 클라우드 연결은 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 기본적으로 후보 오디오는 폐기하고, 시험자 본인이 확인한 후보 한 건만 내부 API로 직접 전송할 수 있습니다. 자동 전송과 환자 화자 판정은 아직 없습니다.
+iPad의 기기 내 발화 후보 감지·지원되는 기기의 한국어 로컬 전사와 수동 자가 음성 클라우드 연결은 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 기본적으로 후보 오디오는 폐기하고, 시험자 본인이 확인한 후보 한 건만 내부 API로 직접 전송할 수 있습니다. 자동 서버 전송과 환자 화자 판정은 아직 없습니다.
 
 ## 합성 대화 흐름 확인
 
