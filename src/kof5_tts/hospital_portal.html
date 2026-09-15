@@ -122,6 +122,17 @@
           <div id="synthetic-alert-items" class="facts"></div>
           <div id="synthetic-alert-status" class="status" role="status" aria-live="polite"></div>
         </section>
+        <section id="synthetic-voice-section" class="pairing" aria-labelledby="synthetic-voice-title" hidden>
+          <h3 id="synthetic-voice-title">합성 30초 마이크 시험</h3>
+          <p class="small">담당 직원이 자신의 목소리로만 시험합니다. 실제 환자·주변인 음성은 녹음하지 마세요. 중단 시 앱의 오디오 참조를 해제하며 추가 보관·전송·화자 특징 생성은 하지 않습니다.</p>
+          <div id="synthetic-voice-profile" class="small"></div>
+          <div class="section-title">
+            <button id="synthetic-voice-start" type="button" disabled>본인 음성 시험 시작</button>
+            <button id="synthetic-voice-stop" type="button" disabled>중단하고 오디오 참조 해제</button>
+          </div>
+          <div id="synthetic-voice-duration" class="small">0.0초 / 최대 30초</div>
+          <div id="synthetic-voice-status" class="status" role="status" aria-live="polite"></div>
+        </section>
         <section id="synthetic-message-section" class="pairing" aria-labelledby="synthetic-message-title" hidden>
           <h3 id="synthetic-message-title">합성 병원 메시지 초안·원문 승인</h3>
           <p class="small">고정 합성 환자와 담당 직원 두 명의 내부 시험입니다. 두 번째 직원이 원문을 승인하면 예약 전달 대기 기록이 생깁니다. 실제 환자에게 전달됐다는 뜻은 아닙니다.</p>
@@ -157,9 +168,10 @@
   </main>
   <script>
     const state = { config: null, token: null, generation: 0, request: 0,
-      registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, alertRequest: 0,
+      registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, alertRequest: 0, voiceRequest: 0,
       patients: [], selected: null, pairingPatient: null, messagePatient: null, messageEncounterId: null,
       alertPatient: null, alertEncounterId: null, alertBusy: false,
+      voicePatient: null, voiceEncounterId: null, voiceReady: false, voiceCapture: null,
       staffUserId: null, messageBusy: false, messageUncertain: false,
       uncertainDraft: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
@@ -176,6 +188,7 @@
     }).format(new Date(timestamp)) + ' (한국 시간)';
 
     function clearSession(message = '로그아웃했습니다.') {
+      stopVoiceCapture(true);
       ++state.generation;
       ++state.request;
       ++state.registrationRequest;
@@ -183,6 +196,7 @@
       ++state.pairingRequest;
       ++state.messageRequest;
       ++state.alertRequest;
+      ++state.voiceRequest;
       state.token = null;
       state.staffUserId = null;
       state.patients = [];
@@ -193,6 +207,9 @@
       state.alertPatient = null;
       state.alertEncounterId = null;
       state.alertBusy = false;
+      state.voicePatient = null;
+      state.voiceEncounterId = null;
+      state.voiceReady = false;
       state.messageBusy = false;
       state.messageUncertain = false;
       state.uncertainDraft = null;
@@ -220,6 +237,12 @@
       $('synthetic-alert-status').textContent = '';
       $('synthetic-alert-refresh').disabled = false;
       $('synthetic-alert-sweep').disabled = false;
+      $('synthetic-voice-section').hidden = true;
+      $('synthetic-voice-profile').textContent = '';
+      $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
+      $('synthetic-voice-status').textContent = '';
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-stop').disabled = true;
       lockRegistration(false);
       $('registration-button').disabled = false;
       $('email').value = '';
@@ -259,6 +282,7 @@
     }
 
     async function showPatient(patient) {
+      stopVoiceCapture(true);
       const preserveForm = state.token && state.staffUserId
         && state.selected === patient.patient_id && state.messagePatient?.patient_id === patient.patient_id
         && state.messageEncounterId === patient.encounter_id && !!patient.encounter_id
@@ -272,12 +296,16 @@
       ++state.pairingRequest;
       ++state.messageRequest;
       ++state.alertRequest;
+      ++state.voiceRequest;
       state.pairingPatient = null;
       state.messagePatient = null;
       state.messageEncounterId = null;
       state.alertPatient = null;
       state.alertEncounterId = null;
       state.alertBusy = false;
+      state.voicePatient = null;
+      state.voiceEncounterId = null;
+      state.voiceReady = false;
       state.messageBusy = false;
       if (!recoverDraft) {
         state.messageUncertain = false;
@@ -290,6 +318,12 @@
       $('synthetic-alert-status').textContent = '';
       $('synthetic-alert-refresh').disabled = false;
       $('synthetic-alert-sweep').disabled = false;
+      $('synthetic-voice-section').hidden = true;
+      $('synthetic-voice-profile').textContent = '';
+      $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
+      $('synthetic-voice-status').textContent = '';
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-stop').disabled = true;
       $('pairing-user-id').value = '';
       $('pairing-form').hidden = false;
       $('pairing-status').textContent = '';
@@ -362,6 +396,8 @@
         $('detail-card').hidden = false;
         if (patient.patient_id === syntheticPatientId && state.staffUserId && current())
           await loadAlertDashboard(patient);
+        if (patient.patient_id === syntheticPatientId && state.staffUserId && current())
+          await loadSyntheticVoicePanel(patient);
         if (patient.patient_id === syntheticPatientId && current()) {
           try {
             const id = encodeURIComponent(patient.patient_id);
@@ -425,6 +461,151 @@
         throw new Error(String(response.status));
       }
       return response.json();
+    }
+
+    const voiceProfileLabel = { none: '기록 없음', pending: '합성 메타데이터 대기',
+      active: '합성 메타데이터 활성', revoked: '합성 메타데이터 철회', deleted: '합성 메타데이터 삭제' };
+
+    function stopVoiceCapture(silent = false, reason = '수동 중단') {
+      const capture = state.voiceCapture;
+      if (!capture) return;
+      state.voiceCapture = null;
+      capture.active = false;
+      clearInterval(capture.tick);
+      clearTimeout(capture.deadline);
+      capture.recorder.ondataavailable = null;
+      capture.recorder.onerror = null;
+      capture.recorder.onstop = null;
+      try { if (capture.recorder.state !== 'inactive') capture.recorder.stop(); } catch (_) { /* tracks still close */ }
+      for (const track of capture.stream.getTracks()) track.stop();
+      capture.chunks.length = 0;
+      const seconds = (Date.now() - capture.startedAt) / 1000;
+      capture.stream = null;
+      capture.recorder = null;
+      if (!silent) {
+        $('synthetic-voice-duration').textContent = `${seconds.toFixed(1)}초 / 30초 시험 목표`;
+        $('synthetic-voice-status').textContent = `${reason}. 마이크를 중단하고 앱의 오디오 참조를 해제했습니다. 추가 보관·전송, 환자 화자 확인·프로필 생성은 하지 않았습니다.`;
+        $('synthetic-voice-start').disabled = !state.voiceReady;
+        $('synthetic-voice-stop').disabled = true;
+      }
+    }
+
+    async function voiceReadyRpc(token, generation) {
+      const response = await fetch(state.config.url + '/rest/v1/rpc/synthetic_voice_enrollment_ready', {
+        method: 'POST', headers: { apikey: state.config.publishable_key,
+          Authorization: `Bearer ${token}`, 'Content-Profile': 'api', 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!response.ok) {
+        if (generation === state.generation && token === state.token && [401, 403].includes(response.status))
+          clearSession('합성 음성 시험 직원 권한이 유효하지 않아 정보를 숨겼습니다.');
+        throw new Error(String(response.status));
+      }
+      return response.json();
+    }
+
+    async function loadSyntheticVoicePanel(patient) {
+      const generation = state.generation;
+      const detailRequest = state.request;
+      const request = ++state.voiceRequest;
+      const token = state.token;
+      const staffId = state.staffUserId;
+      const patientId = patient.patient_id;
+      const encounterId = patient.encounter_id;
+      const current = () => generation === state.generation && detailRequest === state.request
+        && request === state.voiceRequest && token === state.token && staffId === state.staffUserId
+        && state.selected === patientId && patient.encounter_id === encounterId;
+      $('synthetic-voice-section').hidden = true;
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-stop').disabled = true;
+      state.voicePatient = null;
+      state.voiceEncounterId = null;
+      state.voiceReady = false;
+      if (!token || !staffId || patientId !== syntheticPatientId || !encounterId) return;
+      try {
+        const rows = await voiceReadyRpc(token, generation);
+        if (!current()) return;
+        if (!Array.isArray(rows) || rows.length !== 1 || rows[0].patient_id !== patientId
+            || !voiceProfileLabel[rows[0].voice_profile_state]
+            || ![true, false].includes(rows[0].ready)) return;
+        state.voicePatient = patient;
+        state.voiceEncounterId = encounterId;
+        state.voiceReady = rows[0].ready;
+        $('synthetic-voice-section').hidden = false;
+        $('synthetic-voice-profile').textContent = `현재 입원의 DB 합성 음성 프로필 상태: ${voiceProfileLabel[rows[0].voice_profile_state]}. 실제 환자 목소리 등록·검증 결과가 아닙니다.`;
+        $('synthetic-voice-start').disabled = !state.voiceReady;
+        $('synthetic-voice-status').textContent = state.voiceReady
+          ? '합성 준비 조건만 확인했습니다. 시험자 본인 음성으로만 30초 이내 마이크 시험을 시작할 수 있습니다.'
+          : '합성 준비 조건이 충족되지 않았습니다. 마이크 시험을 시작하지 않습니다.';
+      } catch (_) {
+        if (current()) $('detail-status').textContent += ' 합성 음성 시험 준비 결과를 확인하지 못했습니다.';
+      }
+    }
+
+    async function startVoiceCapture() {
+      const patient = state.voicePatient;
+      if (!patient || !state.voiceReady || state.voiceCapture || $('synthetic-voice-section').hidden
+          || $('synthetic-voice-start').disabled || state.selected !== patient.patient_id
+          || state.voiceEncounterId !== patient.encounter_id) return;
+      const generation = state.generation;
+      const detailRequest = state.request;
+      const request = ++state.voiceRequest;
+      const token = state.token;
+      const staffId = state.staffUserId;
+      const encounterId = patient.encounter_id;
+      const current = () => generation === state.generation && detailRequest === state.request
+        && request === state.voiceRequest && token === state.token && staffId === state.staffUserId
+        && state.selected === patient.patient_id && state.voicePatient === patient
+        && state.voiceEncounterId === encounterId && patient.encounter_id === encounterId;
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-status').textContent = '직원 자격을 다시 확인한 뒤 시험자 본인 마이크 권한을 요청합니다.';
+      let stream = null;
+      try {
+        const rows = await voiceReadyRpc(token, generation);
+        if (!current()) return;
+        if (!Array.isArray(rows) || rows.length !== 1 || rows[0].ready !== true
+            || rows[0].patient_id !== syntheticPatientId) {
+          state.voiceReady = false;
+          $('synthetic-voice-section').hidden = true;
+          return;
+        }
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder !== 'function')
+          throw new Error('browser recording unavailable');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (!current()) {
+          for (const track of stream.getTracks()) track.stop();
+          return;
+        }
+        const recorder = new MediaRecorder(stream);
+        const capture = { stream, recorder, chunks: [], startedAt: Date.now(),
+          active: true, tick: null, deadline: null };
+        recorder.ondataavailable = event => {
+          if (capture.active && current() && event.data?.size) capture.chunks.push(event.data);
+        };
+        recorder.onerror = () => { if (state.voiceCapture === capture) stopVoiceCapture(false, '마이크 오류'); };
+        recorder.onstop = () => { if (state.voiceCapture === capture) stopVoiceCapture(false, '마이크 종료'); };
+        recorder.start(1000);
+        state.voiceCapture = capture;
+        capture.tick = setInterval(() => {
+          if (!current() || state.voiceCapture !== capture) return;
+          const seconds = (Date.now() - capture.startedAt) / 1000;
+          $('synthetic-voice-duration').textContent = `${seconds.toFixed(1)}초 / 최대 30초`;
+          if (seconds >= 30) stopVoiceCapture(false, '30초 시험 상한 도달');
+        }, 250);
+        capture.deadline = setTimeout(() => {
+          if (state.voiceCapture === capture) stopVoiceCapture(false, '30초 시험 상한 도달');
+        }, 30000);
+        $('synthetic-voice-stop').disabled = false;
+        $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
+        $('synthetic-voice-status').textContent = '시험자 본인 음성을 메모리에서만 녹음 중입니다. 중단 시 앱의 오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
+      } catch (_) {
+        if (stream) for (const track of stream.getTracks()) track.stop();
+        if (current()) {
+          $('synthetic-voice-start').disabled = false;
+          $('synthetic-voice-stop').disabled = true;
+          $('synthetic-voice-status').textContent = '마이크 권한·브라우저 녹음 기능을 확인하지 못했습니다. 오디오는 전송·저장하지 않았습니다.';
+        }
+      }
     }
 
     const alertState = { created: '경고 생성 · 포털 표시 미확인',
@@ -780,11 +961,13 @@
     }
 
     function renderPatients(patients) {
+      stopVoiceCapture(true);
       ++state.request;
       ++state.queueRequest;
       ++state.pairingRequest;
       ++state.messageRequest;
       ++state.alertRequest;
+      ++state.voiceRequest;
       state.selected = null;
       state.pairingPatient = null;
       state.messagePatient = null;
@@ -792,6 +975,9 @@
       state.alertPatient = null;
       state.alertEncounterId = null;
       state.alertBusy = false;
+      state.voicePatient = null;
+      state.voiceEncounterId = null;
+      state.voiceReady = false;
       state.messageBusy = false;
       state.messageUncertain = false;
       state.uncertainDraft = null;
@@ -803,6 +989,12 @@
       $('synthetic-alert-status').textContent = '';
       $('synthetic-alert-refresh').disabled = false;
       $('synthetic-alert-sweep').disabled = false;
+      $('synthetic-voice-section').hidden = true;
+      $('synthetic-voice-profile').textContent = '';
+      $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
+      $('synthetic-voice-status').textContent = '';
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-stop').disabled = true;
       $('pairing-user-id').value = '';
       $('pairing-form').hidden = false;
       $('pairing-status').textContent = '';
@@ -955,6 +1147,8 @@
         return loadAlertDashboard(state.alertPatient);
     });
     $('synthetic-alert-sweep').addEventListener('click', sweepSyntheticAlerts);
+    $('synthetic-voice-start').addEventListener('click', startVoiceCapture);
+    $('synthetic-voice-stop').addEventListener('click', () => stopVoiceCapture(false, '직원이 중단'));
     $('synthetic-message-review-button').addEventListener('click', () => {
       if (!state.messageUncertain || $('synthetic-message-review-button').hidden
           || $('synthetic-message-section').hidden || !state.messagePatient

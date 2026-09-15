@@ -34,6 +34,7 @@ async function run() {
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -300,6 +301,7 @@ async function runPairing() {
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -427,6 +429,7 @@ async function runSyntheticMessage() {
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -455,6 +458,8 @@ async function runSyntheticMessage() {
     if (url.includes('/hospital_context_current?patient_id=eq.')) return reply(200, []);
     if (url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, approvedMessages);
     if (url.includes('/rpc/synthetic_alert_staff_ready')) return reply(200, [{ ready: false, patient_id: null }]);
+    if (url.includes('/rpc/synthetic_voice_enrollment_ready')) return reply(200,
+      [{ ready: false, patient_id: null, voice_profile_state: null }]);
     if (url.includes('/synthetic_device_pairing_ready')) return reply(pairingReadyStatus,
       pairingReadyStatus === 200 && pairingReady
         ? [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }] : []);
@@ -741,6 +746,7 @@ async function runSyntheticAlert() {
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -803,6 +809,8 @@ async function runSyntheticAlert() {
       return reply(200, [{ authorized: rpcAuthorized, alert_id: rpcAuthorized ? id : null,
                            state: rpcAuthorized ? target : null }]);
     }
+    if (url.includes('/rpc/synthetic_voice_enrollment_ready')) return reply(200,
+      [{ ready: false, patient_id: null, voice_profile_state: null }]);
     if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
     throw new Error(`unexpected alert URL ${url}`);
   }
@@ -888,5 +896,152 @@ async function runSyntheticAlert() {
   console.log('Hospital synthetic auxiliary alert state and staff action boundary: PASS');
 }
 
-run().then(runPairing).then(runSyntheticMessage).then(runSyntheticAlert)
+async function runSyntheticVoice() {
+  const ids = [
+    'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
+    'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
+    'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975',
+    encounter_id: '00000000-0000-4000-8000-000000000976', staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975' };
+  const other = { patient_id: '00000000-0000-4000-8000-000000000977',
+    encounter_id: '00000000-0000-4000-8000-000000000978', staff_display_name: '가상 다른 환자', ehr_patient_ref: 'TEST-977' };
+  const staff = '00000000-0000-4000-8000-000000000991';
+  let ready = false;
+  let state = 'none';
+  let readinessStatus = 200;
+  let permissionPending = null;
+  let micCalls = 0;
+  let nowMs = 0;
+  let nextTimer = 1;
+  const intervals = new Map();
+  const deadlines = new Map();
+  const streams = [];
+  const recorders = [];
+  const requests = [];
+  const makeStream = () => {
+    const track = { stopped: false, stop() { this.stopped = true; } };
+    const stream = { track, getTracks() { return [track]; } };
+    streams.push(stream);
+    return stream;
+  };
+  class Recorder {
+    constructor(stream) { this.stream = stream; this.state = 'inactive'; this.stops = 0; recorders.push(this); }
+    start(slice) { this.state = 'recording'; this.slice = slice; }
+    stop() { this.state = 'inactive'; this.stops++; if (this.ondataavailable) this.ondataavailable({ data: { size: 10 } }); }
+    emit() { if (this.ondataavailable) this.ondataavailable({ data: { size: 10 } }); }
+  }
+  class FakeDate extends Date { static now() { return nowMs; } }
+  const navigator = { mediaDevices: { async getUserMedia(options) {
+    micCalls++;
+    assert.equal(options.audio, true);
+    assert.equal(options.video, false);
+    return permissionPending ? permissionPending.promise : makeStream();
+  } } };
+  async function fetch(url, options = {}) {
+    requests.push(url);
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'voice-staff-token', user: { id: staff } });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture, other]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, []);
+    if (url.includes('/hospital_context_current?patient_id=eq.') || url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, []);
+    if (url.includes('/rpc/synthetic_alert_staff_ready')) return reply(200, [{ ready: false, patient_id: null }]);
+    if (url.includes('/rpc/synthetic_voice_enrollment_ready')) {
+      assert.equal(options.method, 'POST');
+      assert.equal(options.headers['Content-Profile'], 'api');
+      assert.equal(options.body, '{}', 'readiness RPC transmits no audio');
+      return reply(readinessStatus, [{ ready, patient_id: fixture.patient_id, voice_profile_state: state }]);
+    }
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
+    throw new Error(`unexpected voice URL or audio upload ${url}`);
+  }
+  vm.runInNewContext(script, { document, fetch, navigator, MediaRecorder: Recorder, Date: FakeDate, console,
+    setInterval: callback => { const id = nextTimer++; intervals.set(id, callback); return id; },
+    clearInterval: id => intervals.delete(id),
+    setTimeout: callback => { const id = nextTimer++; deadlines.set(id, callback); return id; },
+    clearTimeout: id => deadlines.delete(id) });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const selectFixture = () => elements.patients.children[0].handlers.click();
+  const start = () => elements['synthetic-voice-start'].handlers.click();
+  elements.email.value = 'voice-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await elements.patients.children[1].handlers.click();
+  assert.equal(elements['synthetic-voice-section'].hidden, true, 'other patient has no mic panel');
+  await selectFixture();
+  assert.equal(elements['synthetic-voice-section'].hidden, false, 'assigned fixture can read readiness state');
+  assert.equal(elements['synthetic-voice-start'].disabled, true, 'unready fixture cannot start mic');
+  await start();
+  assert.equal(micCalls, 0);
+
+  ready = true;
+  await selectFixture();
+  assert.match(elements['synthetic-voice-profile'].textContent, /기록 없음.*실제 환자 목소리 등록·검증 결과가 아닙니다/);
+  assert.equal(elements['synthetic-voice-start'].disabled, false);
+  await start();
+  assert.equal(micCalls, 1, 'mic permission is requested only after a fresh ready RPC');
+  assert.equal(recorders[0].slice, 1000);
+  recorders[0].emit();
+  nowMs += 5200;
+  for (const tick of intervals.values()) tick();
+  assert.match(elements['synthetic-voice-duration'].textContent, /5\.2초/);
+  elements['synthetic-voice-stop'].handlers.click();
+  assert.equal(streams[0].track.stopped, true, 'explicit stop closes the microphone track');
+  assert.equal(recorders[0].ondataavailable, null, 'stop detaches Blob callbacks before final dataavailable');
+  assert.equal(recorders[0].stops, 1);
+  assert.match(elements['synthetic-voice-status'].textContent, /오디오 참조를 해제했습니다.*추가 보관·전송.*프로필 생성은 하지 않았/);
+  assert.equal(requests.some(url => /upload|storage|synthetic\/audio/.test(url)), false,
+    'captured audio is never sent to a server');
+
+  await start();
+  assert.equal(recorders.length, 2);
+  nowMs += 30000;
+  for (const tick of intervals.values()) tick();
+  assert.equal(streams[1].track.stopped, true, '30-second timer closes the microphone');
+  assert.equal(intervals.size, 0);
+  assert.equal(deadlines.size, 0);
+
+  state = 'active';
+  await selectFixture();
+  assert.match(elements['synthetic-voice-profile'].textContent, /합성 메타데이터 활성.*실제 환자 목소리 등록·검증 결과가 아닙니다/);
+  permissionPending = pending();
+  const pendingStart = start();
+  await pause();
+  elements.logout.handlers.click();
+  const lateStream = makeStream();
+  permissionPending.resolve(lateStream);
+  await pendingStart;
+  assert.equal(lateStream.track.stopped, true, 'late mic permission response closes tracks after logout');
+  assert.equal(elements['synthetic-voice-section'].hidden, true);
+  assert.equal(recorders.length, 2, 'late permission creates no recorder');
+  permissionPending = null;
+
+  elements.email.value = 'voice-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  await start();
+  assert.equal(streams[3].track.stopped, false);
+  readinessStatus = 403;
+  await selectFixture();
+  assert.equal(streams[3].track.stopped, true, 'current readiness 403 closes active mic before clearing session');
+  assert.equal(elements['patient-card'].hidden, true);
+  assert.equal(elements['synthetic-voice-section'].hidden, true);
+  console.log('Hospital synthetic tester-only 30-second in-memory mic and readiness boundary: PASS');
+}
+
+run().then(runPairing).then(runSyntheticMessage).then(runSyntheticAlert).then(runSyntheticVoice)
   .catch(error => { console.error(error); process.exitCode = 1; });
