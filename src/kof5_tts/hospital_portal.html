@@ -40,6 +40,7 @@
     .patients button[aria-current="true"] { border-color: #194a40; background: #edf5ef; }
     .patients strong, .patients span { display: block; }
     .patients span { margin-top: 5px; color: #607069; font-size: 13px; }
+    .patients .queue-text { white-space: pre-wrap; color: #233530; font-size: 15px; }
     .fact { padding: 16px 18px; border: 1px solid #e0e8df; border-radius: 12px; background: #fafcf9; }
     .fact h3 { color: #3a6956; }
     .fact p { margin: 0; white-space: pre-wrap; }
@@ -83,6 +84,12 @@
         <div id="list-status" class="status" role="status" aria-live="polite"></div>
         <div id="readiness-status" class="small" role="status" aria-live="polite"></div>
       </section>
+      <section class="card" id="queue-card" aria-labelledby="queue-title" hidden>
+        <div class="section-title"><h2 id="queue-title">예약 메시지 확인</h2><button id="queue-refresh" type="button">새로고침</button></div>
+        <p>현재 입원의 승인 원문 중 DB 상태가 전달 대기인 기록입니다. 이 화면에서 승인·발송하거나 환자 수신을 확인할 수는 없습니다.</p>
+        <div id="queue-items" class="patients"></div>
+        <div id="queue-status" class="status" role="status" aria-live="polite"></div>
+      </section>
       <section class="card" id="registration-card" aria-labelledby="registration-title" hidden>
         <h2 id="registration-title">환자 기본정보 등록</h2>
         <p>기관 자격과 임상 안전 승인이 확인된 병원에서만 등록합니다. 실제 환자 사용에는 별도의 동의·거부 확인 절차가 필요합니다.</p>
@@ -111,7 +118,7 @@
   </main>
   <script>
     const state = { config: null, token: null, generation: 0, request: 0,
-      registrationRequest: 0, patients: [], selected: null, readyHospitals: [] };
+      registrationRequest: 0, queueRequest: 0, patients: [], selected: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
     const registrationFields = ['registration-hospital', 'registration-number', 'registration-name', 'registration-birth'];
     const lockRegistration = locked => registrationFields.forEach(id => { $(id).disabled = locked; });
@@ -127,6 +134,7 @@
       ++state.generation;
       ++state.request;
       ++state.registrationRequest;
+      ++state.queueRequest;
       state.token = null;
       state.patients = [];
       state.selected = null;
@@ -141,6 +149,7 @@
       $('email').value = '';
       $('password').value = '';
       $('patients').replaceChildren();
+      $('queue-items').replaceChildren();
       $('facts').replaceChildren();
       $('messages').replaceChildren();
       $('detail-title').textContent = '';
@@ -148,8 +157,11 @@
       $('detail-status').textContent = '';
       $('list-status').textContent = '';
       $('readiness-status').textContent = '';
+      $('queue-status').textContent = '';
+      $('queue-refresh').disabled = false;
       $('registration-status').textContent = '';
       $('patient-card').hidden = true;
+      $('queue-card').hidden = true;
       $('detail-card').hidden = true;
       $('registration-card').hidden = true;
       $('signin-card').hidden = false;
@@ -247,6 +259,7 @@
 
     function renderPatients(patients) {
       ++state.request;
+      ++state.queueRequest;
       state.selected = null;
       $('detail-card').hidden = true;
       $('detail-title').textContent = '';
@@ -254,6 +267,9 @@
       $('facts').replaceChildren();
       $('messages').replaceChildren();
       $('detail-status').textContent = '';
+      $('queue-items').replaceChildren();
+      $('queue-status').textContent = '담당 환자 목록이 갱신됐습니다. 전달 대기 기록을 새로고침하세요.';
+      $('queue-refresh').disabled = false;
       state.patients = patients;
       $('patients').replaceChildren();
       for (const patient of patients) {
@@ -296,6 +312,56 @@
           : '현재 환자 등록 권한이 없습니다.';
     }
 
+    const queuePath = '/rest/v1/hospital_message_list?delivery_status=eq.pending&select=patient_id,encounter_id,approved_text,due_at,delivery_status&order=due_at.asc&limit=100';
+
+    function renderQueue(messages) {
+      const patients = new Map(state.patients.filter(patient => patient.encounter_id)
+        .map(patient => [patient.patient_id, patient]));
+      $('queue-items').replaceChildren();
+      let visible = 0;
+      for (const message of messages) {
+        const patient = patients.get(message.patient_id);
+        if (!patient || patient.encounter_id !== message.encounter_id || message.delivery_status !== 'pending') continue;
+        const button = document.createElement('button');
+        button.type = 'button';
+        const title = document.createElement('strong');
+        title.textContent = `${patient.staff_display_name} · ${patient.ehr_patient_ref}`;
+        const due = document.createElement('span');
+        due.textContent = `예약 ${hospitalTime(message.due_at)}`;
+        const text = document.createElement('span');
+        text.className = 'queue-text';
+        text.textContent = message.approved_text;
+        button.append(title, due, text);
+        button.addEventListener('click', () => showPatient(patient));
+        $('queue-items').append(button);
+        ++visible;
+      }
+      $('queue-status').textContent = messages.length >= 100
+        ? `${visible}건 표시했습니다. 조회 상한 100건이므로 전체 대기 건수는 확인되지 않았습니다.`
+        : visible ? `현재 담당 입원에서 전달 대기 기록 ${visible}건을 표시했습니다.`
+          : '현재 담당 입원에서 전달 대기 기록이 없습니다.';
+      $('queue-card').hidden = false;
+    }
+
+    async function refreshQueue() {
+      if (!state.token) return;
+      const generation = state.generation;
+      const token = state.token;
+      const request = ++state.queueRequest;
+      const current = () => generation === state.generation && request === state.queueRequest && token === state.token;
+      $('queue-refresh').disabled = true;
+      $('queue-items').replaceChildren();
+      $('queue-status').textContent = '전달 대기 기록을 다시 확인하고 있습니다.';
+      try {
+        const messages = await supabase(queuePath, token, generation);
+        if (current()) renderQueue(messages);
+      } catch (_) {
+        if (current()) $('queue-status').textContent = '전달 대기 기록을 읽지 못했습니다. 권한과 연결을 확인하세요.';
+      } finally {
+        if (current()) $('queue-refresh').disabled = false;
+      }
+    }
+
     $('signin-form').addEventListener('submit', async event => {
       event.preventDefault();
       const generation = ++state.generation;
@@ -311,13 +377,15 @@
         if (generation !== state.generation) return;
         state.token = session.access_token;
         $('password').value = '';
-        const [patients, readiness] = await Promise.all([
+        const [patients, readiness, queue] = await Promise.all([
           supabase('/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref', state.token, generation),
           supabase('/rest/v1/hospital_registration_ready?select=hospital_ref,ready', state.token, generation),
+          supabase(queuePath, state.token, generation),
         ]);
         if (generation !== state.generation) return;
         renderPatients(patients);
         showReadiness(readiness);
+        renderQueue(queue);
         $('signin-card').hidden = true;
         $('patient-card').hidden = false;
       } catch (_) {
@@ -326,6 +394,7 @@
         if (generation === state.generation || !state.token) $('signin-button').disabled = !state.config;
       }
     });
+    $('queue-refresh').addEventListener('click', refreshQueue);
     $('registration-form').addEventListener('submit', async event => {
       event.preventDefault();
       const hospital = $('registration-hospital').value;

@@ -26,6 +26,7 @@ async function run() {
     'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
     'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
     'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
     'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
     'registration-name', 'registration-birth', 'registration-button', 'registration-status',
   ].map(id => [id, new Element(id)]));
@@ -41,6 +42,14 @@ async function run() {
   let postStatus = 201;
   let latePost = null;
   let lateReadiness = null;
+  let lateQueue = null;
+  let queueReadStatus = 200;
+  let queueData = [
+    { patient_id: 'B', encounter_id: 'B', approved_text: '가상 B 예약 원문', due_at: '2026-09-15T04:00:00Z', delivery_status: 'pending' },
+    { patient_id: 'A', encounter_id: 'A', approved_text: '가상 A 예약 원문', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+    { patient_id: 'B', encounter_id: 'OLD', approved_text: '이전 입원 원문', due_at: '2026-09-15T07:00:00Z', delivery_status: 'pending' },
+    { patient_id: 'A', encounter_id: 'A', approved_text: '이미 전달됨', due_at: '2026-09-15T08:00:00Z', delivery_status: 'delivered' },
+  ];
   const registrationPosts = [];
   const detailReads = [];
   async function fetch(url, options = {}) {
@@ -54,6 +63,10 @@ async function run() {
       if (postStatus === 201) patients.push({ patient_id: 'D', ehr_patient_ref: registrationPosts.at(-1).payload.ehr_patient_ref,
         staff_display_name: registrationPosts.at(-1).payload.staff_display_name, encounter_id: null });
       return reply(postStatus, null);
+    }
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) {
+      assert.equal(options.method || 'GET', 'GET', 'queue is read-only');
+      return lateQueue ? lateQueue.promise : reply(queueReadStatus, queueData);
     }
     if (url.includes('hospital_context_current') || url.includes('hospital_message_list')) {
       assert.equal(options.method || 'GET', 'GET', 'hospital information remains read-only');
@@ -93,6 +106,9 @@ async function run() {
   elements.email.value = 'staff@example.invalid';
   elements.password.value = 'synthetic';
   await submit();
+  assert.equal(elements['queue-card'].hidden, false, 'signed-in staff can inspect the read-only pending queue');
+  assert.equal(elements['queue-items'].children.length, 2, 'queue excludes old encounters and non-pending status');
+  assert.equal(elements['queue-items'].children[0].children[2].textContent, '가상 B 예약 원문', 'queue preserves approved wording');
   assert.equal(elements['registration-card'].hidden, true, 'default-deny gate keeps registration form hidden');
   assert.match(elements['list-status'].textContent, /3명의 담당 환자 중 2명이 현재 입원 중/, 'read-only list distinguishes current encounters');
   elements['patient-search'].value = 'test-b';
@@ -144,7 +160,17 @@ async function run() {
   assert.match(elements.messages.children[0].children[0].textContent, /15:00.*한국 시간/,
     'UTC device timezone still displays the 15:00 Korean hospital schedule');
 
+  await elements['queue-items'].children[0].handlers.click();
+  assert.equal(elements['detail-title'].textContent, '가상 환자 B', 'queue item opens the assigned patient detail');
+  lateQueue = pending();
+  const queueRefresh = elements['queue-refresh'].handlers.click();
+  await pause();
   elements.logout.handlers.click();
+  lateQueue.resolve(reply(200, queueData));
+  await queueRefresh;
+  assert.equal(elements['queue-card'].hidden, true, 'late queue refresh cannot restore messages after logout');
+  assert.equal(elements['queue-items'].children.length, 0, 'logout removes pending approved text from DOM');
+  lateQueue = null;
   readiness = [{ hospital_ref: 'TEST-H1', ready: true }, { hospital_ref: 'TEST-H2', ready: true }];
   elements.email.value = 'staff@example.invalid';
   elements.password.value = 'synthetic';
@@ -168,6 +194,9 @@ async function run() {
     hospital_ref: 'TEST-H1', ehr_patient_ref: 'TEST-NEW', staff_display_name: '가상 신규 환자', birth_date: '1940-01-01',
   }, 'POST sends only minimum fields and never a registrar identity claim');
   assert.equal(elements.patients.children.length, 4, 'successful registration refreshes assigned patient list');
+  assert.equal(elements['queue-items'].children.length, 0, 'patient list refresh clears potentially stale queue text');
+  await elements['queue-refresh'].handlers.click();
+  assert.equal(elements['queue-items'].children.length, 2, 'staff can re-read the assigned pending queue');
   assert.equal(elements['registration-number'].value, '', 'successful registration clears identifier input');
   postStatus = 409;
   elements['registration-number'].value = 'TEST-NEW';
@@ -241,6 +270,15 @@ async function run() {
   await delayedLogin;
   assert.equal(elements['registration-card'].hidden, true, 'late readiness cannot open registration after logout');
   assert.equal(elements['patient-card'].hidden, true, 'late login data cannot restore patients after logout');
+  lateReadiness = null;
+  elements.email.value = 'staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await submit();
+  queueReadStatus = 403;
+  await elements['queue-refresh'].handlers.click();
+  assert.equal(elements['patient-card'].hidden, true, 'current queue RLS denial hides patient data');
+  assert.equal(elements['queue-card'].hidden, true, 'current queue RLS denial hides approved message text');
+  assert.equal(elements['queue-items'].children.length, 0);
   console.log('Hospital portal patient and session isolation: PASS');
 }
 
