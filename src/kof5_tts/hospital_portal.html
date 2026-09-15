@@ -75,7 +75,9 @@
       </section>
       <section class="card" id="patient-card" aria-labelledby="patient-title" hidden>
         <div class="section-title"><h2 id="patient-title">담당 환자</h2><button id="logout" type="button">로그아웃</button></div>
-        <p>현재 권한으로 조회할 수 있는 활성 환자입니다.</p>
+        <p>현재 권한으로 조회할 수 있는 환자입니다. 입원 상태는 환자별로 확인하세요.</p>
+        <label for="patient-search">이름·환자 번호·병동 검색</label>
+        <input id="patient-search" type="search" autocomplete="off" placeholder="담당 환자 찾기" aria-controls="patients">
         <div id="patients" class="patients"></div>
         <div id="list-status" class="status" role="status" aria-live="polite"></div>
       </section>
@@ -108,6 +110,7 @@
       state.token = null;
       state.patients = [];
       state.selected = null;
+      $('patient-search').value = '';
       $('email').value = '';
       $('password').value = '';
       $('patients').replaceChildren();
@@ -187,6 +190,18 @@
       }
     }
 
+    function filterPatients() {
+      const query = $('patient-search').value.trim().toLocaleLowerCase('ko-KR');
+      let visible = 0;
+      for (const button of $('patients').children) {
+        button.hidden = !button.dataset.search.includes(query);
+        if (!button.hidden) ++visible;
+      }
+      $('list-status').textContent = query
+        ? `${visible}명의 환자가 검색 결과에 있습니다.`
+        : `${state.patients.length}명의 담당 환자 중 ${state.patients.filter(patient => !!patient.encounter_id).length}명이 현재 입원 중입니다.`;
+    }
+
     $('signin-form').addEventListener('submit', async event => {
       event.preventDefault();
       const generation = ++state.generation;
@@ -210,6 +225,7 @@
           const button = document.createElement('button');
           button.type = 'button';
           button.dataset.patientId = patient.patient_id;
+          button.dataset.search = `${patient.staff_display_name} ${patient.ehr_patient_ref} ${patient.ward_ref || ''}`.toLocaleLowerCase('ko-KR');
           const title = document.createElement('strong');
           title.textContent = patient.staff_display_name;
           const caption = document.createElement('span');
@@ -218,7 +234,7 @@
           button.addEventListener('click', () => showPatient(patient));
           $('patients').append(button);
         }
-        $('list-status').textContent = patients.length ? `${patients.length}명의 활성 환자를 조회했습니다.` : '조회 권한이 있는 활성 환자가 없습니다.';
+        filterPatients();
         $('signin-card').hidden = true;
         $('patient-card').hidden = false;
       } catch (_) {
@@ -227,6 +243,7 @@
         if (generation === state.generation || !state.token) $('signin-button').disabled = !state.config;
       }
     });
+    $('patient-search').addEventListener('input', filterPatients);
     $('logout').addEventListener('click', () => clearSession());
     fetch('/portal/config').then(response => {
       if (!response.ok) throw new Error('unconfigured');

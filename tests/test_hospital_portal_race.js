@@ -24,7 +24,7 @@ class Element {
 async function run() {
   const elements = Object.fromEntries([
     'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
-    'patient-card', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
     'detail-summary', 'facts', 'messages', 'detail-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -63,6 +63,13 @@ async function run() {
   elements.email.value = 'staff@example.invalid';
   elements.password.value = 'synthetic';
   await submit();
+  assert.match(elements['list-status'].textContent, /3명의 담당 환자 중 2명이 현재 입원 중/, 'read-only list distinguishes current encounters');
+  elements['patient-search'].value = 'test-b';
+  elements['patient-search'].handlers.input();
+  assert.deepEqual(elements.patients.children.map(button => button.hidden), [true, false, true], 'local search filters assigned patient numbers');
+  assert.match(elements['list-status'].textContent, /1명의 환자/);
+  elements['patient-search'].value = '';
+  elements['patient-search'].handlers.input();
   const aRead = elements.patients.children[0].handlers.click();
   await pause();
   await elements.patients.children[1].handlers.click();
@@ -78,6 +85,7 @@ async function run() {
   const bRead = elements.patients.children[1].handlers.click();
   await pause();
   elements.logout.handlers.click();
+  assert.equal(elements['patient-search'].value, '', 'logout clears the patient search');
   assert.equal(elements['detail-card'].hidden, true, 'logout immediately hides hospital data');
   assert.equal(elements['detail-title'].textContent, '', 'logout removes patient name from DOM');
   assert.equal(elements['detail-summary'].textContent, '', 'logout removes patient number and location from DOM');
