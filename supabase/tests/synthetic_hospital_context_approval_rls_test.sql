@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(36);
+SELECT plan(41);
 
 -- Fixed, throwaway synthetic fixture. All rows roll back below.
 INSERT INTO auth.users (id, is_anonymous) VALUES
@@ -240,6 +240,67 @@ SELECT ok((SELECT authorized IS TRUE AND jsonb_array_length(facts) = 1
     FROM api.patient_hospital_turn_context(
         '00000000-0000-4000-8000-000000000975', '제 병실은 어디인가요?')),
     'paired device sees exact approved room fact but no source through bounded turn RPC');
+RESET ROLE;
+
+-- Legacy approved hospital-name facts may apply across admissions only when
+-- category='hospital'; a prior room fact and an expired name stay hidden.
+INSERT INTO kof5.hospital_encounter
+    (encounter_id, patient_id, ehr_encounter_ref, status, admitted_at, discharged_at)
+VALUES ('00000000-0000-4000-8000-000000000979',
+        '00000000-0000-4000-8000-000000000975', 'TEST-OLD-E975',
+        'finished', now() - interval '3 days', now() - interval '2 days');
+INSERT INTO kof5.hospital_context_fact
+    (fact_id, patient_id, encounter_id, category, content,
+     source_staff_ref, synthetic_source_ref, approved_by_staff_ref,
+     verified_at, valid_until, status)
+VALUES ('00000000-0000-4000-8000-000000000971',
+        '00000000-0000-4000-8000-000000000975', NULL, 'hospital',
+        '가상 새봄병원입니다.', 'TEST-SOURCE', 'TEST-HOSPITAL-NAME',
+        'TEST-APPROVER', now() - interval '1 hour', now() + interval '1 day',
+        'approved'),
+       ('00000000-0000-4000-8000-000000000972',
+        '00000000-0000-4000-8000-000000000975',
+        '00000000-0000-4000-8000-000000000979', 'room',
+        '가상 지난 병실입니다.', 'TEST-SOURCE', 'TEST-OLD-ROOM',
+        'TEST-APPROVER', now() - interval '1 hour', now() + interval '1 day',
+        'approved'),
+       ('00000000-0000-4000-8000-000000000973',
+        '00000000-0000-4000-8000-000000000975', NULL, 'hospital',
+        '가상 만료된 병원입니다.', 'TEST-SOURCE', 'TEST-EXPIRED-HOSPITAL',
+        'TEST-APPROVER', now() - interval '2 days', now() - interval '1 day',
+        'approved');
+SELECT throws_ok($sql$INSERT INTO kof5.hospital_context_fact
+    (patient_id, encounter_id, category, content, source_staff_ref,
+     approved_by_staff_ref, verified_at, status)
+    VALUES ('00000000-0000-4000-8000-000000000975', NULL, 'room',
+            '가상 잘못된 병실입니다.', 'TEST-SOURCE', 'TEST-APPROVER',
+            now(), 'approved')
+$sql$, '23514');
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000991', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000991","is_anonymous":false}', true);
+SELECT ok((SELECT count(*) = 1 AND max(synthetic_source_ref) = 'TEST-HOSPITAL-NAME'
+    FROM api.hospital_context_current
+    WHERE fact_id = '00000000-0000-4000-8000-000000000971'),
+    'assigned permanent staff sees exact current global hospital name and source');
+SELECT is((SELECT count(*)::integer FROM api.hospital_context_current
+    WHERE fact_id = '00000000-0000-4000-8000-000000000972'), 0,
+    'prior encounter room fact does not become global');
+SELECT is((SELECT count(*)::integer FROM api.hospital_context_current
+    WHERE fact_id = '00000000-0000-4000-8000-000000000973'), 0,
+    'expired global hospital fact stays hidden');
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000994', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000994","is_anonymous":true}', true);
+SELECT ok((SELECT authorized IS TRUE AND jsonb_array_length(facts) = 1
+           AND facts->0->>'content' = '가상 새봄병원입니다.'
+           AND NOT (facts->0 ? 'synthetic_source_ref')
+    FROM api.patient_hospital_turn_context(
+        '00000000-0000-4000-8000-000000000975', '어느 병원인가요?')),
+    'paired device gets only current approved hospital name without staff source');
 RESET ROLE;
 
 UPDATE kof5.hospital_staff_assignment SET status = 'revoked', revoked_at = now()

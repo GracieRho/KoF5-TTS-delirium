@@ -131,6 +131,12 @@ def main() -> None:
                                                 "content": ROOM_TEXT, "encounter_id": str(ENCOUNTER),
                                                 "synthetic_source_ref": proposal["source_ref"]}], \
             "approved exact original was not published to current encounter"
+        status, hospital_name = request(
+            f"{base}/hospital_context_current?patient_id=eq.{PATIENT}&category=eq.hospital&select=content,encounter_id",
+            "GET", public, reviewer_token, schema="api")
+        assert status == 200 and hospital_name == [
+            {"content": HOSPITAL_TEXT, "encounter_id": None}], \
+            "assigned staff lost a current global hospital-name fact"
 
         def hospital_turn(token: str, question: str) -> tuple[int, object]:
             return request(turn, "POST", public, token,

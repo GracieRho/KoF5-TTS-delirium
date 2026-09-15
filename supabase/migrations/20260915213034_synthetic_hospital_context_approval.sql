@@ -177,7 +177,9 @@ CREATE POLICY synthetic_context_fixture_ready_read
             AND EXISTS (
                 SELECT 1 FROM api.synthetic_device_pairing_ready r
                 WHERE r.patient_id = hospital_context_fact.patient_id
-                  AND r.encounter_id = hospital_context_fact.encounter_id
+                  AND (r.encounter_id = hospital_context_fact.encounter_id
+                       OR (hospital_context_fact.encounter_id IS NULL
+                           AND hospital_context_fact.category = 'hospital'))
             )
         ) OR (
             COALESCE(((SELECT auth.jwt()) ->> 'is_anonymous')::boolean, false)
@@ -218,7 +220,9 @@ WITH (security_invoker = true) AS
                      AND EXISTS (
                          SELECT 1 FROM api.synthetic_device_pairing_ready r
                          WHERE r.patient_id = f.patient_id
-                           AND r.encounter_id = f.encounter_id
+                           AND (r.encounter_id = f.encounter_id
+                                OR (f.encounter_id IS NULL
+                                    AND f.category = 'hospital'))
                      )
                 THEN f.synthetic_source_ref ELSE NULL::text
            END AS synthetic_source_ref
