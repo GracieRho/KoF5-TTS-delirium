@@ -30,6 +30,9 @@ async function run() {
     'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
     'registration-name', 'registration-birth', 'registration-button', 'registration-status',
     'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -292,6 +295,9 @@ async function runPairing() {
     'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
     'registration-name', 'registration-birth', 'registration-button', 'registration-status',
     'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -406,4 +412,172 @@ async function runPairing() {
   console.log('Hospital synthetic device pairing boundary: PASS');
 }
 
-run().then(runPairing).catch(error => { console.error(error); process.exitCode = 1; });
+async function runSyntheticMessage() {
+  const ids = [
+    'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
+    'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
+    'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975', encounter_id: '00000000-0000-4000-8000-000000000976',
+    staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975', ward_ref: '시험병동' };
+  const proposer = '00000000-0000-4000-8000-000000000991';
+  const approver = '00000000-0000-4000-8000-000000000992';
+  let activeUser = proposer;
+  let postStatus = 201;
+  let patchZero = false;
+  let latePost = null;
+  const drafts = [];
+  const approvedMessages = [];
+  const posts = [];
+  const patches = [];
+  async function fetch(url, options = {}) {
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: `synthetic-${activeUser}`, user: { id: activeUser } });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, approvedMessages);
+    if (url.includes('/hospital_context_current?patient_id=eq.')) return reply(200, []);
+    if (url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, approvedMessages);
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(200,
+      [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }]);
+    if (url.includes('/hospital_message_list?message_id=eq.')) {
+      const id = url.match(/message_id=eq\.([^&]+)/)[1];
+      return reply(200, approvedMessages.filter(message => message.message_id === id));
+    }
+    if (url.includes('/synthetic_hospital_message_draft') && options.method === 'PATCH') {
+      patches.push({ options, payload: JSON.parse(options.body) });
+      const id = url.match(/draft_id=eq\.([^&]+)/)[1];
+      const draft = drafts.find(item => item.draft_id === id);
+      if (draft && activeUser !== draft.proposed_by_auth_user_id && !patchZero) {
+        draft.status = 'approved';
+        draft.approved_by_auth_user_id = activeUser;
+        const approvedAt = '2026-09-16T02:00:00Z';
+        approvedMessages.push({ message_id: id, patient_id: fixture.patient_id,
+          encounter_id: fixture.encounter_id, approved_text: draft.proposed_text,
+          approved_by_staff_ref: activeUser, approved_at: approvedAt,
+          due_at: draft.schedule_mode === 'now' ? approvedAt : draft.requested_due_at,
+          delivery_status: 'pending' });
+      }
+      return reply(204, null);
+    }
+    if (url.includes('/synthetic_hospital_message_draft') && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      posts.push({ options, payload });
+      if (latePost) return latePost.promise;
+      if (postStatus === 201) drafts.push({ ...payload,
+        draft_id: `00000000-0000-4000-8000-00000000090${drafts.length + 1}`,
+        proposed_by_auth_user_id: activeUser, proposed_at: '2026-09-16T01:00:00Z', status: 'draft' });
+      return reply(postStatus, null);
+    }
+    if (url.includes('/synthetic_hospital_message_draft?draft_id=eq.')) {
+      const id = url.match(/draft_id=eq\.([^&]+)/)[1];
+      return reply(200, drafts.filter(item => item.draft_id === id));
+    }
+    if (url.includes('/synthetic_hospital_message_draft?')) return reply(200, drafts.filter(item => item.status === 'draft'));
+    throw new Error(`unexpected synthetic message URL ${url}`);
+  }
+
+  vm.runInNewContext(script, { document, fetch, console });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const compose = () => elements['synthetic-message-form'].handlers.submit({ preventDefault() {} });
+  const selectFixture = () => elements.patients.children[0].handlers.click();
+  elements.email.value = 'synthetic-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  assert.equal(elements['synthetic-message-section'].hidden, false, 'only ready fixture shows synthetic message forms');
+  const exact = '가상 CT 촬영 예정입니다.\n원문 그대로';
+  elements['synthetic-message-text'].value = exact;
+  await compose();
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].payload.proposed_text, exact, 'draft POST preserves exact staff wording');
+  assert.deepEqual(Object.keys(posts[0].payload).sort(), ['encounter_id', 'patient_id', 'proposed_text', 'schedule_mode']);
+  assert.equal(posts[0].options.headers['Content-Profile'], 'api');
+  assert.equal(posts[0].options.headers.Prefer, 'return=minimal');
+  assert.equal(elements['synthetic-drafts'].children[0].children[1].textContent, exact);
+  assert.match(elements['synthetic-drafts'].children[0].children[3].textContent, /다른 담당 직원/,
+    'proposer receives no self-approval button');
+
+  elements.logout.handlers.click();
+  activeUser = approver;
+  elements.email.value = 'synthetic-approver@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  const approveButton = elements['synthetic-drafts'].children[0].children[3];
+  assert.equal(typeof approveButton.handlers.click, 'function', 'distinct staff can inspect and approve exact draft');
+  await approveButton.handlers.click();
+  assert.deepEqual(patches[0].payload, { status: 'approved' }, 'PATCH contains no self-approval or rewritten text');
+  assert.equal(patches[0].options.headers.Prefer, 'return=minimal');
+  assert.equal(approvedMessages.length, 1);
+  assert.equal(elements.messages.children[0].children[1].textContent, exact,
+    'approval refreshes current patient pending message with original wording');
+  assert.equal(elements['queue-items'].children[0].children[2].textContent, exact,
+    'approval refreshes hospital pending queue with original wording');
+  assert.match(elements['synthetic-message-status'].textContent, /실제 전달은 확인되지/);
+
+  elements.logout.handlers.click();
+  activeUser = proposer;
+  elements.email.value = 'synthetic-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  elements['synthetic-message-mode'].value = 'scheduled';
+  elements['synthetic-message-mode'].handlers.change();
+  assert.equal(elements['synthetic-message-time-wrap'].hidden, false);
+  elements['synthetic-message-text'].value = '내일 가상 검사 예정입니다.';
+  elements['synthetic-message-time'].value = '2099-01-01T12:00';
+  await compose();
+  assert.equal(posts[1].payload.requested_due_at, '2099-01-01T03:00:00.000Z',
+    'scheduled draft converts Korean hospital time to ISO without rewriting source text');
+  assert.equal(posts[1].payload.proposed_text, '내일 가상 검사 예정입니다.');
+
+  elements.logout.handlers.click();
+  activeUser = approver;
+  elements.email.value = 'synthetic-approver@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  patchZero = true;
+  const zeroButton = elements['synthetic-drafts'].children[0].children[3];
+  await zeroButton.handlers.click();
+  assert.equal(elements['synthetic-message-section'].hidden, true,
+    'zero-row PATCH return cannot be mistaken for approval');
+  assert.equal(approvedMessages.length, 1);
+
+  await selectFixture();
+  postStatus = 403;
+  elements['synthetic-message-text'].value = '거부할 가상 원문';
+  await compose();
+  assert.equal(elements['patient-card'].hidden, true, 'current RLS write denial clears staff patient data');
+  assert.equal(elements['synthetic-message-section'].hidden, true);
+
+  activeUser = proposer;
+  postStatus = 201;
+  elements.email.value = 'synthetic-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  latePost = pending();
+  elements['synthetic-message-text'].value = '늦은 가상 초안';
+  const pendingCompose = compose();
+  await pause();
+  elements.logout.handlers.click();
+  latePost.resolve(reply(201, null));
+  await pendingCompose;
+  assert.equal(elements['synthetic-message-section'].hidden, true, 'late draft POST cannot restore form after logout');
+  assert.equal(elements['synthetic-message-text'].value, '', 'logout clears pending clinical wording');
+  console.log('Hospital synthetic message draft and distinct approval UI: PASS');
+}
+
+run().then(runPairing).then(runSyntheticMessage).catch(error => { console.error(error); process.exitCode = 1; });
