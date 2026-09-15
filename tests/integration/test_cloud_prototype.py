@@ -129,6 +129,39 @@ class CloudPrototypeTests(unittest.TestCase):
             self.assertEqual(audio, b"synthetic-mp3")
         self.assertEqual(hosts, ["api.elevenlabs.io"] * 4)
 
+    def test_semantic_family_match_can_answer_without_literal_overlap(self) -> None:
+        hosts = []
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "completed", "output": [{
+                    "type": "message", "content": [{"type": "output_text",
+                    "text": "수민은 회사에 다니고 있어."}],
+                }]})
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("unexpected provider")
+
+        question = "수민아 우리 딸 요즘 직장은 뭐야?"
+        fact = "딸 수민은 회사에 다닌다."
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            unknown, _ = run_synthetic_text_pipeline(
+                client, question, "DIRECTED", fact, credentials,
+            )
+            self.assertIn("확인된 정보가 없어서", unknown)
+            answer, audio = run_synthetic_text_pipeline(
+                client, question, "DIRECTED", fact, credentials, semantic_match=True,
+            )
+            self.assertEqual((answer, audio), ("수민은 회사에 다니고 있어.", b"synthetic-mp3"))
+            hospital, _ = run_synthetic_text_pipeline(
+                client, "수민아 CT 검사 결과 어때?", "DIRECTED", fact, credentials,
+                semantic_match=True,
+            )
+            self.assertIn("의료", hospital)
+        self.assertEqual(hosts, ["api.elevenlabs.io", "api.openai.com",
+                                 "api.elevenlabs.io", "api.elevenlabs.io"])
+
     def test_approved_hospital_fact_uses_exact_text_without_family_or_llm(self) -> None:
         hosts = []
 

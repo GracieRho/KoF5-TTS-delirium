@@ -272,12 +272,14 @@ def run_synthetic_pipeline(
 def run_synthetic_text_pipeline(
     client: httpx.Client, transcript: str, label: str,
     known_fact: str, credentials: CloudCredentials,
-    *, namespace: str = "family_context", on_first_audio: Callable[[], None] | None = None,
+    *, namespace: str = "family_context", semantic_match: bool = False,
+    on_first_audio: Callable[[], None] | None = None,
 ) -> tuple[str | None, bytes | None]:
     """Process a bounded iPad transcript without sending candidate audio to hosted STT."""
     if (not transcript.strip() or len(transcript) > 500
             or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}
-            or namespace not in {"family_context", "hospital_context"}):
+            or namespace not in {"family_context", "hospital_context"}
+            or (semantic_match and namespace != "family_context")):
         raise ValueError("bounded local transcript and activation label are required")
     now = datetime.now(timezone.utc)
     event = ConversationSession().hear(transcript, label, now)
@@ -293,7 +295,8 @@ def run_synthetic_text_pipeline(
             safe_question = not search(rf"결과|진단|치료|{MEDICATION_WORD_PATTERN}|괜찮아|안전해", transcript)
             reply = known_fact if hospital_fact_question(transcript) and safe_question and 1 <= len(known_fact) <= 200 and safe_fact else \
                 "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
-        elif not known_fact.strip() or _unsupported_fact_question(transcript, known_fact):
+        elif (not known_fact.strip() or hospital_fact_question(transcript)
+              or (not semantic_match and _unsupported_fact_question(transcript, known_fact))):
             reply = "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
         else:
             # ponytail: lexical grounding is an internal-test ceiling; measured safety eval precedes patients.
