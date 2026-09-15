@@ -10,6 +10,8 @@ AI Hub 테스트는 가짜 로컬 CLI와 가짜 API key만 사용합니다. 오�
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 node tests/test_guardian_portal_race.js
+node tests/test_hospital_portal_race.js
 ```
 
 보호자 웹 경합 검사는 외부 호출 없이 지연된 조회·저장·로그아웃/재로그인 응답, 환자 전환 시 초안 폐기, 같은 환자의 저장 중 새 초안 보존을 재현합니다.
+병원 웹 경합 검사는 지연된 다른 환자 사실과 이전 로그인 세션의 권한 오류가 현재 환자 정보를 덮거나 새 세션을 종료하지 못하는지 재현합니다.

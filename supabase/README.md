@@ -16,7 +16,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/smoke/registry_constraints.sql
 ```
 
-2026-09-15 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 네 마이그레이션이 적용됐고, 직원 15개·보호자 17개·병원 사실/메시지 25개인 pgTAP **57개**가 통과했다. 퇴원 후 사실·메시지 차단과 재입원 시 이전 입원 정보 제외도 검사했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 계정의 로그인→가족 기억 읽기/쓰기→연결 철회 후 차단·비로그인 차단도 통과했고, 시험 환자·계정은 0건으로 정리했다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
+2026-09-15 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 네 마이그레이션이 적용됐고, 직원 15개·보호자 17개·병원 사실/메시지 25개인 pgTAP **57개**가 통과했다. 퇴원 후 사실·메시지 차단과 재입원 시 이전 입원 정보 제외도 검사했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 계정의 가족 기억 읽기/쓰기·연결 철회 차단과 합성 직원 계정의 기관별 환자·사실·메시지 조회·자격 철회 차단·비로그인 차단이 통과했고, 시험 환자·계정은 0건으로 정리했다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke/registry_constraints.sql
@@ -25,11 +25,12 @@ supabase db advisors --local
 supabase migration list --local
 ```
 
-로컬 HTTP 검사는 작업 전용 Supabase DB/Auth/Data API/Kong을 켠 뒤 실행한다. `local_http_smoke.py`는 실행 위치와 관계없이 이 작업 설정을 읽고 `127.0.0.1:54341`만 허용한다. 브라우저와 같은 **publishable 키**를 사용한다. 임의 비밀번호와 `example.invalid` 합성 계정을 사용하고 로컬 키·토큰을 출력하지 않으며, 생성 응답이 유실돼도 이번 합성 이메일로 계정을 찾아 환자·기억·계정을 삭제한다. 공유 `yai-hub` 인스턴스에는 적용하지 않는다. 별도 `/guardian` 보호자 웹도 로컬 합성 계정의 로그인·가족 기억 저장/재조회·연결 철회 후 거부 및 기존 기억 숨김을 브라우저에서 확인했다.
+로컬 HTTP 검사는 작업 전용 Supabase DB/Auth/Data API/Kong을 켠 뒤 실행한다. `local_http_smoke.py`와 `local_staff_http_smoke.py`는 실행 위치와 관계없이 이 작업 설정을 읽고 `127.0.0.1:54341`만 허용한다. 브라우저와 같은 **publishable 키**를 사용한다. 임의 비밀번호와 `example.invalid` 합성 계정을 사용하고 로컬 키·토큰을 출력하지 않으며, 생성 응답이 유실돼도 이번 합성 이메일로 계정을 찾아 환자·기억·계정을 삭제한다. 직원 검사는 다른 기관 환자·승인 사실·메시지가 조회되지 않고 자격 철회 후 세 뷰가 비워지는 것을 확인한다. 공유 `yai-hub` 인스턴스에는 적용하지 않는다. 별도 `/guardian` 보호자 웹도 로컬 합성 계정의 로그인·가족 기억 저장/재조회·연결 철회 후 거부 및 기존 기억 숨김을 브라우저에서 확인했다.
 
 ```bash
 supabase start --exclude edge-runtime,imgproxy,mailpit,postgres-meta,realtime,storage-api,studio,logflare,vector,supavisor
 python3 supabase/tests/local_http_smoke.py
+python3 supabase/tests/local_staff_http_smoke.py
 python3 -m unittest supabase/tests/test_local_http_smoke.py
 supabase stop --project-id kof5-familiar-voice-mvp
 ```

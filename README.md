@@ -67,6 +67,8 @@ uv run python scripts/run_backend.py
 
 `http://127.0.0.1:8765/guardian`은 별도 **보호자 웹 초안**입니다. 전용 Supabase의 URL과 publishable 키를 서버 환경 변수 `KOF5_SUPABASE_URL`, `KOF5_SUPABASE_PUBLISHABLE_KEY`로 설정해야 로그인할 수 있습니다. 원격 프로젝트에는 `KOF5_SUPABASE_PROJECT_REF`도 설정해야 하며, 공유 `yai-hub-production` 주소는 거부합니다. 브라우저는 Supabase Auth에 로그인하고 검증된 환자 연결의 가족 기억만 Data API/RLS로 읽고 저장합니다. 토큰은 페이지 메모리에만 있어 새로고침하면 다시 로그인해야 합니다. 작업 전용 **로컬 합성 계정**에서는 로그인·기억 저장·철회 후 차단을 브라우저로 확인했지만, 원격 전용 프로젝트·기관 직원 승인·실제 환자 데이터 처리·음성 등록은 아직 연결되지 않았습니다. 실제 가족/환자 정보는 안전 게이트 통과 전 입력하지 마세요.
 
+`http://127.0.0.1:8765/hospital`은 **병원 직원 조회 웹 초안**입니다. 같은 전용 Supabase 설정으로 Auth에 로그인한 뒤 호출자 RLS가 적용된 `api.hospital_patient_list`, `api.hospital_context_current`, `api.hospital_message_list`만 읽습니다. 현재 입원이 없는 환자의 병원 사실·메시지는 조회하지 않고, 승인 메시지 원문과 전달 상태·예정 시각을 표시합니다. 토큰은 페이지 메모리에만 보관합니다. 작업 전용 로컬 합성 직원 계정에서 기관별 조회·자격 철회 차단을 HTTP로 확인했고 모바일 폭에서 가로 넘침을 확인했지만, 실제 기관 직원 자격 검증·환자 등록·승인·전달은 아직 연결되지 않았습니다.
+
 내부 오디오 API `POST /internal/synthetic/audio`는 `KOF5_INTERNAL_DEMO_TOKEN`(32자 이상), 공급자 키·voice ID, `VOICE_OWNER_CONSENT_RECORD_ID`가 서버에 설정된 경우에만 열립니다. 요청에는 `X-Internal-Demo-Token`, `X-Synthetic-Material: confirmed`, `Content-Type: audio/wav`가 필요하며, PCM16 WAV 원문(2 MB 이하·30초 이하)을 전송합니다. 응답은 전사·짧은 답·MP3의 base64입니다. 이 확인은 내부 시험자의 선언이며 실제 동의 검증이나 환자 인증이 아닙니다. 오디오는 메모리에서만 처리하고 앱 DB에 저장하지 않습니다. 실제 환자 오디오를 보내지 마세요.
 
 루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
