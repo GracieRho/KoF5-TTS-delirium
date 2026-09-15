@@ -13,8 +13,10 @@ import httpx
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from kof5_tts.cloud_prototype import CloudCredentials, run_synthetic_pipeline  # noqa: E402
-from tests.synthetic_wav import SYNTHETIC_WAV  # noqa: E402
+from kof5_tts.cloud_prototype import (  # noqa: E402
+    CloudCredentials, delete_test_voice, enroll_test_voice, run_synthetic_pipeline,
+)
+from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
 
 
 class CloudPrototypeTests(unittest.TestCase):
@@ -28,6 +30,20 @@ class CloudPrototypeTests(unittest.TestCase):
         )
         self.assertEqual(run.returncode, 2)
         self.assertIn("VOICE_OWNER_CONSENT_RECORD_ID", run.stderr)
+
+    def test_own_voice_cli_requires_explicit_upload_and_consent_before_file_read(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("VOICE_OWNER_CONSENT_RECORD_ID", None)
+        command = [sys.executable, str(ROOT / "scripts" / "demo_voice_enrollment.py"),
+                   "enroll", "/nonexistent/one.wav", "/nonexistent/two.wav", "/nonexistent/three.wav"]
+        no_flags = subprocess.run(command, env=environment, capture_output=True, text=True,
+                                  check=False)
+        self.assertEqual(no_flags.returncode, 2)
+        self.assertIn("--own-voice", no_flags.stderr)
+        no_consent = subprocess.run(command + ["--own-voice", "--upload"], env=environment,
+                                    capture_output=True, text=True, check=False)
+        self.assertEqual(no_consent.returncode, 2)
+        self.assertIn("동의 기록", no_consent.stderr)
 
     def test_synthetic_three_provider_flow_and_privacy_flags(self) -> None:
         calls = []
@@ -221,6 +237,46 @@ class CloudPrototypeTests(unittest.TestCase):
                     CloudCredentials("d", "o", "e", "v", True),
                 )
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
+
+    def test_own_voice_enrollment_and_task_owned_delete_contract(self) -> None:
+        calls = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            if request.method == "POST":
+                return httpx.Response(200, json={"voice_id": "internal-voice-123",
+                                                 "requires_verification": True})
+            return httpx.Response(200, json={"status": "ok"})
+
+        samples = [make_synthetic_wav(20) for _ in range(3)]
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            enrolled = enroll_test_voice(client, samples, "test-key", True)
+            delete_test_voice(client, enrolled.voice_id, "test-key")
+        self.assertEqual((enrolled.voice_id, enrolled.requires_verification),
+                         ("internal-voice-123", True))
+        self.assertEqual((calls[0].method, calls[0].url.path), ("POST", "/v1/voices/add"))
+        self.assertEqual(calls[0].content.count(b'name="files[]"'), 3)
+        self.assertIn(b"KoF5 internal self-voice test", calls[0].content)
+        self.assertEqual((calls[1].method, calls[1].url.path),
+                         ("DELETE", "/v1/voices/internal-voice-123"))
+
+    def test_voice_enrollment_rejects_unconsented_short_or_invalid_response(self) -> None:
+        samples = [make_synthetic_wav(20) for _ in range(3)]
+        def unexpected(request: httpx.Request) -> httpx.Response:
+            raise AssertionError("invalid enrollment must not upload samples")
+        with httpx.Client(transport=httpx.MockTransport(unexpected)) as client:
+            with self.assertRaises(ValueError):
+                enroll_test_voice(client, samples, "test-key", False)
+            with self.assertRaises(ValueError):
+                enroll_test_voice(client, [SYNTHETIC_WAV] * 3, "test-key", True)
+            with self.assertRaises(ValueError):
+                delete_test_voice(client, "https://other", "test-key")
+
+        def malformed(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"voice_id": 123, "requires_verification": False})
+        with httpx.Client(transport=httpx.MockTransport(malformed)) as client:
+            with self.assertRaisesRegex(ValueError, "no valid ID"):
+                enroll_test_voice(client, samples, "test-key", True)
 
 
 if __name__ == "__main__":

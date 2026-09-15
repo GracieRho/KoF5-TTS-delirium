@@ -32,7 +32,7 @@ flowchart LR
 
 - Python 모듈: **7**
 - 설정 파일: **0**
-- 프로젝트 실행 스크립트: **6**
+- 프로젝트 실행 스크립트: **7**
 
 ### Python 모듈
 
@@ -57,6 +57,7 @@ flowchart LR
 | `scripts/convert_wav_to_flac.py` |
 | `scripts/demo_cloud_pipeline.py` |
 | `scripts/demo_companion_text.py` |
+| `scripts/demo_voice_enrollment.py` |
 | `scripts/download_aihub.py` |
 | `scripts/run_backend.py` |
 | `scripts/run_preprocessing_pipeline.py` |

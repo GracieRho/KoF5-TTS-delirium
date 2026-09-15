@@ -71,6 +71,8 @@ uv run python scripts/run_backend.py
 
 후보 API를 실제 합성 자료로 시험할 때는 세 API key, `ELEVENLABS_VOICE_ID`, `VOICE_OWNER_CONSENT_RECORD_ID`를 로컬 환경 변수에 설정하고 `uv run python scripts/demo_cloud_pipeline.py <합성 WAV> --synthetic-only`를 실행합니다. 동의 기록 ID 입력은 **내부 시험자의 확인 표시**일 뿐 실제 환자 시험의 승인·동의 절차가 아닙니다. Deepgram에는 WAV, OpenAI에는 전사 문장과 합성 사실, ElevenLabs에는 응답 문장과 시험용 voice ID가 전달됩니다. 결과 MP3는 Git에서 제외된 `runs/synthetic-preview-*.mp3`에 저장합니다. 현재 실서비스 호출은 수행하지 않았습니다.
 
+보호자 복제 음성의 API 계약은 [ElevenLabs IVC 생성](https://elevenlabs.io/docs/api-reference/voices/ivc/create)·[삭제](https://elevenlabs.io/docs/api-reference/voices/delete)를 기준으로 내부 **자가 음성**만 시험합니다. `ELEVENLABS_API_KEY`와 `VOICE_OWNER_CONSENT_RECORD_ID`를 설정한 뒤, 각 20~30초 PCM16 WAV 세 파일에 대해 `uv run python scripts/demo_voice_enrollment.py enroll <내음성1.wav> <내음성2.wav> <내음성3.wav> --own-voice --upload`를 명시적으로 실행해야 외부 전송·시험 clone 생성이 시작됩니다. 반환된 voice ID와 검증 대기 상태만 Git에서 제외된 `runs/internal-test-voice.json`에 기록하며 원본 파일은 복사하지 않습니다. `uv run python scripts/demo_voice_enrollment.py delete --confirm-delete`는 **이 CLI가 만든 시험 clone만** 공급자에서 삭제합니다. ElevenLabs는 [IVC에 1~2분의 깨끗한 음성과 MP3 192kbps 이상](https://elevenlabs.io/docs/help-center/product/voices/voice-cloning/what-files-do-you-accept-for-voice-cloning)을 권장하므로, WAV 기반 절차의 품질·업로드 성공은 아직 실측되지 않았습니다. [Zero Retention Mode도 IVC 샘플에는 적용되지 않습니다](https://elevenlabs.io/docs/eleven-api/resources/zero-retention-mode). 실제 보호자/환자 자료는 기관·동의·보관/삭제 계약이 정해지기 전까지 등록하지 않습니다.
+
 ## 기존 전처리 도구
 
 AI Hub 데이터셋 key와 선택 file key를 확인한 뒤 다운로드부터 24 kHz mono 16-bit FLAC 변환까지 실행할 수 있습니다.

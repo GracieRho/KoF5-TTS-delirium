@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
+from re import fullmatch
+from typing import Sequence
 from urllib.parse import quote
 import wave
 
@@ -28,7 +30,7 @@ class CloudCredentials:
             raise ValueError("voice owner's cloning consent must be verified")
 
 
-def validate_short_wav(wav: bytes) -> None:
+def validate_short_wav(wav: bytes) -> float:
     """Reject invalid or long audio before it can reach a hosted provider."""
     if len(wav) > 2_000_000 or wav[:4] != b"RIFF" or wav[8:12] != b"WAVE":
         raise ValueError("expected a short WAV under 2 MB")
@@ -43,6 +45,7 @@ def validate_short_wav(wav: bytes) -> None:
                 raise ValueError("expected PCM16 WAV of at most 30 seconds")
             if len(audio.readframes(frames)) != frames * channels * width:
                 raise ValueError("WAV audio data is incomplete")
+            return frames / rate
     except (EOFError, RuntimeError, wave.Error) as exc:
         raise ValueError("invalid WAV container") from exc
 
@@ -128,6 +131,53 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
     if not audio:
         raise ValueError("TTS returned no audio")
     return bytes(audio)
+
+
+@dataclass(frozen=True)
+class EnrolledVoice:
+    voice_id: str
+    requires_verification: bool
+
+
+def enroll_test_voice(
+    client: httpx.Client, samples: Sequence[bytes], key: str, own_voice_consent_verified: bool
+) -> EnrolledVoice:
+    """Create an IVC clone from the internal tester's own three short samples."""
+    if not own_voice_consent_verified or not key:
+        raise ValueError("own-voice cloning consent and provider key are required")
+    if len(samples) != 3:
+        raise ValueError("three voice samples are required")
+    durations = [validate_short_wav(sample) for sample in samples]
+    if any(duration < 20 for duration in durations) or sum(durations) < 60:
+        raise ValueError("three 20–30 second voice samples are required")
+    response = client.post(
+        "https://api.elevenlabs.io/v1/voices/add",
+        headers={"xi-api-key": key},
+        data={"name": "KoF5 internal self-voice test"},
+        files=[("files[]", (f"sample-{index}.wav", sample, "audio/wav"))
+               for index, sample in enumerate(samples, start=1)],
+    )
+    response.raise_for_status()
+    body = response.json()
+    voice_id = body.get("voice_id") if isinstance(body, dict) else None
+    if not isinstance(voice_id, str) or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id) \
+            or not isinstance(body.get("requires_verification"), bool):
+        raise ValueError("voice clone response has no valid ID or verification state")
+    return EnrolledVoice(voice_id, body["requires_verification"])
+
+
+def delete_test_voice(client: httpx.Client, voice_id: str, key: str) -> None:
+    """Remove a task-owned test clone by its provider ID."""
+    if not key or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
+        raise ValueError("provider key and valid test voice ID are required")
+    response = client.delete(
+        f"https://api.elevenlabs.io/v1/voices/{quote(voice_id, safe='')}",
+        headers={"xi-api-key": key},
+    )
+    response.raise_for_status()
+    body = response.json()
+    if not isinstance(body, dict) or body.get("status") != "ok":
+        raise ValueError("provider did not confirm test voice deletion")
 
 
 def run_synthetic_pipeline(
