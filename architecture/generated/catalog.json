@@ -48,6 +48,14 @@
         "imports": []
       },
       {
+        "module": "kof5_tts.api",
+        "path": "src/kof5_tts/api.py",
+        "layer": "api",
+        "imports": [
+          "kof5_tts.companion"
+        ]
+      },
+      {
         "module": "kof5_tts.companion",
         "path": "src/kof5_tts/companion.py",
         "layer": "companion",
@@ -80,6 +88,7 @@
     "scripts/convert_wav_to_flac.py",
     "scripts/demo_companion_text.py",
     "scripts/download_aihub.py",
+    "scripts/run_backend.py",
     "scripts/run_preprocessing_pipeline.py"
   ],
   "limitations": [
