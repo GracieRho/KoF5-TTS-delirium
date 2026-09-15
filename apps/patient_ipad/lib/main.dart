@@ -8,6 +8,8 @@ import 'package:record/record.dart';
 import 'on_device_speech.dart';
 import 'device_anonymous_auth.dart';
 import 'synthetic_hospital_message.dart';
+import 'synthetic_auxiliary_alert.dart';
+import 'synthetic_risk_candidate.dart';
 import 'speech_candidate.dart';
 import 'synthetic_activation.dart';
 import 'synthetic_cloud_trial.dart';
@@ -26,6 +28,7 @@ class PatientMicDemo extends StatefulWidget {
     this.dueHospitalMessageIds = listSyntheticDueHospitalMessageIds,
     this.confirmHospitalMessage = confirmSyntheticDueHospitalMessage,
     this.hospitalMessageAudio = synthesizeSyntheticHospitalMessage,
+    this.auxiliaryAlert = createSyntheticAuxiliaryAlert,
   });
 
   final Future<SyntheticCloudReply> Function(HttpClient, Uri, String, Uint8List)
@@ -80,6 +83,15 @@ class PatientMicDemo extends StatefulWidget {
     DueHospitalMessage,
   )
   hospitalMessageAudio;
+  final Future<SyntheticAlertCreated> Function(
+    HttpClient,
+    Uri,
+    String,
+    AnonymousDeviceSession,
+    SyntheticRiskCandidate,
+    String,
+  )
+  auxiliaryAlert;
 
   @override
   State<PatientMicDemo> createState() => _PatientMicDemoState();
@@ -102,6 +114,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   HttpClient? _cloudClient;
   HttpClient? _deviceClient;
   HttpClient? _hospitalClient;
+  HttpClient? _alertClient;
   AnonymousDeviceSession? _deviceSession;
   DevicePairContext? _devicePairContext;
   var _deviceGeneration = 0;
@@ -110,6 +123,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   DueHospitalMessage? _dueHospitalMessage;
   var _hospitalStatus = '병원 승인 메시지를 확인하지 않았습니다.';
   var _hospitalGeneration = 0;
+  static const _callButtonAdvice = '의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요.';
+  var _riskStatus = '고위험 발화 후보를 확인하지 않았습니다. 이 시험은 의료진 호출을 보장하지 않습니다.';
   var _pairedOnlyTrial = false;
   var _deviceStatus = '전용 Supabase 익명 기기 로그인과 병원 연결을 확인하지 않았습니다.';
   Uint8List? _heldCandidate;
@@ -218,9 +233,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _hospitalGeneration++;
     _hospitalClient?.close(force: true);
     _hospitalClient = null;
+    _alertClient?.close(force: true);
+    _alertClient = null;
     _dueHospitalMessage = null;
     _hospitalBusy = false;
     _hospitalStatus = '기기 권한을 지워 병원 메시지를 폐기했습니다.';
+    _riskStatus = '기기 권한을 지웠습니다. $_callButtonAdvice';
     _deviceClient?.close(force: true);
     _deviceClient = null;
     _deviceSession = null;
@@ -865,6 +883,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _recognizing = true;
     setState(() => _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.');
     String? directedText;
+    SyntheticRiskCandidate? directedRisk;
     try {
       final transcript = await _speech
           .transcribe(candidate)
@@ -898,7 +917,30 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         unawaited(_stopMicAndReply());
         return;
       }
-      if (fromPlayback) {
+      final riskPhrase = SyntheticRiskCandidate.matchPhrase(_localTranscript);
+      if (riskPhrase != null) {
+        _activation.reset();
+        final risk = SyntheticRiskCandidate.fromDirectedOwnVoice(
+          _localTranscript,
+        );
+        if (fromPlayback) {
+          _pendingBargeInText = risk?.transcript;
+          _pendingBargeInGeneration = risk == null ? null : _trialGeneration;
+        } else if (_autoTextTrial && !_proactivePaused) {
+          directedRisk = risk;
+        }
+        setState(() {
+          _localStatus = risk == null
+              ? '위험 표현 후보이지만 화자가 불명확해 서버 전송을 폐기했습니다.'
+              : fromPlayback
+              ? '재생 중 위험 후보입니다. 내 목소리 확인 전 보조 alert를 보내지 않습니다.'
+              : '합성 자가 음성 위험 후보입니다. 실제 환자 화자 판정은 아직 검증되지 않았습니다.';
+          _riskStatus = risk == null
+              ? '화자 불명/주변 발화 후보는 alert를 만들지 않습니다. $_callButtonAdvice'
+              : '위험 발화 후보만 감지했습니다. 의료진 확인은 미확인입니다. $_callButtonAdvice';
+          _cloudStatus = _callButtonAdvice;
+        });
+      } else if (fromPlayback) {
         _pendingBargeInText = _localTranscript.isEmpty
             ? null
             : _localTranscript;
@@ -929,6 +971,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         generation == _localGeneration &&
         _autoTextTrial) {
       unawaited(_sendTextTrial(directedText));
+    }
+    if (directedRisk != null &&
+        mounted &&
+        _foreground &&
+        generation == _localGeneration &&
+        _autoTextTrial &&
+        !_dissentStopped) {
+      unawaited(_sendSyntheticRiskAlert(directedRisk));
     }
   }
 
@@ -986,6 +1036,17 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _sessionExpiry = null;
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
+    if (SyntheticRiskCandidate.matchPhrase(transcript) != null) {
+      final risk = SyntheticRiskCandidate.fromDirectedOwnVoice(transcript);
+      if (risk == null) {
+        setState(
+          () => _riskStatus = '화자 불명 위험 후보는 전송하지 않습니다. $_callButtonAdvice',
+        );
+      } else {
+        unawaited(_sendSyntheticRiskAlert(risk));
+      }
+      return;
+    }
     _candidateExpiry?.cancel();
     _candidateExpiry = null;
     _heldCandidate = null;
@@ -1026,6 +1087,102 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         'DIRECTED',
       );
     }, textOnly: true);
+  }
+
+  Future<void> _sendSyntheticRiskAlert(SyntheticRiskCandidate candidate) async {
+    final session = _deviceSession;
+    if (!_ownVoiceTrial ||
+        !_autoTextTrial ||
+        !_foreground ||
+        _dissentStopped ||
+        _proactivePaused ||
+        _sending ||
+        _hospitalBusy ||
+        _playedReply ||
+        _stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _speechStop != null ||
+        !_pairedReady ||
+        session == null) {
+      if (mounted) {
+        setState(
+          () => _riskStatus =
+              '보조 alert 권한/발화 판정을 확인하지 못해 전송하지 않았습니다. $_callButtonAdvice',
+        );
+      }
+      return;
+    }
+    final generation = ++_trialGeneration;
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
+    _candidateExpiry?.cancel();
+    _candidateExpiry = null;
+    _heldCandidate = null;
+    setState(() {
+      _sending = true;
+      _riskStatus =
+          '마이크와 기기 내 전사를 중단하고 합성 보조 alert 기록 생성을 확인하고 있습니다. $_callButtonAdvice';
+    });
+    if (!await _stopForTrial(generation)) {
+      if (mounted && generation == _trialGeneration) {
+        setState(
+          () => _riskStatus =
+              '마이크/전사 중단을 확인하지 못해 보조 alert를 보내지 않았습니다. $_callButtonAdvice',
+        );
+      }
+      return;
+    }
+    if (!_pairedReady ||
+        !identical(_deviceSession, session) ||
+        !_foreground ||
+        _dissentStopped ||
+        generation != _trialGeneration) {
+      if (mounted && generation == _trialGeneration) {
+        setState(() => _sending = false);
+      }
+      return;
+    }
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    _alertClient = client;
+    try {
+      final project = Uri.parse(_supabaseUrl.text.trim());
+      await widget
+          .auxiliaryAlert(
+            client,
+            project,
+            _publishableKey.text.trim(),
+            session,
+            candidate,
+            newSyntheticAlertIdempotencyKey(),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (!mounted ||
+          !_foreground ||
+          !_ownVoiceTrial ||
+          _dissentStopped ||
+          !_pairedReady ||
+          !identical(_deviceSession, session) ||
+          generation != _trialGeneration) {
+        return;
+      }
+      setState(
+        () => _riskStatus =
+            '보조 alert DB 기록 생성만 확인했습니다. 의료진 전달·확인은 미확인입니다. $_callButtonAdvice',
+      );
+    } catch (_) {
+      if (mounted && _foreground && generation == _trialGeneration) {
+        setState(
+          () => _riskStatus = '보조 alert 생성 상태를 확인하지 못했습니다. $_callButtonAdvice',
+        );
+      }
+    } finally {
+      client.close(force: true);
+      if (_alertClient == client) _alertClient = null;
+      if (mounted && generation == _trialGeneration) {
+        setState(() => _sending = false);
+      }
+    }
   }
 
   void _confirmBargeInText() {
@@ -1805,8 +1962,13 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                             _speechStop != null
                                         ? null
                                         : _confirmBargeInText,
-                                    child: const Text(
-                                      '끼어든 글이 내 목소리였음 확인 · 글 보내기',
+                                    child: Text(
+                                      SyntheticRiskCandidate.matchPhrase(
+                                                _pendingBargeInText!,
+                                              ) !=
+                                              null
+                                          ? '끼어든 위험 후보가 내 목소리였음 확인 · 보조 alert 시험'
+                                          : '끼어든 글이 내 목소리였음 확인 · 글 보내기',
                                     ),
                                   ),
                                 ],
@@ -1841,6 +2003,18 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   _cloudStatus,
                                   style: const TextStyle(
                                     color: Color(0xFF53615F),
+                                    fontSize: 16,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Semantics(
+                                liveRegion: true,
+                                child: Text(
+                                  _riskStatus,
+                                  style: const TextStyle(
+                                    color: Color(0xFF9A4B27),
                                     fontSize: 16,
                                     height: 1.4,
                                   ),
