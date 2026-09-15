@@ -129,6 +129,9 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.api.run_synthetic_pipeline", return_value=("수민아?", "응, 왜?", b"mp3")
         ) as pipeline:
             self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV).status_code, 401)
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV, headers=[
+                (b"x-internal-demo-token", b"\xff"),
+            ]).status_code, 401)
             self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV,
                                               headers={"X-Internal-Demo-Token": headers["X-Internal-Demo-Token"]}).status_code, 400)
             self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV,
@@ -136,6 +139,9 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.post(path, content=b"x" * 2_000_001,
                                               headers=headers).status_code, 413)
             self.assertEqual(self.client.post(path, content=b"RIFF" + b"x" * 60,
+                                              headers=headers).status_code, 422)
+            bad_chunk = b"RIFF" + (100).to_bytes(4, "little") + b"WAVEJUNK" + (0xffffffff).to_bytes(4, "little")
+            self.assertEqual(self.client.post(path, content=bad_chunk,
                                               headers=headers).status_code, 422)
             pipeline.assert_not_called()
             result = self.client.post(path, content=SYNTHETIC_WAV, headers=headers)

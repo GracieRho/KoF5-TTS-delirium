@@ -43,7 +43,7 @@ def validate_short_wav(wav: bytes) -> None:
                 raise ValueError("expected PCM16 WAV of at most 30 seconds")
             if len(audio.readframes(frames)) != frames * channels * width:
                 raise ValueError("WAV audio data is incomplete")
-    except (EOFError, wave.Error) as exc:
+    except (EOFError, RuntimeError, wave.Error) as exc:
         raise ValueError("invalid WAV container") from exc
 
 
@@ -113,15 +113,21 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
     """ElevenLabs Korean-capable IVC voice playback, never enrollment here."""
     if not text.strip() or len(text) > 200:
         raise ValueError("TTS text must be short")
-    response = client.post(
+    with client.stream(
+        "POST",
         f"https://api.elevenlabs.io/v1/text-to-speech/{quote(credentials.voice_id, safe='')}",
         headers={"xi-api-key": credentials.elevenlabs_key},
         json={"text": text, "model_id": "eleven_multilingual_v2"},
-    )
-    response.raise_for_status()
-    if not response.content or len(response.content) > 2_000_000:
-        raise ValueError("TTS returned empty or oversized audio")
-    return response.content
+    ) as response:
+        response.raise_for_status()
+        audio = bytearray()
+        for chunk in response.iter_bytes():
+            if len(audio) + len(chunk) > 2_000_000:
+                raise ValueError("TTS returned oversized audio")
+            audio.extend(chunk)
+    if not audio:
+        raise ValueError("TTS returned no audio")
+    return bytes(audio)
 
 
 def run_synthetic_pipeline(

@@ -77,9 +77,10 @@ def health() -> dict[str, str]:
 async def synthetic_audio(request: Request) -> dict[str, str | None]:
     """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
     token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
-    if len(token) < 32:
+    if len(token) < 32 or not token.isascii():
         raise HTTPException(status_code=503, detail="내부 오디오 시험이 설정되지 않았습니다")
-    if not compare_digest(request.headers.get("x-internal-demo-token", ""), token):
+    supplied_token = request.headers.get("x-internal-demo-token", "")
+    if not supplied_token.isascii() or not compare_digest(supplied_token, token):
         raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
     if request.headers.get("x-synthetic-material") != "confirmed":
         raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
@@ -99,9 +100,9 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
         raise HTTPException(status_code=503, detail="Hosted 공급자 설정이 필요합니다") from exc
     wav = bytearray()
     async for chunk in request.stream():
-        wav.extend(chunk)
-        if len(wav) > 2_000_000:
+        if len(wav) + len(chunk) > 2_000_000:
             raise HTTPException(status_code=413, detail="2 MB 이하의 짧은 WAV만 허용합니다")
+        wav.extend(chunk)
     try:
         validate_short_wav(wav)
     except ValueError as exc:

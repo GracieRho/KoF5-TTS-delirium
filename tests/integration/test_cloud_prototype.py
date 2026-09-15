@@ -81,11 +81,36 @@ class CloudPrototypeTests(unittest.TestCase):
             audio.setframerate(16_000)
             audio.writeframes(b"\0" * (16_000 * 2 * 31))
         with httpx.Client(transport=httpx.MockTransport(unexpected)) as client:
-            for wav in (SYNTHETIC_WAV[:-100], long_audio.getvalue()):
+            bad_chunk = b"RIFF" + (100).to_bytes(4, "little") + b"WAVEJUNK" + (0xffffffff).to_bytes(4, "little")
+            for wav in (SYNTHETIC_WAV[:-100], long_audio.getvalue(), bad_chunk):
                 with self.subTest(size=len(wav)), self.assertRaises(ValueError):
                     run_synthetic_pipeline(
                         client, wav, "known fact", CloudCredentials("d", "o", "e", "v", True),
                     )
+
+    def test_oversized_tts_stops_reading_provider_stream(self) -> None:
+        chunks_sent = []
+
+        class OversizedAudio(httpx.SyncByteStream):
+            def __iter__(self):
+                for index in range(5):
+                    chunks_sent.append(index)
+                    yield b"x" * 1_000_000
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "api.deepgram.com":
+                return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                    {"transcript": "수민아?"},
+                ]}]}})
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, stream=OversizedAudio())
+            raise AssertionError("first turn must skip LLM")
+
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            with self.assertRaisesRegex(ValueError, "oversized audio"):
+                run_synthetic_pipeline(client, SYNTHETIC_WAV, "known fact",
+                                       CloudCredentials("d", "o", "e", "v", True))
+        self.assertEqual(chunks_sent, [0, 1, 2])
 
     def test_empty_transcript_stops_before_llm_or_tts(self) -> None:
         calls = []
