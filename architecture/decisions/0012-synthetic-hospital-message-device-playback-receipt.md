@@ -17,4 +17,4 @@ iPad가 **네이티브 재생 종료를 확인한 뒤에만** 기기 JWT와 같�
 
 ## 검증과 후속 조건
 
-로컬 DB 권한/멱등성·기기 타이머/철회/재생 실패 검사를 거쳐 합성 결과를 기록한다. 완료 RPC의 네트워크 결과가 불명확한 채 앱이 재시작되면 재생이 중복될 수 있다. 실제 환자 시험 전에는 기기별 복구·중복 방지, 정확한 예약 시각, 실제 청취 확인, 임상 원문 승인 및 [Gate07 네 조건](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md#23-pre-patient-trial-gate)을 따로 검증한다.
+작업 전용 로컬 DB를 최종 migration으로 깨끗하게 재적용한 뒤 pgTAP 474개/17파일과 Auth/Data API의 직원 승인→기기 완료→같은 시도 재요청→철회 거부가 통과했다. Flutter 전체 42개·정적 분석도 통과했다. 이 검사는 합성 장치의 코드 경계이며 실기기 네이티브 재생이나 실제 공급자 호출의 증거는 아니다. 완료 RPC의 네트워크 결과가 불명확한 채 앱이 재시작되면 재생이 중복될 수 있다. 실제 환자 시험 전에는 기기별 복구·중복 방지, 정확한 예약 시각, 실제 청취 확인, 임상 원문 승인 및 [Gate07 네 조건](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md#23-pre-patient-trial-gate)을 따로 검증한다.

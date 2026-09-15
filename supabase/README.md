@@ -36,7 +36,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/smoke/registry_constraints.sql
 ```
 
-2026-09-16 현재 **이 작업 전용 로컬 Supabase PostgreSQL 17**에서 전체 migration을 빈 DB로 재적용하고 pgTAP **451개/16파일**이 통과했다. 로컬 GoTrue/Data API에서 고정 합성 환자의 서버 전용 색인·기기 의미 검색·사실 수정/동의 철회, 보호자 음성 `pending` 선기록·멱등 재시도·검증/삭제 대기·별도 동의 철회 후 TTS 차단·원격 부재 표시 전이, 보호자 clone 선택(0/1/2개 및 철회), 합성 직접 발화 기록의 중복 요청/철회와 담당 직원의 오늘 전사 조회를 검사했다. 시험 환자·색인·전사·clone·Auth 계정은 모두 0건으로 정리했다. 실제 공급자 음성 생성/삭제, 원격 프로젝트, 기관 직원 승인·실제 환자 처리는 검증하지 않았다.
+2026-09-16 현재 **이 작업 전용 로컬 Supabase PostgreSQL 17**에서 전체 migration을 빈 DB로 재적용하고 pgTAP **474개/17파일**이 통과했다. 로컬 GoTrue/Data API에서 고정 합성 환자의 서버 전용 색인·기기 의미 검색·사실 수정/동의 철회, 보호자 음성 `pending` 선기록·멱등 재시도·검증/삭제 대기·별도 동의 철회 후 TTS 차단·원격 부재 표시 전이, 보호자 clone 선택(0/1/2개 및 철회), 합성 직접 발화 기록의 중복 요청/철회와 담당 직원의 오늘 전사 조회, 두 직원 승인 예약 메시지의 기기 완료 기록·같은 시도 재요청·철회 거부를 검사했다. 시험 환자·색인·전사·clone·Auth 계정은 모두 0건으로 정리했다. 실제 공급자 음성 생성/삭제, 원격 프로젝트, 기관 직원 승인·실제 환자 처리는 검증하지 않았다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke/registry_constraints.sql
