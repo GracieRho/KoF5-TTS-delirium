@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from kof5_tts.companion import ConversationSession, Fact, orientation_date, relevant_facts
@@ -25,6 +27,11 @@ app = FastAPI(title="Synthetic Familiar Voice MVP", docs_url=None, redoc_url=Non
 app.state.sessions = {}
 
 
+@app.get("/demo", include_in_schema=False)
+def demo() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("synthetic_demo.html"))
+
+
 class SpeechTurn(BaseModel):
     transcript: str = Field(min_length=1, max_length=500)
     label: Literal["DIRECTED", "AMBIENT", "UNCERTAIN"]
@@ -32,7 +39,7 @@ class SpeechTurn(BaseModel):
 
 def _patient(patient_id: str) -> None:
     if patient_id != SYNTHETIC_PATIENT:
-        raise HTTPException(status_code=404, detail="synthetic patient only")
+        raise HTTPException(status_code=404, detail="합성 환자 ID만 사용할 수 있습니다")
 
 
 def _reply(event: str, transcript: str, now: datetime) -> str | None:
@@ -64,11 +71,11 @@ def start(patient_id: str, speech: SpeechTurn) -> dict[str, str | None]:
     now = datetime.now(timezone.utc)
     existing = app.state.sessions.get(patient_id)
     if existing is not None and existing.proactive_paused:
-        raise HTTPException(status_code=409, detail="patient dissent remains active")
+        raise HTTPException(status_code=409, detail="환자 거부 상태가 유지되어 재시작할 수 없습니다")
     if existing is not None:
         existing.expire(now)
     if existing is not None and existing.state != "IDLE":
-        raise HTTPException(status_code=409, detail="conversation already active")
+        raise HTTPException(status_code=409, detail="대화가 이미 진행 중입니다")
     session = ConversationSession()
     app.state.sessions[patient_id] = session
     return _route(session, speech, now)
@@ -79,7 +86,7 @@ def turn(patient_id: str, speech: SpeechTurn) -> dict[str, str | None]:
     _patient(patient_id)
     session = app.state.sessions.get(patient_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="conversation not started")
+        raise HTTPException(status_code=404, detail="시작된 대화가 없습니다")
     now = datetime.now(timezone.utc)
     session.expire(now)
     return _route(session, speech, now)
@@ -90,6 +97,6 @@ def end(patient_id: str) -> dict[str, str]:
     _patient(patient_id)
     session = app.state.sessions.get(patient_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="conversation not started")
+        raise HTTPException(status_code=404, detail="시작된 대화가 없습니다")
     session.stop()
     return {"event": "closed", "state": session.state}
