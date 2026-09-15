@@ -155,7 +155,12 @@ class CloudPrototypeTests(unittest.TestCase):
                 namespace="hospital_context",
             )
             self.assertIn("확인된 정보가 없어서", unsafe)
-        self.assertEqual(hosts, ["api.elevenlabs.io"] * 3)
+            result_question, _ = run_synthetic_text_pipeline(
+                client, "수민아 CT 검사 결과 어때?", "DIRECTED", approved, credentials,
+                namespace="hospital_context",
+            )
+            self.assertIn("확인된 정보가 없어서", result_question)
+        self.assertEqual(hosts, ["api.elevenlabs.io"] * 4)
 
     def test_llm_extra_hospital_or_date_claim_does_not_reach_tts(self) -> None:
         for invented in ("내일 CT 검사를 받으러 가.", "2027년 5월에 제주도 갔었어.",
