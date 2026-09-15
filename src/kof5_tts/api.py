@@ -120,7 +120,7 @@ def health() -> dict[str, str]:
     return {"status": "synthetic_demo_only"}
 
 
-def _internal_demo_credentials(request: Request) -> CloudCredentials:
+def _internal_demo_auth(request: Request) -> None:
     token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
     if len(token) < 32 or not token.isascii():
         raise HTTPException(status_code=503, detail="내부 오디오 시험이 설정되지 않았습니다")
@@ -129,6 +129,10 @@ def _internal_demo_credentials(request: Request) -> CloudCredentials:
         raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
     if request.headers.get("x-synthetic-material") != "confirmed":
         raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+
+
+def _internal_demo_credentials(request: Request) -> CloudCredentials:
+    _internal_demo_auth(request)
     if not os.environ.get("VOICE_OWNER_CONSENT_RECORD_ID", "").strip():
         raise HTTPException(status_code=503, detail="시험용 음성 소유자 동의 기록이 필요합니다")
     try:
@@ -233,6 +237,28 @@ async def _device_preflight(request: Request, patient_id: str) -> None:
         raise HTTPException(status_code=503, detail="기기 배정·동의 사전 확인이 실패했습니다") from None
 
 
+async def _paired_clone_credentials(request: Request, patient_id: str) -> CloudCredentials:
+    await _device_preflight(request, patient_id)
+    row = await _voice_rpc("synthetic_patient_tts_voice_ready",
+                           {"p_patient_id": patient_id}, _service_headers())
+    if row.get("authorized") is not True:
+        raise HTTPException(status_code=403, detail="현재 승인된 합성 보호자 음성이 없습니다")
+    try:
+        if (row.get("provider") != "elevenlabs"
+                or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", row.get("voice_id", ""))
+                or not isinstance(row.get("guardian_user_id"), str)
+                or not isinstance(row.get("clone_id"), str)):
+            raise ValueError("invalid eligible clone response")
+        UUID(row["guardian_user_id"])
+        UUID(row["clone_id"])
+        return CloudCredentials(
+            os.environ.get("DEEPGRAM_API_KEY", ""), os.environ.get("OPENAI_API_KEY", ""),
+            os.environ.get("ELEVENLABS_API_KEY", ""), row["voice_id"], True,
+        )
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="승인된 합성 음성·공급자 설정을 확인하지 못했습니다") from None
+
+
 async def _paired_turn_rows(
     request: Request, patient_id: str, term: str,
     rpc_name: Literal["patient_family_turn_context", "patient_hospital_turn_context"],
@@ -277,7 +303,7 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
 
 
 async def _paired_semantic_memory(request: Request, patient_id: str, transcript: str) -> str:
-    await _device_preflight(request, patient_id)  # No transcript leaves this server before current consent.
+    # The paired route checks device and clone consent before calling this embedding path.
     vector = await _embedding(transcript)
     config = guardian_config()
     try:
@@ -758,6 +784,9 @@ async def synthetic_text(request: Request) -> dict[str, str | None]:
     """Internal text-only iPad path; candidate PCM stays on the device."""
     credentials = _internal_demo_credentials(request)
     speech = await _read_text_turn(request)
+    event = ConversationSession().hear(speech.transcript, speech.label, datetime.now(timezone.utc))
+    if event in {"discarded", "closed", "patient_dissent"}:
+        return {"transcript": "", "reply": None, "audio_mp3_base64": None}
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
@@ -780,18 +809,18 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     """Paired device JWT/RLS, refreshed family facts and text-only synthetic turn."""
     if patient_id != SYNTHETIC_DB_PATIENT:
         raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
-    credentials = _internal_demo_credentials(request)
+    _internal_demo_auth(request)
     speech = await _read_text_turn(request)
     now = datetime.now(timezone.utc)
     event = ConversationSession().hear(speech.transcript, speech.label, now)
     if event in {"discarded", "closed", "patient_dissent"}:
-        return {"transcript": speech.transcript, "reply": None, "audio_mp3_base64": None}
+        return {"transcript": "", "reply": None, "audio_mp3_base64": None}
+    credentials = await _paired_clone_credentials(request, patient_id)
     hospital = hospital_fact_question(speech.transcript)
     # Deterministic policy replies do not require family transcript embeddings.
     if hospital:
         known_fact = await _paired_hospital_fact(request, patient_id, speech.transcript)
     elif policy_reply(speech.transcript, event, now) is not None:
-        await _device_preflight(request, patient_id)
         known_fact = ""
     else:
         known_fact = await _paired_semantic_memory(request, patient_id, speech.transcript)
@@ -820,7 +849,8 @@ async def paired_synthetic_message_audio(patient_id: str, message_id: str, reque
     """Read one due approved synthetic message under device RLS, then voice its exact text."""
     if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", message_id):
         raise HTTPException(status_code=404, detail="합성 시험 메시지만 사용할 수 있습니다")
-    credentials = _internal_demo_credentials(request)
+    _internal_demo_auth(request)
+    credentials = await _paired_clone_credentials(request, patient_id)
     approved_text = await _paired_due_message(request, patient_id, message_id)
 
     def run() -> bytes:

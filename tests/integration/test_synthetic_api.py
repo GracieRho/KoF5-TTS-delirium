@@ -17,6 +17,12 @@ sys.path.insert(0, str(ROOT / "src"))
 from kof5_tts.api import SYNTHETIC_DB_PATIENT, app  # noqa: E402
 from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
 
+READY_CLONE = {"authorized": True,
+               "guardian_user_id": "00000000-0000-4000-8000-000000000913",
+               "clone_id": "00000000-0000-4000-8000-000000000914",
+               "provider": "elevenlabs", "voice_id": "guardian-clone-975"}
+SERVICE_KEY = "sb_secret_" + "s" * 32
+
 
 class SyntheticApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -161,6 +167,7 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV).status_code, 503)
         env = {
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram",
             "OPENAI_API_KEY": "test-openai",
@@ -220,6 +227,7 @@ class SyntheticApiTests(unittest.TestCase):
 
         env = {
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -241,6 +249,7 @@ class SyntheticApiTests(unittest.TestCase):
     def test_internal_text_requires_trial_auth_and_never_needs_candidate_audio(self) -> None:
         env = {
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -272,6 +281,7 @@ class SyntheticApiTests(unittest.TestCase):
             "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
             "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -286,6 +296,9 @@ class SyntheticApiTests(unittest.TestCase):
 
         def respond(request: httpx.Request) -> httpx.Response:
             calls.append((request.url.path, request.headers.get("authorization")))
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                self.assertEqual(request.headers["apikey"], SERVICE_KEY)
+                return httpx.Response(200, json=[READY_CLONE])
             if not request.url.path.endswith("/embeddings"):
                 self.assertEqual(request.headers["apikey"], "sb_publishable_local")
             if request.url.path.endswith("/patient_device_context"):
@@ -329,7 +342,8 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(pipeline.call_args.args[3], "2024년 5월 제주도에 함께 갔었다.")
             self.assertEqual(result.json()["audio_mp3_base64"], "bXAz")
             self.assertEqual([path.rsplit("/", 1)[-1] for path, _ in calls],
-                             ["patient_device_context", "embeddings", "patient_family_semantic_turn_context"])
+                             ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                              "embeddings", "patient_family_semantic_turn_context"])
             memory_rows = []
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "", "each turn gets fresh memory")
@@ -348,6 +362,7 @@ class SyntheticApiTests(unittest.TestCase):
             "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
             "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -365,6 +380,9 @@ class SyntheticApiTests(unittest.TestCase):
 
         def respond(request: httpx.Request) -> httpx.Response:
             calls.append(request.url.path)
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                self.assertEqual(request.headers["apikey"], SERVICE_KEY)
+                return httpx.Response(200, json=[READY_CLONE])
             if not request.url.path.endswith("/embeddings"):
                 self.assertEqual(request.headers["content-profile"], "api")
             if request.url.path.endswith("/patient_hospital_turn_context"):
@@ -410,6 +428,7 @@ class SyntheticApiTests(unittest.TestCase):
             "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
             "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -421,6 +440,11 @@ class SyntheticApiTests(unittest.TestCase):
         approved = "수민이 면회 예약은 오늘 오후 4시입니다."
 
         def respond(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/patient_device_context"):
+                return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
+                                                  "encounter_id": "synthetic-encounter"}])
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                return httpx.Response(200, json=[READY_CLONE])
             self.assertTrue(request.url.path.endswith("/patient_hospital_turn_context"))
             return httpx.Response(200, json=[{"authorized": True, "facts": [{
                 "category": "visit_schedule", "content": approved,
@@ -520,6 +544,7 @@ class SyntheticApiTests(unittest.TestCase):
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
                "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
                "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
                "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
                "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
@@ -533,6 +558,8 @@ class SyntheticApiTests(unittest.TestCase):
             if request.url.path.endswith("/patient_device_context"):
                 return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
                                                   "encounter_id": "synthetic-encounter"}])
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                return httpx.Response(200, json=[READY_CLONE])
             if request.url.path.endswith("/embeddings"):
                 return (httpx.Response(200, json={"model": "text-embedding-3-small",
                                                    "data": [{"index": 0, "embedding": [0.1] * 1536}]})
@@ -548,12 +575,13 @@ class SyntheticApiTests(unittest.TestCase):
         ), patch("kof5_tts.api.run_synthetic_text_pipeline") as pipeline:
             turn = {"transcript": "수민아 우리 휴가 어디였지?", "label": "DIRECTED"}
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 502)
-            self.assertEqual(seen, ["patient_device_context", "embeddings"])
+            self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                    "embeddings"])
             provider_ok = True
             seen.clear()
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
-            self.assertEqual(seen, ["patient_device_context", "embeddings",
-                                    "patient_family_semantic_turn_context"])
+            self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                    "embeddings", "patient_family_semantic_turn_context"])
             pipeline.assert_not_called()
 
     def test_paired_discard_and_dissent_never_leave_for_embedding_or_reply(self) -> None:
@@ -561,6 +589,7 @@ class SyntheticApiTests(unittest.TestCase):
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
                "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
                "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
                "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
                "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
@@ -578,14 +607,21 @@ class SyntheticApiTests(unittest.TestCase):
                 result = self.client.post(path, json={"transcript": transcript, "label": label},
                                           headers=headers)
                 self.assertEqual(result.status_code, 200)
+                self.assertEqual(result.json()["transcript"], "", "discarded transcript must not echo")
                 self.assertIsNone(result.json()["reply"])
                 self.assertIsNone(result.json()["audio_mp3_base64"])
+                unpaired = self.client.post("/internal/synthetic/text",
+                                            json={"transcript": transcript, "label": label},
+                                            headers={k: v for k, v in headers.items() if k != "Authorization"})
+                self.assertEqual(unpaired.status_code, 200)
+                self.assertEqual(unpaired.json()["transcript"], "")
 
     def test_paired_policy_medical_question_skips_embedding_and_llm(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
                "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
                "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
                "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
                "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
@@ -595,6 +631,8 @@ class SyntheticApiTests(unittest.TestCase):
 
         def preflight(request: httpx.Request) -> httpx.Response:
             seen.append(request.url.path.rsplit("/", 1)[-1])
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                return httpx.Response(200, json=[READY_CLONE])
             self.assertTrue(request.url.path.endswith("/patient_device_context"),
                             "policy-only speech must not call embeddings or family facts")
             return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
@@ -612,16 +650,15 @@ class SyntheticApiTests(unittest.TestCase):
                                                   "label": "DIRECTED"}, headers=headers)
         self.assertEqual(result.status_code, 200)
         self.assertIn("의료진", result.json()["reply"])
-        self.assertEqual(seen, ["patient_device_context"])
+        self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready"])
 
     def test_semantic_fact_reaches_real_reply_pipeline_without_word_overlap(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
                "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
-               "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
-               "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
-               "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
+               "OPENAI_API_KEY": "test-openai", "ELEVENLABS_API_KEY": "test-eleven"}
         headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
                    "Authorization": "Bearer " + "d" * 40}
         transcript = "수민아 그때 뭘 먹었어?"
@@ -633,6 +670,9 @@ class SyntheticApiTests(unittest.TestCase):
             if request.url.path.endswith("/patient_device_context"):
                 return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
                                                   "encounter_id": "synthetic-encounter"}])
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                self.assertEqual(request.headers["apikey"], SERVICE_KEY)
+                return httpx.Response(200, json=[READY_CLONE])
             if request.url.path.endswith("/embeddings"):
                 self.assertEqual(json.loads(request.read())["input"], transcript)
                 return httpx.Response(200, json={"model": "text-embedding-3-small",
@@ -650,6 +690,8 @@ class SyntheticApiTests(unittest.TestCase):
                     "type": "message", "content": [{"type": "output_text", "text": "흑돼지를 좋아했어."}],
                 }]})
             if "/text-to-speech/" in request.url.path:
+                self.assertTrue(request.url.path.endswith("/guardian-clone-975"),
+                                "paired TTS must use DB-selected clone ID")
                 self.assertEqual(json.loads(request.read())["text"], "흑돼지를 좋아했어.")
                 return httpx.Response(200, content=b"synthetic-mp3")
             raise AssertionError("unexpected reply provider route")
@@ -668,7 +710,8 @@ class SyntheticApiTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["reply"], "흑돼지를 좋아했어.")
         self.assertEqual(result.json()["audio_mp3_base64"], "c3ludGhldGljLW1wMw==")
-        self.assertEqual(hosted, ["patient_device_context", "embeddings",
+        self.assertEqual(hosted, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                  "embeddings",
                                   "patient_family_semantic_turn_context"])
 
     def test_due_hospital_message_voices_only_atomic_approved_original(self) -> None:
@@ -678,6 +721,7 @@ class SyntheticApiTests(unittest.TestCase):
             "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
             "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
             "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
             "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
             "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
@@ -688,8 +732,14 @@ class SyntheticApiTests(unittest.TestCase):
         }
         approved = "CT 검사는 오늘 14시입니다."
         authorized = True
+        spoken: list[str] = []
 
         def respond(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/patient_device_context"):
+                return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
+                                                  "encounter_id": "synthetic-encounter"}])
+            if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
+                return httpx.Response(200, json=[READY_CLONE])
             self.assertTrue(request.url.path.endswith("/synthetic_due_hospital_message"))
             self.assertEqual(request.headers["content-profile"], "api")
             self.assertEqual(json.loads(request.read()), {
@@ -702,22 +752,80 @@ class SyntheticApiTests(unittest.TestCase):
             }])
 
         async_client_class = httpx.AsyncClient
+        sync_client_class = httpx.Client
+
+        def provider(request: httpx.Request) -> httpx.Response:
+            spoken.append(request.url.path)
+            self.assertTrue(request.url.path.endswith("/guardian-clone-975"))
+            self.assertEqual(json.loads(request.read())["text"], approved)
+            return httpx.Response(200, content=b"mp3")
+
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
             side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
-        ), patch("kof5_tts.api.synthesize_mp3", return_value=b"mp3") as voice:
+        ), patch("kof5_tts.api.httpx.Client",
+                 side_effect=lambda **_: sync_client_class(transport=httpx.MockTransport(provider))):
             self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
                                               headers=headers).status_code, 404)
             self.assertEqual(self.client.post(path, headers={k: v for k, v in headers.items()
                                                              if k != "Authorization"}).status_code, 401)
-            voice.assert_not_called()
+            self.assertEqual(spoken, [])
             result = self.client.post(path, headers=headers)
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result.json(), {"approved_text": approved, "audio_mp3_base64": "bXAz"})
-            self.assertEqual(voice.call_args.args[1], approved)
+            self.assertEqual(len(spoken), 1)
             authorized = False
             self.assertEqual(self.client.post(path, headers=headers).status_code, 403)
-            self.assertEqual(voice.call_count, 1, "withdrawn message must never reach TTS")
+            self.assertEqual(len(spoken), 1, "withdrawn message must never reach TTS")
+
+    def test_paired_voice_ready_denials_block_text_and_message_before_provider(self) -> None:
+        message_id = "00000000-0000-4000-8000-000000000123"
+        paths = (f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text",
+                 f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/message/{message_id}/audio")
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "VOICE_OWNER_CONSENT_RECORD_ID": "", "ELEVENLABS_VOICE_ID": "",
+               "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+               "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "d" * 40}
+        cases = (("no_clone", [{"authorized": False}], 403),
+                 ("wrong_provider", [{**READY_CLONE, "provider": "other"}], 503),
+                 ("invalid_voice", [{**READY_CLONE, "voice_id": "bad/id"}], 503),
+                 ("ambiguous", [READY_CLONE, READY_CLONE], 503))
+        selected: list[dict] = []
+        seen: list[str] = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            route = request.url.path.rsplit("/", 1)[-1]
+            seen.append(route)
+            if route == "patient_device_context":
+                return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
+                                                  "encounter_id": "synthetic-encounter"}])
+            if route == "synthetic_patient_tts_voice_ready":
+                self.assertEqual(request.headers["apikey"], SERVICE_KEY)
+                return httpx.Response(200, json=selected)
+            raise AssertionError("denied voice cannot reach embedding/facts/message")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api.run_synthetic_text_pipeline") as reply, patch(
+            "kof5_tts.api.synthesize_mp3",
+        ) as speech:
+            for name, rows, expected in cases:
+                selected = rows
+                for path in paths:
+                    seen.clear()
+                    request_json = {"transcript": "수민아 제주도 기억나?", "label": "DIRECTED"} if path.endswith("/text") else None
+                    response = self.client.post(path, json=request_json, headers=headers)
+                    self.assertEqual(response.status_code, expected, name)
+                    self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready"], name)
+            reply.assert_not_called()
+            speech.assert_not_called()
 
     def test_guardian_voice_pending_before_provider_and_absence_before_deleted(self) -> None:
         from base64 import b64encode
