@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
 import 'on_device_speech.dart';
+import 'device_anonymous_auth.dart';
 import 'speech_candidate.dart';
 import 'synthetic_activation.dart';
 import 'synthetic_cloud_trial.dart';
@@ -18,6 +19,9 @@ class PatientMicDemo extends StatefulWidget {
     super.key,
     this.cloudTrial = sendOwnVoiceCandidate,
     this.textTrial = sendOwnVoiceText,
+    this.pairedTextTrial = sendPairedOwnVoiceText,
+    this.deviceSignIn = signInAnonymousDevice,
+    this.devicePair = confirmSyntheticDevicePair,
   });
 
   final Future<SyntheticCloudReply> Function(HttpClient, Uri, String, Uint8List)
@@ -30,6 +34,25 @@ class PatientMicDemo extends StatefulWidget {
     String,
   )
   textTrial;
+  final Future<SyntheticCloudReply> Function(
+    HttpClient,
+    Uri,
+    String,
+    String,
+    String,
+    String,
+    String,
+  )
+  pairedTextTrial;
+  final Future<AnonymousDeviceSession> Function(HttpClient, Uri, String)
+  deviceSignIn;
+  final Future<DevicePairContext> Function(
+    HttpClient,
+    Uri,
+    String,
+    AnonymousDeviceSession,
+  )
+  devicePair;
 
   @override
   State<PatientMicDemo> createState() => _PatientMicDemoState();
@@ -44,10 +67,19 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   final _activation = SyntheticActivation();
   final _endpoint = TextEditingController();
   final _token = TextEditingController();
+  final _supabaseUrl = TextEditingController();
+  final _publishableKey = TextEditingController();
   StreamSubscription<Uint8List>? _subscription;
   Timer? _candidateExpiry;
   Timer? _sessionExpiry;
   HttpClient? _cloudClient;
+  HttpClient? _deviceClient;
+  AnonymousDeviceSession? _deviceSession;
+  DevicePairContext? _devicePairContext;
+  var _deviceGeneration = 0;
+  var _deviceBusy = false;
+  var _pairedOnlyTrial = false;
+  var _deviceStatus = '전용 Supabase 익명 기기 로그인과 병원 연결을 확인하지 않았습니다.';
   Uint8List? _heldCandidate;
   var _listening = false;
   var _starting = false;
@@ -114,6 +146,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
     _activation.reset();
+    _clearDeviceAuth();
+    _pairedOnlyTrial = false;
     _sessionExpiry?.cancel();
     _sessionExpiry = null;
     _autoResumeOwnerGeneration = null;
@@ -121,6 +155,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _cloudClient?.close(force: true);
     _cloudClient = null;
     _token.clear();
+    _publishableKey.clear();
     _candidateExpiry?.cancel();
     _candidateExpiry = null;
     _heldCandidate = null;
@@ -144,6 +179,121 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       unawaited(_stopReply(successStatus: '시험 자료를 폐기했습니다.').then((_) {}));
     }
     if (hadActiveMic) unawaited(_stop());
+  }
+
+  void _clearDeviceAuth() {
+    _deviceGeneration++;
+    _deviceClient?.close(force: true);
+    _deviceClient = null;
+    _deviceSession = null;
+    _devicePairContext = null;
+    _deviceBusy = false;
+    _deviceStatus = '기기 JWT를 메모리에서 지웠습니다. 병원 연결을 다시 확인해야 합니다.';
+  }
+
+  bool get _pairedReady =>
+      _deviceSession?.usable(DateTime.now()) == true &&
+      _devicePairContext?.patientId == syntheticPatientId;
+
+  Future<void> _signInDevice() async {
+    if (!_ownVoiceTrial ||
+        _deviceBusy ||
+        _sending ||
+        _playedReply ||
+        !_foreground) {
+      return;
+    }
+    _clearDeviceAuth();
+    _pairedOnlyTrial =
+        true; // Never silently fall back to the legacy demo route.
+    final generation = _deviceGeneration;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    _deviceClient = client;
+    setState(() {
+      _deviceBusy = true;
+      _deviceStatus = '익명 기기 로그인을 확인하고 있습니다.';
+    });
+    try {
+      final project = Uri.parse(_supabaseUrl.text.trim());
+      checkDedicatedSupabase(project, _publishableKey.text.trim());
+      final session = await widget
+          .deviceSignIn(client, project, _publishableKey.text.trim())
+          .timeout(const Duration(seconds: 20));
+      if (!mounted || !_foreground || generation != _deviceGeneration) return;
+      if (!session.usable(DateTime.now())) {
+        throw const FormatException('JWT expired');
+      }
+      setState(() {
+        _deviceSession = session;
+        _devicePairContext = null;
+        _deviceStatus = '익명 기기 ID를 병원 직원에게 전달해 합성 연결을 등록하세요.';
+      });
+    } catch (_) {
+      if (mounted && generation == _deviceGeneration) {
+        setState(() => _deviceStatus = '전용 Supabase 익명 기기 로그인을 확인하지 못했습니다.');
+      }
+    } finally {
+      client.close(force: true);
+      if (_deviceClient == client) _deviceClient = null;
+      if (mounted && generation == _deviceGeneration) {
+        setState(() => _deviceBusy = false);
+      }
+    }
+  }
+
+  Future<void> _confirmDevicePair() async {
+    final session = _deviceSession;
+    if (session == null ||
+        _deviceBusy ||
+        _sending ||
+        _playedReply ||
+        !_foreground) {
+      return;
+    }
+    if (!session.usable(DateTime.now())) {
+      _clearDeviceAuth();
+      if (mounted) setState(() {});
+      return;
+    }
+    final generation = _deviceGeneration;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10);
+    _deviceClient = client;
+    setState(() {
+      _deviceBusy = true;
+      _devicePairContext = null;
+      _deviceStatus = '병원에서 등록한 합성 기기 연결을 확인하고 있습니다.';
+    });
+    try {
+      final project = Uri.parse(_supabaseUrl.text.trim());
+      checkDedicatedSupabase(project, _publishableKey.text.trim());
+      final context = await widget
+          .devicePair(client, project, _publishableKey.text.trim(), session)
+          .timeout(const Duration(seconds: 20));
+      if (!mounted || !_foreground || generation != _deviceGeneration) return;
+      if (!identical(_deviceSession, session) ||
+          !session.usable(DateTime.now()) ||
+          context.patientId != syntheticPatientId) {
+        throw const FormatException('unpaired synthetic device');
+      }
+      setState(() {
+        _devicePairContext = context;
+        _deviceStatus = '병원 등록과 일치하는 합성 기기 연결을 확인했습니다.';
+      });
+    } catch (_) {
+      if (mounted && generation == _deviceGeneration) {
+        setState(
+          () => _deviceStatus = '병원에서 확인한 합성 기기 연결이 없습니다. 연결 뒤 다시 확인하세요.',
+        );
+      }
+    } finally {
+      client.close(force: true);
+      if (_deviceClient == client) _deviceClient = null;
+      if (mounted && generation == _deviceGeneration) {
+        setState(() => _deviceBusy = false);
+      }
+    }
   }
 
   Future<bool> _cancelLocalSpeech() {
@@ -553,6 +703,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   Future<void> _sendTrial() async {
     if (!_ownVoiceTrial ||
+        _pairedOnlyTrial ||
         _heldCandidate == null ||
         _autoTextTrial ||
         _sending ||
@@ -588,6 +739,15 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         !_foreground) {
       return;
     }
+    if (_pairedOnlyTrial && !_pairedReady) {
+      if (_deviceSession?.usable(DateTime.now()) != true) _clearDeviceAuth();
+      if (mounted) {
+        setState(
+          () => _cloudStatus = '병원에서 확인한 합성 기기 연결과 유효한 JWT가 없어 글을 보내지 않았습니다.',
+        );
+      }
+      return;
+    }
     final generation = ++_trialGeneration;
     _sessionExpiry?.cancel();
     _sessionExpiry = null;
@@ -604,6 +764,24 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     });
     if (!await _stopForTrial(generation)) return;
     await _runTrialRequest(generation, (client) {
+      if (_pairedOnlyTrial) {
+        final session = _deviceSession;
+        if (!_pairedReady || session == null) {
+          throw const FormatException('paired device authorization expired');
+        }
+        final endpoint = Uri.parse(
+          _endpoint.text.trim(),
+        ).replace(path: '/internal/synthetic/paired/$syntheticPatientId/text');
+        return widget.pairedTextTrial(
+          client,
+          endpoint,
+          _token.text,
+          transcript,
+          'DIRECTED',
+          session.accessToken,
+          syntheticPatientId,
+        );
+      }
       final endpoint = Uri.parse(
         _endpoint.text.trim(),
       ).replace(path: '/internal/synthetic/text');
@@ -654,7 +832,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           : '재생 중 끼어들기 실험을 껐습니다.';
     });
     if (!sharedMic) return;
-    await _stop();
+    await _stop(keepDeviceAuth: true);
     if (mounted &&
         _foreground &&
         _ownVoiceTrial &&
@@ -670,7 +848,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   Future<bool> _stopForTrial(int generation) async {
-    await _stop();
+    await _stop(keepDeviceAuth: true);
     if (!mounted ||
         !_foreground ||
         !_ownVoiceTrial ||
@@ -794,7 +972,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _cloudStatus = '음성 응답 재생을 마쳤습니다. 기기에서 다시 듣습니다.';
       });
       if (_bargeInListeningGeneration == generation && _listening) {
-        await _stop(); // Leave the echo-cancelled shared mic before the next idle turn.
+        await _stop(
+          keepDeviceAuth: true,
+        ); // Shared mic teardown is part of this turn.
       }
       _resumeAfterReplyIfReady(generation);
     } catch (_) {
@@ -825,7 +1005,11 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     unawaited(_start(afterReply: true));
   }
 
-  Future<void> _stop() async {
+  Future<void> _stop({bool keepDeviceAuth = false}) async {
+    if (!keepDeviceAuth) {
+      _clearDeviceAuth();
+      if (mounted) setState(() {});
+    }
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
     _sessionExpiry?.cancel();
@@ -862,9 +1046,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         setState(() => _status = '마이크 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.');
       }
     }
-    await speechStopped;
+    final speechConfirmed = await speechStopped;
     _detector.reset();
     _stopUnconfirmed = !confirmed;
+    if (!confirmed || !speechConfirmed) _clearDeviceAuth();
     _stopping = false;
     if (mounted) {
       setState(
@@ -891,9 +1076,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _subscription?.cancel();
     _recorder.dispose();
     _cloudClient?.close(force: true);
+    _clearDeviceAuth();
     if (_playedReply) unawaited(_stopReply().then((_) {}));
     _endpoint.dispose();
     _token.dispose();
+    _supabaseUrl.dispose();
+    _publishableKey.dispose();
     super.dispose();
   }
 
@@ -1139,6 +1327,101 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   border: OutlineInputBorder(),
                                 ),
                               ),
+                              const SizedBox(height: 20),
+                              const Divider(color: Color(0xFFDCE5E1)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                '익명 iPad 기기 연결 · 합성 시험',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                '전용 Supabase publishable 키로 기기 ID만 만듭니다. 직원·보호자 로그인은 이 iPad에 넣지 않습니다.',
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _supabaseUrl,
+                                keyboardType: TextInputType.url,
+                                autocorrect: false,
+                                onChanged: (_) {
+                                  if (_deviceSession != null || _deviceBusy) {
+                                    _clearDeviceAuth();
+                                    setState(() {});
+                                  }
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: '전용 Supabase 주소',
+                                  hintText: 'https://<project-ref>.supabase.co',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _publishableKey,
+                                obscureText: true,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                onChanged: (_) {
+                                  if (_deviceSession != null || _deviceBusy) {
+                                    _clearDeviceAuth();
+                                    setState(() {});
+                                  }
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Supabase publishable 키',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed:
+                                        _ownVoiceTrial &&
+                                            !_deviceBusy &&
+                                            !_sending &&
+                                            !_playedReply &&
+                                            _deviceSession == null &&
+                                            _foreground
+                                        ? _signInDevice
+                                        : null,
+                                    child: const Text('익명 기기 ID 만들기'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed:
+                                        _deviceSession?.usable(
+                                                  DateTime.now(),
+                                                ) ==
+                                                true &&
+                                            !_deviceBusy &&
+                                            !_sending &&
+                                            !_playedReply &&
+                                            _foreground
+                                        ? _confirmDevicePair
+                                        : null,
+                                    child: const Text('병원 연결 확인'),
+                                  ),
+                                ],
+                              ),
+                              if (_deviceSession?.usable(DateTime.now()) ==
+                                  true) ...[
+                                const SizedBox(height: 8),
+                                SelectableText(
+                                  '병원 직원에게 보여줄 기기 ID: ${_deviceSession!.userId}',
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Semantics(
+                                liveRegion: true,
+                                child: Text(_deviceStatus),
+                              ),
+                              if (_pairedOnlyTrial && !_pairedReady)
+                                const Text('병원 연결이 확인될 때까지 페어링 글 경로를 차단합니다.'),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: _token,
@@ -1235,6 +1518,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                       _ownVoiceTrial &&
                                           _heldCandidate != null &&
                                           !_autoTextTrial &&
+                                          !_pairedOnlyTrial &&
                                           !_sending &&
                                           !_starting &&
                                           !_stopping &&

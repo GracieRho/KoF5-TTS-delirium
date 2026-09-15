@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'device_anonymous_auth.dart';
+
 class SyntheticCloudReply {
   const SyntheticCloudReply(this.transcript, this.reply, this.mp3);
 
@@ -76,7 +78,74 @@ Future<SyntheticCloudReply> sendOwnVoiceText(
   String transcript,
   String label,
 ) async {
-  _checkEndpoint(endpoint, '/internal/synthetic/text');
+  return _sendText(
+    client,
+    endpoint,
+    token,
+    transcript,
+    label,
+    '/internal/synthetic/text',
+  );
+}
+
+Future<SyntheticCloudReply> sendPairedOwnVoiceText(
+  HttpClient client,
+  Uri endpoint,
+  String token,
+  String transcript,
+  String label,
+  String deviceJwt,
+  String patientId, {
+  String? allowedOriginForTest,
+}) async {
+  const configuredOrigin = String.fromEnvironment(
+    'KOF5_PAIRED_SYNTHETIC_API_ORIGIN',
+  );
+  final allowedOrigin = allowedOriginForTest ?? configuredOrigin;
+  final origin = Uri.tryParse(allowedOrigin);
+  final localTest =
+      allowedOriginForTest != null &&
+      origin != null &&
+      {'127.0.0.1', 'localhost', '::1'}.contains(origin.host) &&
+      origin.scheme == 'http';
+  if (origin == null ||
+      origin.toString() != allowedOrigin ||
+      origin.userInfo.isNotEmpty ||
+      origin.hasQuery ||
+      origin.hasFragment ||
+      origin.path.isNotEmpty ||
+      !(origin.scheme == 'https' || localTest) ||
+      endpoint.origin != origin.origin) {
+    throw const FormatException('설정된 합성 시험 API 원점이 필요합니다.');
+  }
+  final parts = deviceJwt.split('.');
+  if (patientId != syntheticPatientId ||
+      deviceJwt.length > 8192 ||
+      parts.length != 3 ||
+      parts.any((part) => !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(part))) {
+    throw const FormatException('확인된 합성 기기 로그인과 연결이 필요합니다.');
+  }
+  return _sendText(
+    client,
+    endpoint,
+    token,
+    transcript,
+    label,
+    '/internal/synthetic/paired/$patientId/text',
+    deviceJwt,
+  );
+}
+
+Future<SyntheticCloudReply> _sendText(
+  HttpClient client,
+  Uri endpoint,
+  String token,
+  String transcript,
+  String label,
+  String path, [
+  String? deviceJwt,
+]) async {
+  _checkEndpoint(endpoint, path);
   _checkToken(token);
   if (transcript.trim().isEmpty ||
       transcript.length > 500 ||
@@ -88,6 +157,9 @@ Future<SyntheticCloudReply> sendOwnVoiceText(
   request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
   request.headers.set('X-Internal-Demo-Token', token);
   request.headers.set('X-Synthetic-Material', 'confirmed');
+  if (deviceJwt != null) {
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $deviceJwt');
+  }
   request.add(
     utf8.encode(jsonEncode({'transcript': transcript, 'label': label})),
   );

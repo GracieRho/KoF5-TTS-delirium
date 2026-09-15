@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kof5_patient/device_anonymous_auth.dart';
 import 'package:kof5_patient/synthetic_cloud_trial.dart';
 
 void main() {
@@ -145,6 +146,96 @@ void main() {
           'x' * 32,
           '수민아?',
           'DIRECTED',
+        ),
+        throwsFormatException,
+      );
+    } finally {
+      client.close(force: true);
+      await server.close(force: true);
+    }
+  });
+
+  test('paired synthetic text sends only JSON with device Bearer', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final seen = Completer<(String, String?, String?, String?, Object?)>();
+    server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      seen.complete((
+        request.uri.path,
+        request.headers.value(HttpHeaders.authorizationHeader),
+        request.headers.value('X-Internal-Demo-Token'),
+        request.headers.contentType?.mimeType,
+        jsonDecode(body),
+      ));
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode({
+          'transcript': '수민아?',
+          'reply': null,
+          'audio_mp3_base64': null,
+        }),
+      );
+      await request.response.close();
+    });
+    final client = HttpClient();
+    const jwt = 'header.payload.signature';
+    try {
+      final endpoint = Uri.parse(
+        'http://127.0.0.1:${server.port}/internal/synthetic/paired/$syntheticPatientId/text',
+      );
+      final reply = await sendPairedOwnVoiceText(
+        client,
+        endpoint,
+        'x' * 32,
+        '수민아?',
+        'DIRECTED',
+        jwt,
+        syntheticPatientId,
+        allowedOriginForTest: 'http://127.0.0.1:${server.port}',
+      );
+      final (path, bearer, demoToken, mime, body) = await seen.future;
+      expect(path, '/internal/synthetic/paired/$syntheticPatientId/text');
+      expect(bearer, 'Bearer $jwt');
+      expect((demoToken, mime), ('x' * 32, 'application/json'));
+      expect(body, {'transcript': '수민아?', 'label': 'DIRECTED'});
+      expect(reply.mp3, isNull);
+      await expectLater(
+        sendPairedOwnVoiceText(
+          client,
+          endpoint,
+          'x' * 32,
+          '수민아?',
+          'DIRECTED',
+          jwt,
+          '00000000-0000-4000-8000-000000000976',
+          allowedOriginForTest: 'http://127.0.0.1:${server.port}',
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        sendPairedOwnVoiceText(
+          client,
+          Uri.parse(
+            'http://example.com/internal/synthetic/paired/$syntheticPatientId/text',
+          ),
+          'x' * 32,
+          '수민아?',
+          'DIRECTED',
+          jwt,
+          syntheticPatientId,
+          allowedOriginForTest: 'http://127.0.0.1:${server.port}',
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        sendPairedOwnVoiceText(
+          client,
+          endpoint,
+          'x' * 32,
+          '수민아?',
+          'DIRECTED',
+          jwt,
+          syntheticPatientId,
         ),
         throwsFormatException,
       );
