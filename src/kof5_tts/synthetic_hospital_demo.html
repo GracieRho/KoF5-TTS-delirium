@@ -5,36 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>병원 환자·목소리 등록 · 내부 시험</title>
   <style>
-    :root { font-family: system-ui, -apple-system, sans-serif; background: #f4f5f1; color: #23333a; }
+    :root { font-family: system-ui, -apple-system, sans-serif; background: #f7f9f8; color: #172d2a; }
     * { box-sizing: border-box; }
     body { margin: 0; }
-    header { padding: 24px clamp(18px, 4vw, 48px); background: white; border-bottom: 1px solid #dce2df; }
-    h1 { margin: 8px 0; font-size: clamp(25px, 3vw, 35px); }
-    h2 { margin: 0 0 14px; font-size: 20px; }
+    header { padding: 32px clamp(20px, 4vw, 64px); background: white; border-bottom: 1px solid #e2e8e5; }
+    header > * { max-width: 1120px; margin-left: auto; margin-right: auto; }
+    h1 { margin-top: 14px; margin-bottom: 8px; font-size: clamp(30px, 3.6vw, 42px); letter-spacing: -.04em; }
+    h2 { margin: 0 0 22px; font-size: 23px; letter-spacing: -.025em; }
     p { line-height: 1.55; }
-    .badge { color: #296149; background: #e5f1eb; border-radius: 99px; padding: 5px 10px; font-size: 13px; font-weight: 700; }
-    .muted { color: #536167; }
-    main { max-width: 1120px; margin: 24px auto; padding: 0 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    section { padding: 24px; background: white; border: 1px solid #dce2df; border-radius: 18px; box-shadow: 0 8px 28px #263a3608; }
-    label { display: block; margin: 15px 0 7px; font-weight: 700; }
-    select { width: 100%; font: inherit; border: 1px solid #bbc9c4; border-radius: 10px; padding: 11px; background: white; }
-    fieldset { margin: 20px 0; border: 1px solid #dce2df; border-radius: 12px; padding: 12px 16px; }
-    legend { font-weight: 700; }
-    fieldset label { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0; font-weight: 500; }
-    input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; flex: none; }
-    button { border: 0; border-radius: 10px; padding: 11px 16px; font: inherit; font-weight: 700; color: white; background: #286f55; cursor: pointer; }
-    button.secondary { color: #304941; background: #e9efec; }
-    button.danger { background: #8c4747; }
+    a { color: #225d54; text-underline-offset: 3px; }
+    .badge { display: block; color: #276057; font-size: 14px; font-weight: 800; letter-spacing: .04em; }
+    .muted { color: #566562; font-size: 17px; }
+    .warning { padding: 12px 16px; border-left: 3px solid #ad6d42; background: #fbf7f2; }
+    main { max-width: 1160px; margin: 28px auto; padding: 0 20px; display: grid; grid-template-columns: minmax(300px, .9fr) minmax(380px, 1.1fr); gap: 20px; }
+    section { padding: clamp(24px, 3vw, 36px); background: white; border: 1px solid #e2e8e5; border-radius: 20px; }
+    label { display: block; margin: 18px 0 8px; font-weight: 700; }
+    select { width: 100%; min-height: 50px; font: inherit; color: inherit; border: 1px solid #bacbc5; border-radius: 10px; padding: 11px; background: white; }
+    fieldset { margin: 24px 0; border: 1px solid #d9e4df; border-radius: 12px; padding: 12px 18px; background: #fafcfb; }
+    legend { padding: 0 8px; font-weight: 700; }
+    fieldset label { display: flex; gap: 12px; align-items: flex-start; margin: 14px 0; font-weight: 500; line-height: 1.4; }
+    input[type="checkbox"] { width: 20px; height: 20px; margin: 1px 0 0; flex: none; accent-color: #236359; }
+    button { min-height: 48px; border: 0; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 700; color: white; background: #173e38; cursor: pointer; }
+    button.secondary { color: #234740; background: #e8efec; }
+    button.danger { color: #8a3e3e; background: #fff; border: 1px solid #c78f8f; }
     button:disabled { opacity: .55; cursor: not-allowed; }
     button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #5da58b; outline-offset: 2px; }
-    .actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 16px; }
-    dl { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; margin: 20px 0 0; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 12px 18px; margin: 24px 0 0; padding: 20px; border-radius: 12px; background: #f6f9f7; }
     [hidden] { display: none !important; }
-    dt { color: #536167; }
+    dt { color: #5a6965; }
     dd { margin: 0; font-weight: 700; }
-    .status { min-height: 60px; margin-top: 20px; padding: 14px; border-radius: 10px; background: #edf3ef; line-height: 1.5; }
-    .notice { font-size: 14px; color: #56666b; }
-    @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+    .status { min-height: 68px; margin-top: 24px; padding: 18px; border-left: 3px solid #27685d; border-radius: 8px; background: #eef6f2; font-weight: 600; line-height: 1.5; }
+    .notice { font-size: 14px; color: #596965; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { header { padding: 24px 20px; } main { padding: 0 12px; } section { padding: 22px; } dl { grid-template-columns: 1fr; gap: 4px; } dd { margin-bottom: 8px; } }
   </style>
 </head>
 <body>
@@ -42,7 +46,7 @@
     <span class="badge">팀 내부 · 합성 환자와 자가 음성만</span>
     <h1>병원 환자·목소리 등록 화면 시험</h1>
     <p class="muted">환자 기본정보와 현재 입원을 분리하고, 동의·거부 상태에 따라 녹음 버튼이 달라지는 흐름을 확인합니다.</p>
-    <p class="notice">이 화면은 실제 병원 계정·EHR·동의서·화자 특징 저장소와 연결되지 않았습니다. 실제 환자 정보를 입력하거나 환자 목소리를 녹음하지 마세요.</p>
+    <p class="notice warning">이 화면은 실제 병원 계정·EHR·동의서·화자 특징 저장소와 연결되지 않았습니다. 실제 환자 정보를 입력하거나 환자 목소리를 녹음하지 마세요.</p>
   </header>
   <main>
     <section aria-labelledby="patient-title">
@@ -55,8 +59,8 @@
         </select>
         <label for="encounter-case">현재 입원·병실</label>
         <select id="encounter-case">
-          <option value="ward-a">TEST-ENCOUNTER-001 · 시험병동 A / 01호 / 1번 병상</option>
-          <option value="ward-b">TEST-ENCOUNTER-002 · 시험병동 B / 02호 / 2번 병상</option>
+          <option value="ward-a">시험병동 A · 01호 / 1번</option>
+          <option value="ward-b">시험병동 B · 02호 / 2번</option>
         </select>
         <div class="actions"><button type="submit">합성 등록 확인</button></div>
       </form>

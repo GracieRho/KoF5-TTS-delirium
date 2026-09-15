@@ -5,36 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>가족 음성 MVP · 합성 대화 시험</title>
   <style>
-    :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; background: #f4f5f1; color: #23333a; }
+    :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; background: #f7f9f8; color: #172d2a; }
     * { box-sizing: border-box; }
     body { margin: 0; }
-    header { padding: 22px clamp(18px, 4vw, 48px); border-bottom: 1px solid #dce2df; background: #fff; }
-    h1 { margin: 0 0 6px; font-size: clamp(24px, 3vw, 34px); letter-spacing: -.03em; }
-    header p { margin: 0; color: #536167; }
-    .badge { display: inline-block; margin-bottom: 12px; padding: 5px 10px; border-radius: 99px; background: #e5f1eb; color: #296149; font-size: 13px; font-weight: 700; }
-    main { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: 20px; max-width: 1180px; margin: 24px auto; padding: 0 18px; }
-    section { background: white; border: 1px solid #dce2df; border-radius: 18px; padding: 24px; box-shadow: 0 8px 28px #263a3608; }
-    h2 { margin: 0 0 16px; font-size: 19px; }
-    .screen { min-height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 22px; background: linear-gradient(150deg, #eaf1eb, #dce9e3); text-align: center; padding: 24px; }
-    .portrait { width: 92px; height: 92px; display: grid; place-items: center; border-radius: 50%; background: #ffffffb8; color: #607e72; font-size: 42px; margin-bottom: 22px; }
-    .clock { font-size: 23px; font-weight: 700; }
-    .time { margin-top: 5px; color: #4c6059; }
-    .indicator { width: 24px; height: 24px; margin: 34px 0 12px; border-radius: 50%; background: #4a9274; box-shadow: 0 0 0 9px #4a927424; }
-    .indicator.active { background: #317cbd; box-shadow: 0 0 0 9px #317cbd24; }
-    .indicator.error { background: #b44e4e; box-shadow: 0 0 0 9px #b44e4e24; }
-    .state { font-weight: 700; }
+    header { padding: 32px clamp(20px, 4vw, 64px); border-bottom: 1px solid #e2e8e5; background: #fff; }
+    header > * { max-width: 1120px; margin-left: auto; margin-right: auto; }
+    h1 { margin-top: 14px; margin-bottom: 8px; font-size: clamp(30px, 3.6vw, 42px); letter-spacing: -.04em; }
+    header p { margin-top: 0; color: #566562; font-size: 17px; line-height: 1.5; }
+    a { color: #225d54; text-underline-offset: 3px; }
+    .badge { display: block; color: #276057; font-size: 14px; font-weight: 800; letter-spacing: .04em; }
+    main { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(380px, 1fr); gap: 20px; max-width: 1160px; margin: 28px auto; padding: 0 20px; }
+    section { background: white; border: 1px solid #e2e8e5; border-radius: 20px; padding: clamp(24px, 3vw, 36px); }
+    h2 { margin: 0 0 22px; font-size: 23px; letter-spacing: -.025em; }
+    .screen { min-height: 390px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #dce8e2; border-radius: 20px; background: #f6f9f7; text-align: center; padding: 28px; }
+    .portrait { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 16px; background: #e6f0eb; color: #276057; font-size: 38px; margin-bottom: 24px; }
+    .clock { font-size: 28px; font-weight: 800; }
+    .time { margin-top: 7px; color: #4f625b; font-size: 18px; }
+    .indicator { width: 18px; height: 18px; margin: 36px 0 14px; border-radius: 50%; background: #4a9274; }
+    .indicator.active { background: #317cbd; }
+    .indicator.error { background: #b44e4e; }
+    .state { font-size: 20px; font-weight: 700; }
     .caption { min-height: 56px; max-width: 360px; margin-top: 20px; line-height: 1.5; }
     label { display: block; margin: 18px 0 7px; font-weight: 700; }
-    textarea, select { width: 100%; border: 1px solid #bbc9c4; border-radius: 10px; padding: 12px; font: inherit; background: #fff; color: inherit; }
+    textarea, select { width: 100%; border: 1px solid #bacbc5; border-radius: 10px; padding: 12px; font: inherit; background: #fff; color: inherit; }
     textarea { min-height: 110px; resize: vertical; }
     textarea:focus, select:focus, button:focus-visible { outline: 3px solid #5da58b; outline-offset: 2px; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
-    button { border: 0; border-radius: 10px; padding: 11px 17px; font: inherit; font-weight: 700; cursor: pointer; background: #286f55; color: white; }
-    button.secondary { background: #e9efec; color: #304941; }
-    button:disabled { opacity: .55; cursor: wait; }
+    button { min-height: 48px; border: 0; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 700; cursor: pointer; background: #173e38; color: white; }
+    button.secondary { background: #e8efec; color: #234740; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
     .status { min-height: 40px; margin-top: 18px; color: #536167; line-height: 1.5; }
-    .notice { color: #56666b; font-size: 14px; line-height: 1.6; }
-    @media (max-width: 760px) { main { grid-template-columns: 1fr; } .screen { min-height: 310px; } }
+    .notice { color: #596965; font-size: 14px; line-height: 1.6; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } .screen { min-height: 310px; } }
+    @media (max-width: 480px) { header { padding: 24px 20px; } main { padding: 0 12px; } section { padding: 22px; } }
   </style>
 </head>
 <body>
