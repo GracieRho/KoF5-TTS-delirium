@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>병원 환자·목소리 등록 · 내부 시험</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, sans-serif; background: #f4f5f1; color: #23333a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { padding: 24px clamp(18px, 4vw, 48px); background: white; border-bottom: 1px solid #dce2df; }
+    h1 { margin: 8px 0; font-size: clamp(25px, 3vw, 35px); }
+    h2 { margin: 0 0 14px; font-size: 20px; }
+    p { line-height: 1.55; }
+    .badge { color: #296149; background: #e5f1eb; border-radius: 99px; padding: 5px 10px; font-size: 13px; font-weight: 700; }
+    .muted { color: #536167; }
+    main { max-width: 1120px; margin: 24px auto; padding: 0 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    section { padding: 24px; background: white; border: 1px solid #dce2df; border-radius: 18px; box-shadow: 0 8px 28px #263a3608; }
+    label { display: block; margin: 15px 0 7px; font-weight: 700; }
+    select { width: 100%; font: inherit; border: 1px solid #bbc9c4; border-radius: 10px; padding: 11px; background: white; }
+    fieldset { margin: 20px 0; border: 1px solid #dce2df; border-radius: 12px; padding: 12px 16px; }
+    legend { font-weight: 700; }
+    fieldset label { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0; font-weight: 500; }
+    input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; flex: none; }
+    button { border: 0; border-radius: 10px; padding: 11px 16px; font: inherit; font-weight: 700; color: white; background: #286f55; cursor: pointer; }
+    button.secondary { color: #304941; background: #e9efec; }
+    button.danger { background: #8c4747; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #5da58b; outline-offset: 2px; }
+    .actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 16px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; margin: 20px 0 0; }
+    [hidden] { display: none !important; }
+    dt { color: #536167; }
+    dd { margin: 0; font-weight: 700; }
+    .status { min-height: 60px; margin-top: 20px; padding: 14px; border-radius: 10px; background: #edf3ef; line-height: 1.5; }
+    .notice { font-size: 14px; color: #56666b; }
+    @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="badge">팀 내부 · 합성 환자와 자가 음성만</span>
+    <h1>병원 환자·목소리 등록 화면 시험</h1>
+    <p class="muted">환자 기본정보와 현재 입원을 분리하고, 동의·거부 상태에 따라 녹음 버튼이 달라지는 흐름을 확인합니다.</p>
+    <p class="notice">이 화면은 실제 병원 계정·EHR·동의서·화자 특징 저장소와 연결되지 않았습니다. 실제 환자 정보를 입력하거나 환자 목소리를 녹음하지 마세요.</p>
+  </header>
+  <main>
+    <section aria-labelledby="patient-title">
+      <h2 id="patient-title">1. 합성 환자와 입원 확인</h2>
+      <form id="patient-form">
+        <label for="patient-case">합성 환자</label>
+        <select id="patient-case">
+          <option value="one">TEST-MRN-001 · 김가상</option>
+          <option value="two">TEST-MRN-002 · 이가상</option>
+        </select>
+        <label for="encounter-case">현재 입원·병실</label>
+        <select id="encounter-case">
+          <option value="ward-a">TEST-ENCOUNTER-001 · 시험병동 A / 01호 / 1번 병상</option>
+          <option value="ward-b">TEST-ENCOUNTER-002 · 시험병동 B / 02호 / 2번 병상</option>
+        </select>
+        <div class="actions"><button type="submit">합성 등록 확인</button></div>
+      </form>
+      <dl id="patient-summary" hidden>
+        <dt>환자 ID</dt><dd id="patient-id"></dd>
+        <dt>표시 이름</dt><dd id="patient-name"></dd>
+        <dt>나이</dt><dd id="patient-age"></dd>
+        <dt>현재 입원</dt><dd id="encounter-id"></dd>
+        <dt>병실</dt><dd id="location"></dd>
+      </dl>
+      <p class="notice">나이는 생년월일에서 계산합니다. 병실은 환자 고정정보가 아니라 현재 입원의 위치입니다. 선택 내용은 서버에 보내거나 저장하지 않습니다.</p>
+      <p><a href="/demo">합성 대화 화면으로 돌아가기</a></p>
+    </section>
+    <section aria-labelledby="voice-title">
+      <h2 id="voice-title">2. 음성 등록 절차 시험</h2>
+      <p class="notice">아래 확인은 화면 동작을 위한 가상 상태입니다. 실제 동의·assent·직원 권한을 증명하지 않습니다. 녹음은 시험자 자신의 목소리만 사용하며, 약 30초 뒤 브라우저 메모리에서 폐기합니다.</p>
+      <fieldset>
+        <legend>가상 등록 조건</legend>
+        <label><input id="participation" type="checkbox">환자 참여 동의 확인(가상)</label>
+        <label><input id="voice-consent" type="checkbox">환자 목소리 특징 동의 확인(가상)</label>
+        <label><input id="assent" type="checkbox">환자 assent 확인(가상)</label>
+        <label><input id="self-voice" type="checkbox">시험자 본인 음성으로 UI 시험</label>
+        <label><input id="dissent" type="checkbox">환자 거부 또는 철회 상태(가상)</label>
+      </fieldset>
+      <div class="actions">
+        <button id="record" type="button" disabled>자가 음성 30초 시험 시작</button>
+        <button id="stop" type="button" class="secondary" disabled>녹음 중단·폐기</button>
+        <button id="withdraw" type="button" class="danger" disabled>거부·철회 시험</button>
+      </div>
+      <div id="voice-status" class="status" role="status" aria-live="polite">합성 환자를 확인하고 가상 조건을 선택하면 자가 음성 시험을 시작할 수 있습니다.</div>
+      <p class="notice">원본 샘플·임베딩·환자 화자 프로필을 만들지 않습니다. 실제 등록에는 직원 권한, 유효한 동의/assent, 품질 검사, 암호화·폐기 확인이 선행돼야 합니다.</p>
+    </section>
+  </main>
+  <script>
+    const patients = {
+      one: { id: 'TEST-MRN-001', name: '김가상', birth: '1950-04-20' },
+      two: { id: 'TEST-MRN-002', name: '이가상', birth: '1945-12-05' },
+    };
+    const encounters = {
+      'ward-a': { id: 'TEST-ENCOUNTER-001', location: '시험병동 A · 01호 · 1번 병상' },
+      'ward-b': { id: 'TEST-ENCOUNTER-002', location: '시험병동 B · 02호 · 2번 병상' },
+    };
+    const $ = selector => document.querySelector(selector);
+    const recordButton = $('#record');
+    const stopButton = $('#stop');
+    const withdrawButton = $('#withdraw');
+    const voiceStatus = $('#voice-status');
+    let registered = false;
+    let withdrawn = false;
+    let requesting = false;
+    let recorder = null;
+    let stream = null;
+    let interval = null;
+    let startedAt = 0;
+    let requestId = 0;
+    let stopReason = '';
+    let stopUnconfirmed = false;
+
+    function age(birth) {
+      const [year, month, day] = birth.split('-').map(Number);
+      const today = new Date();
+      return today.getFullYear() - year - (today.getMonth() + 1 < month ||
+        (today.getMonth() + 1 === month && today.getDate() < day) ? 1 : 0);
+    }
+    function eligible() {
+      return registered && !withdrawn && !stopUnconfirmed &&
+        ['#participation', '#voice-consent', '#assent', '#self-voice'].every(id => $(id).checked) &&
+        !$('#dissent').checked;
+    }
+    function buttons() {
+      recordButton.disabled = !eligible() || requesting || recorder !== null;
+      stopButton.disabled = recorder === null && !requesting;
+      withdrawButton.disabled = !registered || withdrawn;
+    }
+    function releaseTracks(mediaStream) {
+      mediaStream?.getTracks().forEach(track => {
+        try { track.stop(); }
+        catch (_) { stopUnconfirmed = true; }
+      });
+    }
+    function finish() {
+      clearInterval(interval);
+      interval = null;
+      releaseTracks(stream);
+      stream = null;
+      recorder = null;
+      requesting = false;
+      const seconds = Math.min(30, (performance.now() - startedAt) / 1000).toFixed(1);
+      voiceStatus.textContent = stopUnconfirmed ? '녹음 중단 확인에 실패했습니다. 페이지를 닫고 다시 여세요.'
+        : withdrawn ? '거부·철회 상태입니다. 자가 음성 시험을 중단하고 샘플을 폐기했습니다.'
+        : stopReason === 'patient-change' ? '선택한 합성 환자·입원을 다시 확인해야 자가 음성 시험을 시작할 수 있습니다.'
+        : stopReason === 'complete' ? `${seconds}초 자가 음성 시험 완료 · 샘플 폐기 · 화자 프로필 없음`
+        : '자가 음성 시험을 중단하고 샘플을 폐기했습니다.';
+      buttons();
+    }
+    function stopCapture(reason) {
+      requestId++;
+      stopReason = reason;
+      clearInterval(interval);
+      interval = null;
+      requesting = false;
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.stop(); }
+        catch (_) { stopUnconfirmed = true; }
+      }
+      releaseTracks(stream);
+      if (!recorder || recorder.state === 'inactive' || stopUnconfirmed) finish();
+      else buttons();
+    }
+    async function startCapture() {
+      if (!eligible() || requesting || recorder || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        voiceStatus.textContent = '이 브라우저에서는 마이크 시험을 시작할 수 없습니다.';
+        return;
+      }
+      const currentRequest = ++requestId;
+      requesting = true;
+      voiceStatus.textContent = '마이크 권한 요청 중입니다.';
+      buttons();
+      try {
+        const candidateStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (currentRequest !== requestId || document.hidden || !eligible()) {
+          releaseTracks(candidateStream);
+          return;
+        }
+        stream = candidateStream;
+        recorder = new MediaRecorder(stream);
+        const currentRecorder = recorder;
+        recorder.addEventListener('dataavailable', () => {}); // Audio chunks are intentionally discarded.
+        recorder.addEventListener('stop', () => { if (recorder === currentRecorder) finish(); }, { once: true });
+        recorder.addEventListener('error', () => stopCapture('error'), { once: true });
+        recorder.start(1000);
+        startedAt = performance.now();
+        requesting = false;
+        voiceStatus.textContent = '자가 음성 녹음 중 · 30초 남음';
+        interval = setInterval(() => {
+          const remaining = Math.max(0, 30 - Math.floor((performance.now() - startedAt) / 1000));
+          voiceStatus.textContent = `자가 음성 녹음 중 · ${remaining}초 남음`;
+          if (remaining === 0) stopCapture('complete');
+        }, 1000);
+        buttons();
+      } catch (_) {
+        releaseTracks(stream);
+        stream = null;
+        recorder = null;
+        voiceStatus.textContent = '마이크 권한 또는 녹음 시작에 실패했습니다.';
+      } finally {
+        requesting = false;
+        buttons();
+      }
+    }
+
+    $('#patient-form').addEventListener('submit', event => {
+      event.preventDefault();
+      stopCapture('patient-change');
+      const patient = patients[$('#patient-case').value];
+      const encounter = encounters[$('#encounter-case').value];
+      $('#patient-id').textContent = patient.id;
+      $('#patient-name').textContent = patient.name;
+      $('#patient-age').textContent = `${age(patient.birth)}세`;
+      $('#encounter-id').textContent = encounter.id;
+      $('#location').textContent = encounter.location;
+      $('#patient-summary').hidden = false;
+      registered = true;
+      voiceStatus.textContent = withdrawn ? '거부·철회 상태가 유지됩니다. 자가 음성 시험은 차단됩니다.'
+        : '합성 환자·입원만 화면에서 확인했습니다. 서버 등록은 하지 않았습니다.';
+      buttons();
+    });
+    function invalidateRegistration() {
+      registered = false;
+      $('#patient-summary').hidden = true;
+      stopCapture('patient-change');
+      buttons();
+    }
+    $('#patient-case').addEventListener('change', invalidateRegistration);
+    $('#encounter-case').addEventListener('change', invalidateRegistration);
+    document.querySelectorAll('input[type="checkbox"]').forEach(input => input.addEventListener('change', () => {
+      if (!eligible() && (requesting || recorder)) stopCapture('consent-change');
+      buttons();
+    }));
+    recordButton.addEventListener('click', startCapture);
+    stopButton.addEventListener('click', () => stopCapture('manual'));
+    withdrawButton.addEventListener('click', () => { withdrawn = true; stopCapture('withdrawn'); buttons(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && (requesting || recorder || stream)) stopCapture('hidden'); });
+    window.addEventListener('pagehide', () => { if (requesting || recorder || stream) stopCapture('pagehide'); });
+  </script>
+</body>
+</html>

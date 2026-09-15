@@ -27,6 +27,9 @@ class SyntheticApiTests(unittest.TestCase):
         demo = self.client.get("/demo")
         self.assertEqual(demo.status_code, 200)
         self.assertIn("합성 데이터 전용", demo.text)
+        hospital = self.client.get("/demo/hospital")
+        self.assertEqual(hospital.status_code, 200)
+        self.assertIn("실제 환자 정보를 입력하거나 환자 목소리를 녹음하지 마세요", hospital.text)
         self.assertEqual(
             self.client.post("/patients/real_patient/conversation/start", json={
                 "transcript": "수민아?", "label": "DIRECTED",
