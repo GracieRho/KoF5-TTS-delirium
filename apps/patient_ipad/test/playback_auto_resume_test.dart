@@ -26,6 +26,7 @@ void main() {
     var textCalls = 0;
     var stopCalls = 0;
     var delayStop = false;
+    var recognizedText = '수민아?';
     const audioChannel = MethodChannel('kof5/trial_audio');
     messenger.setMockMethodCallHandler(OnDeviceSpeech.channel, (call) async {
       switch (call.method) {
@@ -33,7 +34,7 @@ void main() {
         case 'authorize':
           return true;
         case 'transcribe':
-          return '수민아?';
+          return recognizedText;
         case 'cancel':
           return null;
       }
@@ -92,9 +93,27 @@ void main() {
       await _until(tester, () => fake.starts == 2);
       expect(find.text('기기에서 듣고 있습니다'), findsOneWidget);
 
+      await tester.pump(const Duration(seconds: 61));
+      await tester.pump();
+      expect(find.textContaining('60초 무응답으로 대화 창을 닫았습니다'), findsOneWidget);
+      recognizedText = '제주도는?';
+      fake.feedCandidate();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(textCalls, 1, reason: 'expired ACTIVE follow-up stays in IDLE');
+      recognizedText = '수민아?';
+
       fake.feedCandidate();
       await _until(tester, () => finishes.length == 2);
       expect((textCalls, playCalls, fake.stops), (2, 2, 2));
+      await tester.pump(const Duration(seconds: 61));
+      expect(
+        find.textContaining('60초 무응답으로 대화 창을 닫았습니다'),
+        findsNothing,
+        reason: 'timeout must not close a turn while the reply is playing',
+      );
       delayStop = true;
       await tester.ensureVisible(find.text('음성 응답 중단'));
       await tester.tap(find.text('음성 응답 중단'));

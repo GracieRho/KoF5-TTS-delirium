@@ -46,6 +46,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   final _token = TextEditingController();
   StreamSubscription<Uint8List>? _subscription;
   Timer? _candidateExpiry;
+  Timer? _sessionExpiry;
   HttpClient? _cloudClient;
   Uint8List? _heldCandidate;
   var _listening = false;
@@ -113,6 +114,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
     _activation.reset();
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
     _autoResumeOwnerGeneration = null;
     if (cancellingSpeech) unawaited(_cancelLocalSpeech());
     _cloudClient?.close(force: true);
@@ -175,7 +178,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
-  Future<bool> _start({int? duringReplyGeneration}) async {
+  Future<bool> _start({
+    int? duringReplyGeneration,
+    bool afterReply = false,
+  }) async {
     final duringReply = duringReplyGeneration != null;
     final startGeneration = _trialGeneration;
     if (_starting ||
@@ -246,12 +252,66 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _listening = true;
         _status = '기기에서 발화 후보를 감지하는 중입니다.';
       });
+      if (!duringReply) _scheduleSessionExpiry(afterReply: afterReply);
       return true;
     } catch (_) {
       if (mounted) setState(() => _status = '마이크를 시작할 수 없습니다.');
       return false;
     } finally {
       if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  void _scheduleSessionExpiry({bool afterReply = false}) {
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
+    if (!_listening ||
+        !_foreground ||
+        !_ownVoiceTrial ||
+        !_autoTextTrial ||
+        _proactivePaused ||
+        _dissentStopped ||
+        _sending ||
+        _playedReply) {
+      return;
+    }
+    final now = DateTime.now();
+    if (afterReply) _activation.resumeAfterReply(now);
+    final deadline = _activation.idleDeadline;
+    if (deadline == null) return;
+    if (!deadline.isAfter(now)) {
+      _expireSyntheticSession();
+      return;
+    }
+    final generation = _trialGeneration;
+    _sessionExpiry = Timer(deadline.difference(now), () {
+      if (!mounted ||
+          !_foreground ||
+          !_listening ||
+          !_autoTextTrial ||
+          _proactivePaused ||
+          _sending ||
+          _playedReply ||
+          _stopping ||
+          generation != _trialGeneration ||
+          _activation.idleDeadline != deadline) {
+        return;
+      }
+      _expireSyntheticSession();
+    });
+  }
+
+  void _expireSyntheticSession() {
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
+    _activation.reset();
+    _pendingBargeInText = null;
+    _pendingBargeInGeneration = null;
+    if (mounted) {
+      setState(() {
+        _localTranscript = '';
+        _cloudStatus = '60초 무응답으로 대화 창을 닫았습니다. 이름을 다시 부르면 새 시험을 시작합니다.';
+      });
     }
   }
 
@@ -356,6 +416,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           _speechStop == null &&
           generation == _trialGeneration) {
         await _recognizeCandidate(candidate, fromPlayback: true);
+        _scheduleSessionExpiry(afterReply: true);
       }
     } finally {
       _interruptingReply = false;
@@ -528,6 +589,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       return;
     }
     final generation = ++_trialGeneration;
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
     _candidateExpiry?.cancel();
@@ -759,12 +822,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       return;
     }
     _autoResumeOwnerGeneration = null;
-    unawaited(_start());
+    unawaited(_start(afterReply: true));
   }
 
   Future<void> _stop() async {
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
+    _sessionExpiry?.cancel();
+    _sessionExpiry = null;
     _bargeInListeningGeneration = null;
     _localGeneration++;
     final speechStopped =
@@ -822,6 +887,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       unawaited(_cancelLocalSpeech());
     }
     _candidateExpiry?.cancel();
+    _sessionExpiry?.cancel();
     _subscription?.cancel();
     _recorder.dispose();
     _cloudClient?.close(force: true);

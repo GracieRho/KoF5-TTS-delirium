@@ -1,6 +1,13 @@
 /// Phase-0 self-voice script: a direct name opens a 60-second question window.
 class SyntheticActivation {
+  static const sessionTimeout = Duration(seconds: 60);
   DateTime? _lastTurn;
+
+  DateTime? get idleDeadline => _lastTurn?.add(sessionTimeout);
+
+  void resumeAfterReply(DateTime now) {
+    if (_lastTurn != null) _lastTurn = now;
+  }
 
   // ponytail: lexical stop can pause on quoted or background speech; validate speaker/intent before patient use.
   static bool isDissent(String transcript) {
@@ -22,8 +29,7 @@ class SyntheticActivation {
       return true;
     }
     final active =
-        _lastTurn != null &&
-        now.difference(_lastTurn!) < const Duration(seconds: 60);
+        _lastTurn != null && now.difference(_lastTurn!) < sessionTimeout;
     if (active &&
         (text.contains('?') || RegExp(r'며칠|몇 시|언제|어디|제주도').hasMatch(text))) {
       _lastTurn = now;
