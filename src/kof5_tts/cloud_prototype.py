@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
 from re import findall, fullmatch, search
-from typing import Sequence
+from typing import Callable, Sequence
 from urllib.parse import quote
 import wave
 
@@ -135,7 +135,8 @@ def _unsupported_fact_question(transcript: str, known_fact: str) -> bool:
     )
 
 
-def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredentials) -> bytes:
+def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredentials,
+                   on_first_audio: Callable[[], None] | None = None) -> bytes:
     """ElevenLabs Korean-capable IVC voice playback, never enrollment here."""
     if not text.strip() or len(text) > 200:
         raise ValueError("TTS text must be short")
@@ -150,6 +151,8 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
         for chunk in response.iter_bytes():
             if len(audio) + len(chunk) > 2_000_000:
                 raise ValueError("TTS returned oversized audio")
+            if chunk and not audio and on_first_audio is not None:
+                on_first_audio()
             audio.extend(chunk)
     if not audio:
         raise ValueError("TTS returned no audio")
@@ -246,17 +249,22 @@ def delete_test_voice(client: httpx.Client, voice_id: str, key: str) -> None:
 
 
 def run_synthetic_pipeline(
-    client: httpx.Client, wav: bytes, known_fact: str, credentials: CloudCredentials
+    client: httpx.Client, wav: bytes, known_fact: str, credentials: CloudCredentials,
+    *, on_first_audio: Callable[[], None] | None = None,
 ) -> tuple[str, str | None, bytes | None]:
     """Keep the WAV and generated MP3 in memory; callers decide if they may save them."""
     transcript = transcribe_wav(client, wav, credentials.deepgram_key)
-    reply, audio = run_synthetic_text_pipeline(client, transcript, "DIRECTED", known_fact, credentials)
+    reply, audio = run_synthetic_text_pipeline(
+        client, transcript, "DIRECTED", known_fact, credentials,
+        on_first_audio=on_first_audio,
+    )
     return transcript, reply, audio
 
 
 def run_synthetic_text_pipeline(
     client: httpx.Client, transcript: str, label: str,
     known_fact: str, credentials: CloudCredentials,
+    *, on_first_audio: Callable[[], None] | None = None,
 ) -> tuple[str | None, bytes | None]:
     """Process a bounded iPad transcript without sending candidate audio to hosted STT."""
     if not transcript.strip() or len(transcript) > 500 or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}:
@@ -272,5 +280,5 @@ def run_synthetic_text_pipeline(
         else:
             # ponytail: lexical grounding is an internal-test ceiling; measured safety eval precedes patients.
             reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
-    audio = synthesize_mp3(client, reply, credentials)
+    audio = synthesize_mp3(client, reply, credentials, on_first_audio)
     return reply, audio

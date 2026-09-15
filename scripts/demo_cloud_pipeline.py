@@ -36,19 +36,28 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("2 MB 이하의 합성 WAV 파일이 필요합니다")
     wav = args.wav.read_bytes()
     started = perf_counter()
+    first_audio_at: float | None = None
+
+    def mark_first_audio() -> None:
+        nonlocal first_audio_at
+        if first_audio_at is None:
+            first_audio_at = perf_counter()
+
     try:
         with httpx.Client(timeout=20) as client:
             _, _, audio = run_synthetic_pipeline(
                 client, wav, "2024년 5월에 수민과 제주도 여행을 갔고 흑돼지를 좋아했다.",
-                credentials,
+                credentials, on_first_audio=mark_first_audio,
             )
     except Exception:
         # Provider exceptions may contain request details; never print them in this CLI.
         print("공급업체 처리 실패: 지연 KPI를 판정할 수 없습니다", file=sys.stderr)
         return 1
     elapsed = perf_counter() - started
+    if first_audio_at is not None:
+        print(f"후보 WAV 준비 후 첫 TTS 바이트 수신까지: {first_audio_at - started:.2f}초")
     print(f"후보 WAV 준비 후 공급업체 응답 완료까지: {elapsed:.2f}초")
-    print("첫 TTS 오디오까지의 3초 KPI와는 측정 구간이 다릅니다")
+    print("PRD 첫 청취 오디오 3초 KPI는 iPad 발화 종료·재생 지연까지 포함하므로 이 CLI 수치만으로 판정하지 않습니다")
     if audio is None:
         print("환자 거부 또는 대화 종료로 생성 음성이 없습니다")
         return 0

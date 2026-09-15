@@ -50,6 +50,7 @@ class CloudPrototypeTests(unittest.TestCase):
 
     def test_synthetic_three_provider_flow_and_privacy_flags(self) -> None:
         calls = []
+        first_audio_events = []
 
         def respond(request: httpx.Request) -> httpx.Response:
             calls.append(request)
@@ -69,10 +70,12 @@ class CloudPrototypeTests(unittest.TestCase):
             result = run_synthetic_pipeline(
                 client, SYNTHETIC_WAV, "2024년 5월 제주도 여행",
                 CloudCredentials("deepgram-test", "openai-test", "eleven-test", "voice-test", True),
+                on_first_audio=lambda: first_audio_events.append(len(calls)),
             )
         self.assertEqual(result, (
             "우리 제주도 언제 갔었지?", "2024년 5월에 제주도 갔었어.", b"synthetic-mp3",
         ))
+        self.assertEqual(first_audio_events, [3], "first hosted TTS chunk is reported once after STT and LLM")
         self.assertEqual(len(calls), 3)
         self.assertIn("mip_opt_out=true", str(calls[0].url))
         self.assertIn("language=ko", str(calls[0].url))
