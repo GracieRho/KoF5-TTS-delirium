@@ -175,8 +175,9 @@
       requesting = true;
       voiceStatus.textContent = '마이크 권한 요청 중입니다.';
       buttons();
+      let candidateStream = null;
       try {
-        const candidateStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        candidateStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         if (currentRequest !== requestId || document.hidden || !eligible()) {
           releaseTracks(candidateStream);
           return;
@@ -186,7 +187,7 @@
         const currentRecorder = recorder;
         recorder.addEventListener('dataavailable', () => {}); // Audio chunks are intentionally discarded.
         recorder.addEventListener('stop', () => { if (recorder === currentRecorder) finish(); }, { once: true });
-        recorder.addEventListener('error', () => stopCapture('error'), { once: true });
+        recorder.addEventListener('error', () => { if (recorder === currentRecorder) stopCapture('error'); }, { once: true });
         recorder.start(1000);
         startedAt = performance.now();
         requesting = false;
@@ -198,13 +199,17 @@
         }, 1000);
         buttons();
       } catch (_) {
-        releaseTracks(stream);
-        stream = null;
-        recorder = null;
-        voiceStatus.textContent = '마이크 권한 또는 녹음 시작에 실패했습니다.';
+        releaseTracks(candidateStream);
+        if (currentRequest === requestId) {
+          stream = null;
+          recorder = null;
+          voiceStatus.textContent = '마이크 권한 또는 녹음 시작에 실패했습니다.';
+        }
       } finally {
-        requesting = false;
-        buttons();
+        if (currentRequest === requestId) {
+          requesting = false;
+          buttons();
+        }
       }
     }
 
