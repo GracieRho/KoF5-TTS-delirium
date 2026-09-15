@@ -14,9 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.cloud_prototype import (  # noqa: E402
-    CloudCredentials, delete_test_voice, enroll_test_voice, run_synthetic_pipeline,
+    CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice,
+    run_synthetic_pipeline,
 )
 from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
+
+TEST_VOICE_NAME = "KoF5 internal self-voice test " + "a" * 32
 
 
 class CloudPrototypeTests(unittest.TestCase):
@@ -250,13 +253,13 @@ class CloudPrototypeTests(unittest.TestCase):
 
         samples = [make_synthetic_wav(20) for _ in range(3)]
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-            enrolled = enroll_test_voice(client, samples, "test-key", True)
+            enrolled = enroll_test_voice(client, samples, "test-key", True, TEST_VOICE_NAME)
             delete_test_voice(client, enrolled.voice_id, "test-key")
         self.assertEqual((enrolled.voice_id, enrolled.requires_verification),
                          ("internal-voice-123", True))
         self.assertEqual((calls[0].method, calls[0].url.path), ("POST", "/v1/voices/add"))
         self.assertEqual(calls[0].content.count(b'name="files[]"'), 3)
-        self.assertIn(b"KoF5 internal self-voice test", calls[0].content)
+        self.assertIn(TEST_VOICE_NAME.encode(), calls[0].content)
         self.assertEqual((calls[1].method, calls[1].url.path),
                          ("DELETE", "/v1/voices/internal-voice-123"))
 
@@ -266,9 +269,10 @@ class CloudPrototypeTests(unittest.TestCase):
             raise AssertionError("invalid enrollment must not upload samples")
         with httpx.Client(transport=httpx.MockTransport(unexpected)) as client:
             with self.assertRaises(ValueError):
-                enroll_test_voice(client, samples, "test-key", False)
+                enroll_test_voice(client, samples, "test-key", False, TEST_VOICE_NAME)
             with self.assertRaises(ValueError):
-                enroll_test_voice(client, [SYNTHETIC_WAV] * 3, "test-key", True)
+                enroll_test_voice(client, [SYNTHETIC_WAV] * 3, "test-key", True,
+                                  TEST_VOICE_NAME)
             with self.assertRaises(ValueError):
                 delete_test_voice(client, "https://other", "test-key")
 
@@ -276,7 +280,24 @@ class CloudPrototypeTests(unittest.TestCase):
             return httpx.Response(200, json={"voice_id": 123, "requires_verification": False})
         with httpx.Client(transport=httpx.MockTransport(malformed)) as client:
             with self.assertRaisesRegex(ValueError, "no valid ID"):
-                enroll_test_voice(client, samples, "test-key", True)
+                enroll_test_voice(client, samples, "test-key", True, TEST_VOICE_NAME)
+
+    def test_missing_verification_state_preserves_created_id_and_recovery_name(self) -> None:
+        samples = [make_synthetic_wav(20) for _ in range(3)]
+        def respond(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST":
+                return httpx.Response(200, json={"voice_id": "created-id"})
+            self.assertEqual(request.url.path, "/v2/voices")
+            self.assertEqual(request.url.params.get("search"), TEST_VOICE_NAME)
+            return httpx.Response(200, json={"voices": [
+                {"name": TEST_VOICE_NAME, "voice_id": "created-id"},
+                {"name": "another voice", "voice_id": "other-id"},
+            ], "has_more": False})
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            created = enroll_test_voice(client, samples, "test-key", True, TEST_VOICE_NAME)
+            recovered = find_test_voice(client, TEST_VOICE_NAME, "test-key")
+        self.assertEqual((created.voice_id, created.requires_verification), ("created-id", None))
+        self.assertEqual(recovered, "created-id")
 
 
 if __name__ == "__main__":

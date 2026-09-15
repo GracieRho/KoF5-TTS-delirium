@@ -3,17 +3,50 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
+from uuid import uuid4
 
 import httpx
 
 import _bootstrap  # noqa: F401
-from kof5_tts.cloud_prototype import delete_test_voice, enroll_test_voice
+from kof5_tts.cloud_prototype import (
+    delete_test_voice, enroll_test_voice, find_test_voice, validate_test_voice_samples,
+)
 
 MANIFEST = Path(__file__).resolve().parents[1] / "runs" / "internal-test-voice.json"
+
+
+@contextmanager
+def ownership_lock():
+    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    with (MANIFEST.parent / "internal-test-voice.lock").open("a+") as guard:
+        try:
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("another own-voice operation is in progress") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(guard, fcntl.LOCK_UN)
+
+
+def save_manifest(data: dict[str, object]) -> None:
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=MANIFEST.parent,
+                                         prefix="voice-test-", suffix=".json", delete=False) as record:
+            temporary = Path(record.name)
+            json.dump(data, record)
+        temporary.replace(MANIFEST)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     enroll.add_argument("samples", nargs=3, type=Path, help="각 20~30초 PCM16 WAV")
     enroll.add_argument("--own-voice", action="store_true", help="세 파일이 시험자 자신의 목소리임을 확인")
     enroll.add_argument("--upload", action="store_true", help="세 파일을 ElevenLabs에 전송하고 시험 clone 생성")
+    actions.add_parser("reconcile", help="불확실한 생성 응답을 공급자 이름 검색으로 복구")
     delete = actions.add_parser("delete")
     delete.add_argument("--confirm-delete", action="store_true", help="이 CLI가 만든 시험 clone을 공급자에서 삭제")
     args = parser.parse_args(argv)
@@ -35,44 +69,68 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("시험용 음성 소유자 동의 기록 ID가 필요합니다")
         if not key:
             parser.error("ELEVENLABS_API_KEY가 필요합니다")
-        if MANIFEST.exists():
-            parser.error("기존 시험 clone을 먼저 삭제해야 합니다")
         if any(not sample.is_file() or sample.stat().st_size > 2_000_000
                for sample in args.samples):
             parser.error("각각 2 MB 이하의 자기 음성 WAV 세 파일이 필요합니다")
         audio = [sample.read_bytes() for sample in args.samples]
-        MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(timeout=30) as client:
-            result = enroll_test_voice(client, audio, key, True)
-            temporary = None
-            try:
-                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=MANIFEST.parent,
-                                                 prefix="voice-test-", suffix=".json", delete=False) as record:
-                    temporary = Path(record.name)
-                    json.dump({"voice_id": result.voice_id,
-                               "requires_verification": result.requires_verification}, record)
-                temporary.replace(MANIFEST)
-            except OSError:
-                if temporary is not None:
-                    temporary.unlink(missing_ok=True)
-                try:
-                    delete_test_voice(client, result.voice_id, key)
-                except (httpx.HTTPError, ValueError):
-                    parser.error(f"로컬 기록이 실패했습니다. 공급자에서 voice ID {result.voice_id}를 삭제하세요")
-                raise
+        try:
+            validate_test_voice_samples(audio)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        try:
+            with ownership_lock():
+                if MANIFEST.exists():
+                    parser.error("기존 시험 clone 또는 불확실한 pending 생성이 있습니다. 재등록하지 마세요")
+                name = f"KoF5 internal self-voice test {uuid4().hex}"
+                save_manifest({"status": "pending", "name": name, "voice_id": None})
+                with httpx.Client(timeout=30) as client:
+                    try:
+                        result = enroll_test_voice(client, audio, key, True, name)
+                    except (httpx.HTTPError, ValueError):
+                        parser.error("생성 결과가 불확실합니다. pending 기록을 유지하고 reconcile을 실행하세요")
+                save_manifest({"status": "created", "name": name, "voice_id": result.voice_id,
+                               "requires_verification": result.requires_verification})
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
         print(f"시험 voice ID: {result.voice_id}")
-        if result.requires_verification:
-            print("공급자 화자 검증 대기: 확인되기 전에는 TTS에 사용하지 마세요")
+        if result.requires_verification is not False:
+            print("공급자 화자 검증 상태가 확인되지 않았습니다. 검증 전에는 TTS에 사용하지 마세요")
         return 0
 
-    if not args.confirm_delete:
+    if args.action == "delete" and not args.confirm_delete:
         parser.error("공급자 시험 clone 삭제 전 --confirm-delete가 필요합니다")
-    if not key or not MANIFEST.is_file():
-        parser.error("API key와 이 CLI가 만든 시험 clone 기록이 필요합니다")
-    voice_id = json.loads(MANIFEST.read_text(encoding="utf-8"))["voice_id"]
-    with httpx.Client(timeout=30) as client:
-        delete_test_voice(client, voice_id, key)
-    MANIFEST.unlink()
+    if not key:
+        parser.error("ELEVENLABS_API_KEY가 필요합니다")
+    try:
+        with ownership_lock():
+            if not MANIFEST.is_file():
+                parser.error("이 CLI가 만든 시험 clone 기록이 필요합니다")
+            record = json.loads(MANIFEST.read_text(encoding="utf-8"))
+            if not isinstance(record, dict) or not isinstance(record.get("name"), str) or not re.fullmatch(
+                r"KoF5 internal self-voice test [0-9a-f]{32}", record["name"]
+            ):
+                parser.error("시험 clone 기록이 손상됐습니다")
+            voice_id = record.get("voice_id")
+            if voice_id is not None and (
+                not isinstance(voice_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id)
+            ):
+                parser.error("시험 clone ID 기록이 손상됐습니다")
+            with httpx.Client(timeout=30) as client:
+                if voice_id is None:
+                    voice_id = find_test_voice(client, record["name"], key)
+                    if voice_id is None:
+                        parser.error("공급자에서 pending clone을 찾지 못했습니다. 재등록하지 말고 계정을 확인하세요")
+                    save_manifest({"status": "recovered", "name": record["name"],
+                                   "voice_id": voice_id, "requires_verification": None})
+                if args.action == "reconcile":
+                    print(f"시험 voice ID 복구: {voice_id} · 검증 상태 미확인")
+                    return 0
+                delete_test_voice(client, voice_id, key)
+            MANIFEST.unlink()
+    except httpx.HTTPError:
+        parser.error("공급자 응답을 확인하지 못했습니다. 로컬 기록을 유지하고 다시 확인하세요")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
     print("시험 clone 공급자 삭제 확인")
     return 0
 

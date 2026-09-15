@@ -136,34 +136,76 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
 @dataclass(frozen=True)
 class EnrolledVoice:
     voice_id: str
-    requires_verification: bool
+    requires_verification: bool | None
 
 
-def enroll_test_voice(
-    client: httpx.Client, samples: Sequence[bytes], key: str, own_voice_consent_verified: bool
-) -> EnrolledVoice:
-    """Create an IVC clone from the internal tester's own three short samples."""
-    if not own_voice_consent_verified or not key:
-        raise ValueError("own-voice cloning consent and provider key are required")
+def validate_test_voice_samples(samples: Sequence[bytes]) -> None:
     if len(samples) != 3:
         raise ValueError("three voice samples are required")
     durations = [validate_short_wav(sample) for sample in samples]
     if any(duration < 20 for duration in durations) or sum(durations) < 60:
         raise ValueError("three 20–30 second voice samples are required")
+
+
+def enroll_test_voice(
+    client: httpx.Client, samples: Sequence[bytes], key: str, own_voice_consent_verified: bool,
+    test_name: str,
+) -> EnrolledVoice:
+    """Create an IVC clone from the internal tester's own three short samples."""
+    if not own_voice_consent_verified or not key:
+        raise ValueError("own-voice cloning consent and provider key are required")
+    if not fullmatch(r"KoF5 internal self-voice test [0-9a-f]{32}", test_name):
+        raise ValueError("a unique internal test voice name is required")
+    validate_test_voice_samples(samples)
     response = client.post(
         "https://api.elevenlabs.io/v1/voices/add",
         headers={"xi-api-key": key},
-        data={"name": "KoF5 internal self-voice test"},
+        data={"name": test_name},
         files=[("files[]", (f"sample-{index}.wav", sample, "audio/wav"))
                for index, sample in enumerate(samples, start=1)],
     )
     response.raise_for_status()
     body = response.json()
     voice_id = body.get("voice_id") if isinstance(body, dict) else None
-    if not isinstance(voice_id, str) or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id) \
-            or not isinstance(body.get("requires_verification"), bool):
-        raise ValueError("voice clone response has no valid ID or verification state")
-    return EnrolledVoice(voice_id, body["requires_verification"])
+    if not isinstance(voice_id, str) or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
+        raise ValueError("voice clone response has no valid ID")
+    verification = body.get("requires_verification")
+    return EnrolledVoice(voice_id, verification if isinstance(verification, bool) else None)
+
+
+def find_test_voice(client: httpx.Client, test_name: str, key: str) -> str | None:
+    """Find only the unique pending IVC name after an uncertain create response."""
+    if not key or not fullmatch(r"KoF5 internal self-voice test [0-9a-f]{32}", test_name):
+        raise ValueError("provider key and pending test name are required")
+    page_token = None
+    matches = []
+    for _ in range(10):
+        params = {"search": test_name, "category": "cloned", "page_size": 100,
+                  "include_total_count": "false"}
+        if page_token:
+            params["next_page_token"] = page_token
+        response = client.get("https://api.elevenlabs.io/v2/voices",
+                              headers={"xi-api-key": key}, params=params)
+        response.raise_for_status()
+        body = response.json()
+        if not isinstance(body, dict) or not isinstance(body.get("voices"), list):
+            raise ValueError("voice list response is invalid")
+        for voice in body["voices"]:
+            if isinstance(voice, dict) and voice.get("name") == test_name:
+                voice_id = voice.get("voice_id")
+                if not isinstance(voice_id, str) or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
+                    raise ValueError("pending voice has an invalid ID")
+                matches.append(voice_id)
+        if not body.get("has_more"):
+            break
+        page_token = body.get("next_page_token")
+        if not isinstance(page_token, str) or not page_token:
+            raise ValueError("voice list pagination is invalid")
+    else:
+        raise ValueError("voice list pagination exceeded the recovery limit")
+    if len(matches) > 1:
+        raise ValueError("multiple pending voices require manual reconciliation")
+    return matches[0] if matches else None
 
 
 def delete_test_voice(client: httpx.Client, voice_id: str, key: str) -> None:
