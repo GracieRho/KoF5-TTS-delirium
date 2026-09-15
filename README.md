@@ -12,7 +12,7 @@
 
 ## 현재 범위
 
-현재 저장소에는 [MVP PRD](docs/Delirium_Familiar_Voice_MVP_PRD.md), 환자 시험 전 안전 게이트, ADR 및 기존 AI Hub 다운로드·오디오 전처리 도구가 있습니다. MVP는 hosted STT·LLM·보호자 음성 복제 TTS를 연결하는 클라우드 중심 흐름을 목표로 합니다. 기존 학습·경량화 경로는 이번 MVP의 구현 범위가 아닙니다.
+현재 저장소에는 [MVP PRD](docs/Delirium_Familiar_Voice_MVP_PRD.md), 환자 시험 전 안전 게이트, ADR 및 기존 AI Hub 다운로드·오디오 전처리 도구가 있습니다. MVP는 hosted STT·LLM·보호자 음성 복제 TTS를 연결하는 클라우드 중심 흐름을 목표로 합니다. 보호자·직원 로그인과 환자 데이터 저장은 [Supabase Auth/Postgres](architecture/decisions/0004-supabase-auth-postgres.md)로 정했고, 웹/API는 Vercel 우선입니다. 기존 학습·경량화 경로는 이번 MVP의 구현 범위가 아닙니다.
 
 다음은 실측 또는 기관 검토 전까지 확정하지 않습니다.
 
@@ -34,6 +34,7 @@
 ├── docs/                  # 프로젝트·연구 문서
 ├── scripts/               # 실행 진입점과 작업 자동화
 ├── src/kof5_tts/          # 재사용 가능한 제품·연구 코드
+├── supabase/              # Auth/Postgres 설정·기본 차단 환자 스키마
 ├── tests/                 # 단위·통합 테스트
 ├── .editorconfig          # 공통 편집기 설정
 ├── .gitignore             # 비밀정보, 데이터, 모델 산출물 제외 규칙

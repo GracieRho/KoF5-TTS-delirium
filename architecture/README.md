@@ -1,6 +1,6 @@
 # 아키텍처 방향
 
-클라우드 중심 MVP의 제품 흐름은 [ADR-0001](decisions/0001-cloud-first-familiar-voice-mvp.md), [iPad·Vercel 우선 결정 ADR-0002](decisions/0002-ipad-local-audio-vercel-first.md)와 [PRD](../docs/Delirium_Familiar_Voice_MVP_PRD.md)에 기록합니다. 아래는 구현 목표 흐름이며 hosted STT·LLM·TTS 제공업체가 확정됐다는 뜻은 아닙니다.
+클라우드 중심 MVP의 제품 흐름은 [ADR-0001](decisions/0001-cloud-first-familiar-voice-mvp.md), [iPad·Vercel 우선 결정 ADR-0002](decisions/0002-ipad-local-audio-vercel-first.md), [Supabase Auth/Postgres 결정 ADR-0004](decisions/0004-supabase-auth-postgres.md)와 [PRD](../docs/Delirium_Familiar_Voice_MVP_PRD.md)에 기록합니다. 아래는 구현 목표 흐름이며 hosted STT·LLM·TTS 제공업체가 확정됐다는 뜻은 아닙니다.
 
 ## MVP 목표 흐름
 

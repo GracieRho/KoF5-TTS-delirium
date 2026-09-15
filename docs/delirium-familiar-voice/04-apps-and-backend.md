@@ -59,7 +59,7 @@ Next.js Responsive Web
 
 # 34. 추천 기술 스택
 
-아래 목록은 비교할 후보 스택이다. 제공업체, 프레임워크와 배포 환경은 한국어 품질·지연·데이터 처리·운영 조건을 확인한 뒤 결정한다.
+로그인과 관계형 환자 데이터는 [ADR-0004](../../architecture/decisions/0004-supabase-auth-postgres.md)에 따라 Supabase Auth/Postgres로 결정했다. 다른 제공업체·웹 프레임워크·객체 저장·벡터 검색은 품질·지연·데이터 처리·운영 조건을 확인할 후보로 남긴다.
 
 ```text
 Patient Client
@@ -72,16 +72,16 @@ Backend
 FastAPI
 
 Auth
-Supabase Auth
+Supabase Auth (확정)
 
 Database
-Supabase Postgres
+Supabase Postgres (확정)
 
 Vector
-pgvector
+pgvector (후보)
 
 Object Storage
-Supabase Storage
+Supabase Storage (후보)
 
 STT
 Hosted streaming STT
