@@ -111,7 +111,7 @@
     </div>
   </main>
   <script>
-    const state = { config: null, token: null, userId: null, links: [], generation: 0, factRequest: 0, saveRequest: 0 };
+    const state = { config: null, token: null, userId: null, links: [], generation: 0, factRequest: 0, saveRequest: 0, draftRevision: 0 };
     const $ = id => document.getElementById(id);
     const labels = { relationship: '가족과 관계', food: '좋아하는 음식', travel: '함께한 여행', avoid_topic: '피해야 할 이야기' };
     const current = link => link.access_status === 'verified'
@@ -140,6 +140,7 @@
       state.generation += 1;
       state.factRequest += 1;
       state.saveRequest += 1;
+      state.draftRevision += 1;
       state.token = null;
       state.userId = null;
       state.links = [];
@@ -245,28 +246,40 @@
 
     $('patient').addEventListener('change', async () => {
       state.saveRequest += 1;
+      state.draftRevision += 1;
       $('content').value = '';
       $('memory-status').textContent = '';
       await loadFacts();
     });
     $('logout').addEventListener('click', () => clearSession());
+    $('content').addEventListener('input', () => { state.draftRevision += 1; });
+    $('category').addEventListener('change', () => { state.draftRevision += 1; });
     $('memory-form').addEventListener('submit', async event => {
       event.preventDefault();
       const generation = state.generation;
       const patientId = $('patient').value;
       const request = ++state.saveRequest;
+      const revision = state.draftRevision;
+      const category = $('category').value;
+      const draft = $('content').value.trim();
       const currentSave = () => generation === state.generation && request === state.saveRequest
         && patientId === $('patient').value && !!state.token;
       $('memory-status').textContent = '기억을 저장하고 있습니다.';
       try {
         await supabase('/rest/v1/family_context', 'POST', {
           patient_id: patientId, author_guardian_user_id: state.userId,
-          category: $('category').value, content: $('content').value.trim(),
+          category, content: draft,
         }, 'api');
         if (!currentSave()) return;
-        $('content').value = '';
         await loadFacts();
-        if (currentSave()) $('memory-status').textContent = '확인한 기억을 저장했습니다.';
+        if (currentSave()) {
+          const unchanged = revision === state.draftRevision
+            && $('content').value.trim() === draft && $('category').value === category;
+          if (unchanged) $('content').value = '';
+          $('memory-status').textContent = unchanged
+            ? '확인한 기억을 저장했습니다.'
+            : '이전 내용을 저장했습니다. 새 초안은 아직 저장되지 않았습니다.';
+        }
       } catch (_) {
         if (currentSave()) $('memory-status').textContent = '기억을 저장하지 못했습니다. 연결 상태를 다시 확인하세요.';
       }

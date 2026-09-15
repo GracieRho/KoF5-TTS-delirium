@@ -12,4 +12,4 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 node tests/test_guardian_portal_race.js
 ```
 
-보호자 웹 경합 검사는 외부 호출 없이 지연된 조회·저장·로그아웃/재로그인 응답과 환자 전환 시 입력 초안 폐기를 재현합니다.
+보호자 웹 경합 검사는 외부 호출 없이 지연된 조회·저장·로그아웃/재로그인 응답, 환자 전환 시 초안 폐기, 같은 환자의 저장 중 새 초안 보존을 재현합니다.

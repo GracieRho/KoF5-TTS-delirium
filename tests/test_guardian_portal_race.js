@@ -35,6 +35,7 @@ async function run() {
   const firstA = pending();
   const oldA = pending();
   const firstSave = pending();
+  const secondSave = pending();
   const posts = [];
   let aReads = 0;
   let logins = 0;
@@ -46,7 +47,9 @@ async function run() {
     if (url.includes('/guardian_links')) return reply(200, links);
     if (url.includes('/family_context') && options.method === 'POST') {
       posts.push(JSON.parse(options.body));
-      return firstSave.promise;
+      if (posts.length === 1) return firstSave.promise;
+      if (posts.length === 2) return secondSave.promise;
+      return reply(201, null);
     }
     if (url.includes('patient_id=eq.A')) {
       aReads += 1;
@@ -65,6 +68,7 @@ async function run() {
 
   elements.email.value = 'synthetic@example.invalid';
   elements.password.value = 'synthetic';
+  elements.category.value = 'travel';
   const login = submit(elements['signin-form'].handlers.submit);
   await pause();
   elements.content.value = 'A draft';
@@ -89,6 +93,21 @@ async function run() {
   await save;
   assert.equal(elements.content.value, 'B draft', 'late A save cannot erase B draft');
   assert.notEqual(elements['memory-status'].textContent, '확인한 기억을 저장했습니다.');
+
+  const samePatientSave = submit(elements['memory-form'].handlers.submit);
+  await pause();
+  assert.equal(posts[1].patient_id, 'B');
+  assert.equal(posts[1].content, 'B draft');
+  elements.content.value = 'new B draft';
+  elements.content.handlers.input();
+  secondSave.resolve(reply(201, null));
+  await samePatientSave;
+  assert.equal(elements.content.value, 'new B draft', 'old B save cannot erase a newer B draft');
+  assert.equal(elements['memory-status'].textContent, '이전 내용을 저장했습니다. 새 초안은 아직 저장되지 않았습니다.');
+  await submit(elements['memory-form'].handlers.submit);
+  assert.equal(posts[2].content, 'new B draft');
+  assert.equal(elements.content.value, '', 'submitted unchanged draft is cleared after success');
+  assert.equal(elements['memory-status'].textContent, '확인한 기억을 저장했습니다.');
 
   elements.patient.value = 'A';
   const staleRead = elements.patient.handlers.change();
