@@ -13,6 +13,7 @@ ENCOUNTER = UUID("00000000-0000-4000-8000-000000000976")
 HOSPITAL = "TEST-HOSPITAL-TURN-HTTP"
 HOSPITAL_TEXT = "가상 새봄병원입니다."
 CT_TEXT = "가상 내일 오후 4시 CT 촬영 예정입니다."
+ROOM_TEXT = "가상 302호 병실입니다."
 
 
 def main() -> None:
@@ -41,6 +42,7 @@ def main() -> None:
 
     try:
         staff, staff_token = permanent("staff")
+        reviewer, reviewer_token = permanent("reviewer")
         guardian, guardian_token = permanent("guardian")
         status, anonymous = request(f"{url}/auth/v1/signup", "POST", public,
                                     payload={"data": {"kof5_synthetic_run": anonymous_marker},
@@ -65,11 +67,12 @@ def main() -> None:
             VALUES ('{HOSPITAL}','approved','TEST-INSTITUTION','TEST-SAFETY',now()-interval '1 day');
             INSERT INTO kof5.hospital_staff_membership
                 (auth_user_id,hospital_ref,product_role,status,effective_at,verified_by_staff_ref,verified_at)
-            VALUES ('{staff}','{HOSPITAL}','care_staff','verified',now()-interval '1 day','TEST-VERIFY',now());
+            VALUES ('{staff}','{HOSPITAL}','care_staff','verified',now()-interval '1 day','TEST-VERIFY',now()),
+                   ('{reviewer}','{HOSPITAL}','care_staff','verified',now()-interval '1 day','TEST-VERIFY',now());
             INSERT INTO kof5.hospital_staff_assignment
                 (membership_id,hospital_ref,patient_id,status,effective_at,verified_by_staff_ref,verified_at)
             SELECT membership_id,'{HOSPITAL}','{PATIENT}','verified',now()-interval '1 day','TEST-VERIFY',now()
-            FROM kof5.hospital_staff_membership WHERE auth_user_id='{staff}';
+            FROM kof5.hospital_staff_membership WHERE hospital_ref='{HOSPITAL}';
             INSERT INTO kof5.consent_record
                 (patient_id,scope,signer_role,signer_ref,assent_status,status,effective_at,recorded_by_staff_ref)
             VALUES ('{PATIENT}','patient_participation','patient','TEST-SIGNER','assented','active',now()-interval '1 day','TEST-STAFF'),
@@ -100,6 +103,34 @@ def main() -> None:
 
         base = f"{url}/rest/v1"
         turn = f"{base}/rpc/patient_hospital_turn_context"
+        drafts = f"{base}/synthetic_hospital_context_draft"
+        proposal = {"patient_id": str(PATIENT), "encounter_id": str(ENCOUNTER),
+                    "category": "room", "proposed_text": ROOM_TEXT,
+                    "source_ref": "TEST-ROOM-BOARD-1"}
+        status, _ = request(drafts, "POST", public, guardian_token, proposal, schema="api")
+        assert status in (401, 403), "guardian proposed a hospital fact"
+        status, _ = request(drafts, "POST", public, staff_token, proposal, schema="api")
+        assert status == 201, f"assigned staff proposal: {status}"
+        status, proposed = request(f"{drafts}?select=draft_id,category,proposed_text,source_ref,status,proposed_by_auth_user_id",
+                                   "GET", public, reviewer_token, schema="api")
+        assert status == 200 and len(proposed) == 1 and proposed[0]["proposed_text"] == ROOM_TEXT
+        assert proposed[0]["category"] == "room" and proposed[0]["source_ref"] == proposal["source_ref"]
+        assert proposed[0]["proposed_by_auth_user_id"] == str(staff)
+        draft_id = UUID(proposed[0]["draft_id"])
+        approval_path = f"{drafts}?draft_id=eq.{draft_id}&status=eq.draft"
+        status, rows = request(approval_path, "PATCH", public, staff_token,
+                               {"status": "approved"}, schema="api")
+        assert status == 200 and rows == [], "proposer self-approved hospital fact"
+        status, rows = request(approval_path, "PATCH", public, reviewer_token,
+                               {"status": "approved"}, schema="api")
+        assert status == 200 and len(rows) == 1 and rows[0]["approved_by_auth_user_id"] == str(reviewer), \
+            f"distinct reviewer approval failed: {status}"
+        status, approved = request(f"{base}/hospital_context_current?fact_id=eq.{draft_id}&select=fact_id,category,content,encounter_id,synthetic_source_ref",
+                                   "GET", public, reviewer_token, schema="api")
+        assert status == 200 and approved == [{"fact_id": str(draft_id), "category": "room",
+                                                "content": ROOM_TEXT, "encounter_id": str(ENCOUNTER),
+                                                "synthetic_source_ref": proposal["source_ref"]}], \
+            "approved exact original was not published to current encounter"
 
         def hospital_turn(token: str, question: str) -> tuple[int, object]:
             return request(turn, "POST", public, token,
@@ -130,6 +161,13 @@ def main() -> None:
         status, rows = hospital_turn(device_token, "CT 검사는 몇 시인가요?")
         assert status == 200 and rows[0]["authorized"] is True \
             and rows[0]["facts"][0]["content"] == CT_TEXT, "CT question selected newer MRI"
+        status, rows = hospital_turn(device_token, "병실은 어디인가요?")
+        assert status == 200 and rows[0]["authorized"] is True \
+            and len(rows[0]["facts"]) == 1 \
+            and rows[0]["facts"][0]["category"] == "room" \
+            and rows[0]["facts"][0]["content"] == ROOM_TEXT \
+            and rows[0]["facts"][0]["encounter_id"] == str(ENCOUNTER), \
+            "paired device did not receive exact two-staff approved room fact"
         for question in ("검사는 언제인가요?", "CT 검사 결과 어때요?", "음악 좋아하세요?"):
             status, rows = hospital_turn(device_token, question)
             assert status == 200 and rows == [{"authorized": True, "facts": []}], \
@@ -148,11 +186,12 @@ def main() -> None:
         status, rows = request(f"{base}/hospital_context_current?select=content", "GET",
                                public, device_token, schema="api")
         assert status == 200 and rows == [], "withdrawn device reached staff hospital view"
-        print("Task-local Auth → paired hospital/family namespaces → atomic withdrawal: PASS")
+        print("Task-local Auth → distinct-approved hospital original → paired turn/withdrawal: PASS")
     finally:
         try:
             sql(f"""
                 DELETE FROM kof5.hospital_context_fact WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.synthetic_hospital_context_draft WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.family_fact WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.patient_guardian_link WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.patient_device_assignment WHERE patient_id='{PATIENT}';
