@@ -12,7 +12,10 @@ VALID_LABELS = {"DIRECTED", "AMBIENT", "UNCERTAIN"}
 # ponytail: labels come from a later activation layer; add scored STT/context signals after measured false activations.
 DISSENT_PHRASES = ("이거 꺼", "말 걸지 마", "대화 그만", "그만해")
 END_PHRASES = ("나 좀 잘게", "이제 됐다", "나중에 얘기하자")
-RISK_PHRASES = ("숨을 못 쉬", "숨이 너무 차", "가슴이 아파", "넘어졌", "너무 어지러워", "살려줘")
+RISK_PHRASES = (
+    "숨을 못 쉬", "숨이 너무 차", "숨이 안 쉬", "가슴이 아파", "통증이 있어",
+    "통증이 심", "넘어졌", "낙상했", "너무 어지러워", "살려줘",
+)
 WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
 

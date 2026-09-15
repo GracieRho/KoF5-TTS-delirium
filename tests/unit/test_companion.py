@@ -127,6 +127,23 @@ class ConversationSessionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HospitalMessage("synthetic_patient", "CT 일정", "", now)
 
+    def test_risk_synonyms_preempt_other_replies_without_claiming_staff_alert(self) -> None:
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        expected = "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
+        for speech in ("숨이 안 쉬어져", "가슴 통증이 있어, 지금 몇 시야?", "낙상했어"):
+            with self.subTest(speech=speech):
+                session = ConversationSession()
+                self.assertEqual(session.hear(speech, "AMBIENT", now), "discarded")
+                event = session.hear(speech, "DIRECTED", now)
+                self.assertEqual(event, "auxiliary_alert_candidate")
+                self.assertEqual(policy_reply(speech, event, now), expected)
+                session.speaking()
+                barge_event = session.hear(speech, "UNCERTAIN", now)
+                self.assertEqual(barge_event, "barge_in_risk_candidate")
+                self.assertEqual(policy_reply(speech, barge_event, now), expected)
+                self.assertNotIn("의료진에게 알렸", expected)
+                self.assertNotIn("의료진에게 전달", expected)
+
     def test_clear_dissent_stops_proactive_conversation_but_short_no_does_not(self) -> None:
         now = datetime(2026, 9, 15, tzinfo=timezone.utc)
         for dissent in ("그만해.", "싫어."):
