@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
+import json
 from re import findall, fullmatch, search
 from typing import Callable, Sequence
 from urllib.parse import quote
@@ -130,16 +131,17 @@ def generate_synthetic_follow_up(client: httpx.Client, fact: str, key: str) -> s
     if not key or not 1 <= len(fact) <= 1000:
         raise ValueError("bounded synthetic fact and provider key are required")
     unsafe = rf"{MEDICATION_WORD_PATTERN}|약|복용|처방|진단|치료|수술|검사|병원|병실|퇴원|증상|통증|의료"
-    if search(unsafe, fact):
-        raise ValueError("medical family fact cannot prompt follow-up")
+    identity_claim = r"(?:제가|내가|나는|저는).{0,20}(?:진짜|실제).{0,20}(?:손녀|딸|아들|가족|수민)"
+    if search(unsafe, fact) or search(identity_claim, fact):
+        raise ValueError("unsafe family fact cannot prompt follow-up")
     response = client.post(
         "https://api.openai.com/v1/responses",
         headers={"Authorization": f"Bearer {key}"},
         json={"model": "gpt-5.4-mini", "store": False, "max_output_tokens": 100,
               "instructions": (
-                  "고정 합성 환자의 검증된 일반 가족 기억 한 건에서 보호자가 검토할 한국어 후속 질문 한 개만 작성하세요. "
-                  "답변, 새 사실, 의료·병원 주제, 가족 본인 사칭은 쓰지 마세요. "
-                  "질문은 한 줄, 100자 이하, 물음표 하나로 끝내세요."
+                  "검증된 합성 가족 기억에서 2~30자 원문을 정확히 연속으로 복사하세요. "
+                  "JSON 객체만 출력하세요: {\"source_quote\":\"원문\",\"focus\":\"scene|feeling|detail 중 하나\"}. "
+                  "필드는 두 개뿐입니다. 질문, 답변, 새 사실, 의료·병원 주제, 가족 사칭을 쓰지 마세요."
               ), "input": f"검증된 합성 가족 기억: {fact}"},
     )
     response.raise_for_status()
@@ -149,20 +151,34 @@ def generate_synthetic_follow_up(client: httpx.Client, fact: str, key: str) -> s
     if not isinstance(body, dict) or body.get("status") != "completed":
         raise ValueError("follow-up response is incomplete")
     try:
-        question = "".join(
+        output_text = "".join(
             part["text"] for item in body["output"] if item.get("type") == "message"
             for part in item.get("content", []) if part.get("type") == "output_text"
         ).strip()
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
-        raise ValueError("follow-up response has no question") from exc
-    if (not 5 <= len(question) <= 100 or "\n" in question or question.count("?") != 1
-            or not question.endswith("?") or not search(r"[가-힣]", question)
-            or search(unsafe, question)):
-        raise ValueError("follow-up question is unsafe or malformed")
-    if any(claim not in fact for claim in findall(r"\d{1,4}(?:년|월|일|시|호)?", question)):
-        raise ValueError("follow-up adds an unverified date or number")
-    if any(anchor not in fact for anchor in findall(r"([가-힣A-Za-z0-9]{2,})(?:에서|와|과|에게)", question)):
-        raise ValueError("follow-up adds an unverified person or place")
+        raise ValueError("follow-up response has no JSON") from exc
+    try:
+        selection = json.loads(output_text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("follow-up response is not exact JSON") from exc
+    if not isinstance(selection, dict) or set(selection) != {"source_quote", "focus"}:
+        raise ValueError("follow-up selection has unexpected fields")
+    quote = selection["source_quote"]
+    focus = selection["focus"]
+    if (not isinstance(quote, str) or not 2 <= len(quote) <= 30
+            or quote != quote.strip() or quote not in fact
+            or any(ch in quote for ch in "\n\r?'\"`‘’“”")
+            or search(unsafe, quote) or search(identity_claim, quote)
+            or not isinstance(focus, str) or focus not in {"scene", "feeling", "detail"}):
+        raise ValueError("follow-up quote or focus is unsafe")
+    suffix = {
+        "scene": "가장 기억에 남는 장면은 무엇인가요?",
+        "feeling": "그때 어떤 마음이셨는지 기억나시나요?",
+        "detail": "더 기억나는 것은 무엇인가요?",
+    }[focus]
+    question = f"말씀해주신 ‘{quote}’ 이야기에서 {suffix}"
+    if len(question) > 100:
+        raise ValueError("follow-up question is too long")
     return question
 
 

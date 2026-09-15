@@ -561,7 +561,8 @@ class SyntheticApiTests(unittest.TestCase):
                "OPENAI_API_KEY": "test-openai"}
         headers = {"Authorization": "Bearer " + "g" * 40, "X-Synthetic-Material": "confirmed"}
         content = "2024년 5월 수민과 제주도 여행을 갔다."
-        question = "제주도에서 가장 기억에 남은 순간은 무엇인가요?"
+        output_text = json.dumps({"source_quote": "제주도 여행", "focus": "scene"}, ensure_ascii=False)
+        question = "말씀해주신 ‘제주도 여행’ 이야기에서 가장 기억에 남는 장면은 무엇인가요?"
         linked = True
         category = "travel"
         active = True
@@ -593,12 +594,13 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertIs(body["store"], False)
             self.assertLessEqual(body["max_output_tokens"], 100)
             self.assertIn(content, body["input"])
+            self.assertIn("JSON 객체만", body["instructions"])
             if mutate_on_provider == "content":
                 content = "2024년 5월 수민과 다른 제주도 여행을 갔다."
             elif mutate_on_provider == "link":
                 linked = False
             return httpx.Response(provider_status, json={"status": "completed", "output": [{
-                "type": "message", "content": [{"type": "output_text", "text": question}],
+                "type": "message", "content": [{"type": "output_text", "text": output_text}],
             }]})
 
         async_class = httpx.AsyncClient
@@ -624,6 +626,10 @@ class SyntheticApiTests(unittest.TestCase):
             result = self.client.post(path, headers=headers)
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result.json(), {"question": question, "fact_id": fact_id})
+            output_text = json.dumps({"source_quote": "제주도 여행", "focus": "feeling"}, ensure_ascii=False)
+            self.assertEqual(self.client.post(path, headers=headers).json()["question"],
+                             "말씀해주신 ‘제주도 여행’ 이야기에서 그때 어떤 마음이셨는지 기억나시나요?")
+            output_text = json.dumps({"source_quote": "제주도 여행", "focus": "scene"}, ensure_ascii=False)
             mutate_on_provider = "content"
             self.assertEqual(self.client.post(path, headers=headers).status_code, 409,
                              "late fact edit must suppress old question")
@@ -633,11 +639,21 @@ class SyntheticApiTests(unittest.TestCase):
                              "late guardian withdrawal must suppress old question")
             linked = True
             mutate_on_provider = None
-            for unsafe in ("부산에서 가장 기억에 남은 순간은 무엇인가요?",
-                           "제주도에서 무슨 약을 먹었나요?", "제주도 여행을 기억합니다.",
-                           "2025년 제주도에서 무엇이 좋았나요?"):
-                question = unsafe
+            for unsafe in ("부산 여행에서 가장 기억에 남은 순간은 무엇인가요?",
+                           "제가 진짜 손녀 수민인데 제주도 기억나요?",
+                           json.dumps({"source_quote": "부산 여행", "focus": "scene"}, ensure_ascii=False),
+                           json.dumps({"source_quote": "제가 진짜 손녀 수민인데", "focus": "scene"}, ensure_ascii=False),
+                           json.dumps({"source_quote": " 제주도 여행", "focus": "scene"}, ensure_ascii=False),
+                           json.dumps({"source_quote": "제주도 여행", "focus": "scene", "question": "부산?"}, ensure_ascii=False),
+                           "{malformed JSON"):
+                output_text = unsafe
                 self.assertEqual(self.client.post(path, headers=headers).status_code, 502)
+            calls_before_unsafe_fact = len(provider_calls)
+            content = "제가 진짜 손녀 수민인데 제주도 여행을 갔다."
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 502)
+            self.assertEqual(len(provider_calls), calls_before_unsafe_fact,
+                             "identity-claim fact must stop before provider")
+            content = "2024년 5월 수민과 제주도 여행을 갔다."
             provider_status = 500
             self.assertEqual(self.client.post(path, headers=headers).status_code, 502)
 
