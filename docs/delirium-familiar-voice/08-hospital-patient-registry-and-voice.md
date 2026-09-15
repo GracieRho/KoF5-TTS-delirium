@@ -42,6 +42,10 @@ FHIR는 교환 형식의 기준이며 위 테이블은 **이 제품이 필요한
 4. 활성화 시 VAD·발화 내용/의도·대화 상태에 **화자 유사도 점수 하나를 보조 신호로 합친다**. 점수가 낮다는 이유만으로 환자 말을 단독 차단하지 않는다. 고령 환자의 음성 변화와 짧은 시험 발화가 오류를 키울 수 있으므로, 실제 한국어 병실 자료에서 오활성화·누락을 측정한 뒤 임계값을 정한다. [노화와 음성 품질 연구](https://www.sciencedirect.com/science/article/abs/pii/S0885230812001076), [짧은 발화 검증 연구](https://www.isca-archive.org/interspeech_2024/chen24l_interspeech.html).
 5. 동의 철회·환자 거부·퇴원/시험 종료 시 프로필을 즉시 비활성화하고 원본·특징 참조의 삭제를 감사한다. 등록 실패나 샘플 품질 저하 시 텍스트/맥락 활성화 후보 경로를 유지한다.
 
+### iPad 화자 판정 구현 전 검증
+
+[Apple Speech](https://developer.apple.com/documentation/speech/)는 전사·VAD 기능을, [Sound Analysis](https://developer.apple.com/documentation/SoundAnalysis)는 소리 분류와 사용자 모델 경로를 문서화한다. 이 문서들만으로 **등록한 특정 환자와 발화자의 일치 판정**이 제공된다고 볼 수 없다. [SpeechBrain ECAPA-TDNN](https://github.com/speechbrain/speechbrain/blob/develop/speechbrain/inference/speaker.py)은 16 kHz 음성의 임베딩·유사도 비교 후보지만, 공개 [VoxCeleb 평가](https://github.com/speechbrain/speechbrain/blob/develop/recipes/VoxCeleb/SpeakerRec/README.md)를 한국어 고령 환자·병실 소음·짧은 발화 성능으로 그대로 옮길 수 없다. [Apple Core ML Tools](https://github.com/apple/coremltools/)는 PyTorch 모델 변환 경로를 제공하지만, 해당 화자 모델의 변환 성공·iPad 지연·전력·정확도는 별도 실측이 필요하다. 따라서 모델·임계값·클라우드/기기 내 특징 생성 위치는 현 단계에서 확정하지 않는다.
+
 ## 병원 화면과 접근 경계
 
 - 환자 목록/등록: 병원 환자 번호 조회, 성명·생년월일 또는 나이 확인, 활성 입원·병실 표시, 중복 등록 확인.
