@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from base64 import b64encode
 from datetime import datetime, timezone
+from hashlib import md5
 from hmac import compare_digest
+import math
 import os
 from pathlib import Path
 import re
@@ -24,6 +26,11 @@ from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant
 
 SYNTHETIC_PATIENT = "synthetic_patient"
 SYNTHETIC_DB_PATIENT = "00000000-0000-4000-8000-000000000975"
+EMBEDDING_MODEL = "text-embedding-3-small"  # Provisional synthetic fixture only.
+FAMILY_CATEGORIES = frozenset({
+    "family", "relationship", "hometown", "occupation", "travel", "food", "hobby", "friend",
+    "pet", "daily_routine", "family_event", "favorite_story", "recent_event", "comfort_topic",
+})
 FAMILY_FACT = Fact(
     SYNTHETIC_PATIENT,
     "family_context",
@@ -139,6 +146,78 @@ def _device_bearer(request: Request) -> str:
     return supplied
 
 
+def _api_headers(config: dict[str, str], bearer: str) -> dict[str, str]:
+    return {"apikey": config["publishable_key"], "Authorization": bearer,
+            "Accept-Profile": "api", "Content-Profile": "api"}
+
+
+def _bounded_json(response: httpx.Response, limit: int) -> object:
+    if len(response.content) > limit:
+        raise ValueError("hosted response is too large")
+    return response.json()
+
+
+def _current_window(start: object, end: object) -> bool:
+    try:
+        now = datetime.now(timezone.utc)
+        beginning = datetime.fromisoformat(start) if isinstance(start, str) else None
+        ending = datetime.fromisoformat(end) if isinstance(end, str) else None
+        return bool(beginning and beginning <= now and (ending is None or ending > now))
+    except (ValueError, TypeError):
+        return False
+
+
+async def _embedding(text: str) -> list[float]:
+    key = os.environ.get("OPENAI_API_KEY", "")
+    if not key or not 1 <= len(text) <= 1000:
+        raise HTTPException(status_code=503, detail="합성 임베딩 공급자 설정이 필요합니다")
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                json={"model": EMBEDDING_MODEL, "input": text},
+                headers={"Authorization": f"Bearer {key}"},
+            )
+            response.raise_for_status()
+            body = _bounded_json(response, 100_000)
+            if not isinstance(body, dict) or body.get("model") != EMBEDDING_MODEL:
+                raise ValueError("unexpected embedding model")
+            data = body.get("data")
+            if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+                raise ValueError("unexpected embedding data")
+            vector = data[0].get("embedding")
+            if (data[0].get("index") != 0 or not isinstance(vector, list) or len(vector) != 1536
+                    or any(type(value) not in (int, float) or not math.isfinite(value) for value in vector)
+                    or not any(value != 0 for value in vector)):
+                raise ValueError("invalid embedding vector")
+            return [float(value) for value in vector]
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=502, detail="합성 임베딩 공급자 처리가 실패했습니다") from None
+
+
+async def _device_preflight(request: Request, patient_id: str) -> None:
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.get(
+                f'{config["url"]}/rest/v1/patient_device_context',
+                params={"select": "patient_id,encounter_id", "patient_id": f"eq.{patient_id}"},
+                headers=_api_headers(config, _device_bearer(request)),
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            response.raise_for_status()
+            rows = _bounded_json(response, 4096)
+            if (not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict)
+                    or rows[0].get("patient_id") != patient_id
+                    or not isinstance(rows[0].get("encounter_id"), str)):
+                raise HTTPException(status_code=403, detail="입원 기기 배정·동의가 중단됐습니다")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="기기 배정·동의 사전 확인이 실패했습니다") from None
+
+
 async def _paired_turn_rows(
     request: Request, patient_id: str, term: str,
     rpc_name: Literal["patient_family_turn_context", "patient_hospital_turn_context"],
@@ -180,6 +259,123 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
            for row in facts):
         raise HTTPException(status_code=503, detail="가족 기억 응답을 확인하지 못했습니다")
     return "\n".join(row["content"] for row in facts)
+
+
+async def _paired_semantic_memory(request: Request, patient_id: str, transcript: str) -> str:
+    await _device_preflight(request, patient_id)  # No transcript leaves this server before current consent.
+    vector = await _embedding(transcript)
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/patient_family_semantic_turn_context',
+                json={"p_patient_id": patient_id, "p_query_embedding": vector},
+                headers=_api_headers(config, _device_bearer(request)),
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            response.raise_for_status()
+            rows = _bounded_json(response, 8192)
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("semantic turn context is invalid")
+            if rows[0].get("authorized") is not True:
+                raise HTTPException(status_code=403, detail="입원 기기 배정·동의가 중단됐습니다")
+            facts = rows[0].get("facts")
+            if (not isinstance(facts, list) or len(facts) > 3
+                    or any(not isinstance(row, dict) or not isinstance(row.get("content"), str)
+                           or not 1 <= len(row["content"]) <= 1000
+                           or row.get("category") not in FAMILY_CATEGORIES for row in facts)):
+                raise ValueError("semantic facts are invalid")
+            return "\n".join(row["content"] for row in facts)
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="기기 권한·의미 검색 조회가 실패했습니다") from None
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/fact/{fact_id}/embedding", include_in_schema=False)
+async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Request) -> dict[str, str]:
+    """Read one current guardian fact under JWT/RLS, then index the fixed synthetic fixture."""
+    if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(
+        r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", fact_id
+    ):
+        raise HTTPException(status_code=404, detail="합성 시험 사실만 사용할 수 있습니다")
+    if request.headers.get("x-synthetic-material") != "confirmed":
+        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+    async for chunk in request.stream():
+        if chunk:
+            raise HTTPException(status_code=413, detail="색인 요청 본문은 비워주세요")
+    bearer = _device_bearer(request)
+    config = guardian_config()
+    secret_key = os.environ.get("KOF5_SUPABASE_SECRET_KEY", "")
+    legacy_key = os.environ.get("KOF5_SUPABASE_SERVICE_ROLE_KEY", "")
+    if secret_key.startswith("sb_secret_") and len(secret_key) >= 32:
+        service_headers = {"apikey": secret_key}
+    elif legacy_key.startswith("eyJ") and len(legacy_key) >= 40:
+        service_headers = {"apikey": legacy_key, "Authorization": f"Bearer {legacy_key}"}
+    else:
+        raise HTTPException(status_code=503, detail="서버 색인 권한이 준비되지 않았습니다")
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            link = await client.get(
+                f'{config["url"]}/rest/v1/guardian_links',
+                params={"select": "patient_id,access_status,effective_at,expires_at",
+                        "patient_id": f"eq.{patient_id}", "access_status": "eq.verified"},
+                headers=_api_headers(config, bearer),
+            )
+            if link.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="검증된 보호자 연결이 필요합니다")
+            link.raise_for_status()
+            links = _bounded_json(link, 4096)
+            if (not isinstance(links, list) or len(links) != 1 or not isinstance(links[0], dict)
+                    or links[0].get("patient_id") != patient_id
+                    or links[0].get("access_status") != "verified"
+                    or not _current_window(links[0].get("effective_at"), links[0].get("expires_at"))):
+                raise HTTPException(status_code=403, detail="검증된 보호자 연결이 필요합니다")
+            fact = await client.get(
+                f'{config["url"]}/rest/v1/family_context',
+                params={"select": "fact_id,patient_id,content,sensitivity,category,active,valid_from,valid_until",
+                        "fact_id": f"eq.{fact_id}", "patient_id": f"eq.{patient_id}"},
+                headers=_api_headers(config, bearer),
+            )
+            if fact.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="보호자 사실 조회 권한이 필요합니다")
+            fact.raise_for_status()
+            rows = _bounded_json(fact, 8192)
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise HTTPException(status_code=404, detail="현재 보호자 사실이 없습니다")
+            row = rows[0]
+            content = row.get("content")
+            if (row.get("fact_id") != fact_id or row.get("patient_id") != patient_id
+                    or row.get("sensitivity") != "ordinary"
+                    or row.get("category") not in FAMILY_CATEGORIES
+                    or row.get("active") is not True
+                    or not _current_window(row.get("valid_from"), row.get("valid_until"))
+                    or not isinstance(content, str)
+                    or not 1 <= len(content) <= 1000):
+                raise HTTPException(status_code=409, detail="현재 색인 가능한 일반 기억이 아닙니다")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="보호자 사실 조회가 실패했습니다") from None
+
+    vector = await _embedding(content)
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/upsert_synthetic_family_fact_embedding',
+                json={"p_fact_id": fact_id, "p_embedding": vector, "p_model": EMBEDDING_MODEL,
+                      "p_content_md5": md5(content.encode("utf-8")).hexdigest()},
+                headers={**service_headers, "Accept-Profile": "api", "Content-Profile": "api"},
+            )
+            response.raise_for_status()
+            if _bounded_json(response, 4096) is not True:
+                raise HTTPException(status_code=409, detail="사실·연결이 변경되어 색인을 거절했습니다")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="서버 색인이 실패했습니다") from None
+    return {"status": "ready", "fact_id": fact_id}
 
 
 async def _paired_hospital_fact(request: Request, patient_id: str, term: str) -> str:
@@ -304,13 +500,14 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     hospital = hospital_fact_question(speech.transcript)
     # One invoker RPC checks authorization and exactly one fact namespace each turn.
     known_fact = (await _paired_hospital_fact(request, patient_id, speech.transcript) if hospital
-                  else await _paired_memory(request, patient_id, speech.transcript))
+                  else await _paired_semantic_memory(request, patient_id, speech.transcript))
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
             return run_synthetic_text_pipeline(
                 client, speech.transcript, speech.label, known_fact, credentials,
                 namespace="hospital_context" if hospital else "family_context",
+                semantic_match=bool(known_fact) and not hospital,
             )
 
     try:
