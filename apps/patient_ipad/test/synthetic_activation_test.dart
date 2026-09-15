@@ -18,7 +18,7 @@ void main() {
     );
     expect(
       activation.accepts('그만해', now.add(const Duration(seconds: 4))),
-      isTrue,
+      isFalse,
     );
     expect(
       activation.accepts('제주도 언제 갔었지', now.add(const Duration(seconds: 5))),
@@ -32,5 +32,28 @@ void main() {
       activation.accepts('제주도 언제 갔었지', now.add(const Duration(seconds: 67))),
       isFalse,
     );
+  });
+
+  test('each server dissent phrase closes the local window before upload', () {
+    final now = DateTime.utc(2026, 9, 15, 6);
+    for (final refusal in [
+      '수민아 그만해',
+      '이거 꺼',
+      '말 걸지 마',
+      '대화 그만',
+      '그만해',
+      '싫어.',
+    ]) {
+      final activation = SyntheticActivation();
+      expect(activation.accepts('수민아?', now), isTrue);
+      expect(
+        activation.accepts(refusal, now.add(const Duration(seconds: 1))),
+        isFalse,
+      );
+      expect(
+        activation.accepts('오늘이 며칠이야', now.add(const Duration(seconds: 2))),
+        isFalse,
+      );
+    }
   });
 }
