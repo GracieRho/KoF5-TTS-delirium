@@ -10,10 +10,15 @@ from zoneinfo import ZoneInfo
 
 VALID_LABELS = {"DIRECTED", "AMBIENT", "UNCERTAIN"}
 # ponytail: labels come from a later activation layer; add scored STT/context signals after measured false activations.
-DISSENT_PHRASES = ("이거 꺼", "말 걸지 마", "대화 그만")
+DISSENT_PHRASES = ("이거 꺼", "말 걸지 마", "대화 그만", "그만해")
 END_PHRASES = ("나 좀 잘게", "이제 됐다", "나중에 얘기하자")
 RISK_PHRASES = ("숨을 못 쉬", "숨이 너무 차", "가슴이 아파", "넘어졌", "살려줘")
 WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
+
+
+def _require_aware(now: datetime) -> None:
+    if now.utcoffset() is None:
+        raise ValueError("time must include a timezone")
 
 
 @dataclass(frozen=True)
@@ -46,8 +51,7 @@ def relevant_facts(
     """Return verified, current facts from one namespace only."""
     if namespace not in {"family_context", "hospital_context"}:
         raise ValueError("unknown fact namespace")
-    if now.utcoffset() is None:
-        raise ValueError("retrieval time must include a timezone")
+    _require_aware(now)
     tokens = [
         token[:-1] if len(token) > 2 and token[-1] in "은는이가을를" else token
         for token in re.findall(r"[가-힣A-Za-z0-9]{2,}", question)
@@ -71,8 +75,7 @@ def relevant_facts(
 
 def orientation_date(now: datetime, zone: str = "Asia/Seoul") -> str:
     """Use a trusted local clock instead of asking an LLM for today's date."""
-    if now.utcoffset() is None:
-        raise ValueError("orientation time must include a timezone")
+    _require_aware(now)
     local = now.astimezone(ZoneInfo(zone))
     return f"오늘은 {local.month}월 {local.day}일 {WEEKDAYS[local.weekday()]}이야."
 
@@ -95,8 +98,7 @@ def due_hospital_message(
     session: ConversationSession, message: HospitalMessage, patient_id: str, now: datetime
 ) -> str | None:
     """Start delivery only when due and return the approved source text unchanged."""
-    if now.utcoffset() is None:
-        raise ValueError("delivery time must include a timezone")
+    _require_aware(now)
     if message.patient_id != patient_id:
         raise ValueError("hospital message belongs to another patient")
     if now < message.due_at or not session.start_scheduled(now):
@@ -112,6 +114,7 @@ class ConversationSession:
 
     def hear(self, transcript: str, label: str, now: datetime) -> str:
         """Return a routing event without retaining discarded ambient speech."""
+        _require_aware(now)
         if label not in VALID_LABELS:
             raise ValueError(f"unknown activation label: {label}")
         if label == "AMBIENT" or not transcript.strip() or self.proactive_paused:
@@ -120,7 +123,7 @@ class ConversationSession:
             return "discarded"
 
         speech = transcript.strip()
-        if any(phrase in speech for phrase in DISSENT_PHRASES):
+        if any(phrase in speech for phrase in DISSENT_PHRASES) or speech.rstrip(".!? ") == "싫어":
             self.proactive_paused = True
             self.stop()
             return "patient_dissent"
@@ -136,6 +139,7 @@ class ConversationSession:
         return "barge_in" if was_speaking else "turn"
 
     def start_scheduled(self, now: datetime) -> bool:
+        _require_aware(now)
         if self.proactive_paused or self.state != "IDLE":
             return False
         self.state = "ACTIVE_LISTENING"
@@ -148,13 +152,17 @@ class ConversationSession:
         self.state = "SPEAKING"
 
     def finished_speaking(self, now: datetime) -> None:
+        _require_aware(now)
         if self.state != "SPEAKING":
             raise ValueError("cannot finish speech that is not playing")
         self.state = "ACTIVE_LISTENING"
         self.last_activity = now
 
     def expire(self, now: datetime, silence_seconds: int = 45) -> bool:
-        if self.last_activity is None or self.state == "IDLE":
+        _require_aware(now)
+        if silence_seconds <= 0:
+            raise ValueError("silence timeout must be positive")
+        if self.last_activity is None or self.state != "ACTIVE_LISTENING":
             return False
         if now - self.last_activity < timedelta(seconds=silence_seconds):
             return False

@@ -108,6 +108,54 @@ class ConversationSessionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HospitalMessage("synthetic_patient", "CT 일정", "", now)
 
+    def test_clear_dissent_stops_proactive_conversation_but_short_no_does_not(self) -> None:
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        for dissent in ("그만해.", "싫어."):
+            session = ConversationSession()
+            self.assertEqual(session.hear("수민아?", "DIRECTED", now), "turn")
+            session.speaking()
+            self.assertEqual(session.hear(dissent, "DIRECTED", now), "patient_dissent")
+            self.assertEqual(session.state, "IDLE")
+            self.assertTrue(session.proactive_paused)
+            self.assertFalse(session.start_scheduled(now))
+
+        session = ConversationSession()
+        self.assertEqual(session.hear("수민아?", "DIRECTED", now), "turn")
+        self.assertEqual(session.hear("아니", "UNCERTAIN", now), "turn")
+        self.assertEqual(session.hear("싫어하는 음식은 뭐야?", "UNCERTAIN", now), "turn")
+        self.assertFalse(session.proactive_paused)
+
+    def test_silence_timeout_starts_after_speech_finishes(self) -> None:
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        session = ConversationSession()
+        session.hear("수민아?", "DIRECTED", now)
+        session.speaking()
+        self.assertFalse(session.expire(now + timedelta(seconds=45)))
+        self.assertEqual(session.state, "SPEAKING")
+        session.finished_speaking(now + timedelta(seconds=46))
+        with self.assertRaises(ValueError):
+            session.expire(now + timedelta(seconds=46), silence_seconds=0)
+        self.assertFalse(session.expire(now + timedelta(seconds=90)))
+        self.assertTrue(session.expire(now + timedelta(seconds=91)))
+
+    def test_naive_time_is_rejected_before_session_state_changes(self) -> None:
+        aware = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        naive = datetime(2026, 9, 15)
+        session = ConversationSession()
+        with self.assertRaises(ValueError):
+            session.hear("수민아?", "DIRECTED", naive)
+        with self.assertRaises(ValueError):
+            session.start_scheduled(naive)
+        self.assertEqual((session.state, session.last_activity), ("IDLE", None))
+
+        session.start_scheduled(aware)
+        session.speaking()
+        with self.assertRaises(ValueError):
+            session.finished_speaking(naive)
+        with self.assertRaises(ValueError):
+            session.expire(naive)
+        self.assertEqual((session.state, session.last_activity), ("SPEAKING", aware))
+
 
 if __name__ == "__main__":
     unittest.main()
