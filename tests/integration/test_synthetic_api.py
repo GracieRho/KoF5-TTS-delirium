@@ -556,6 +556,31 @@ class SyntheticApiTests(unittest.TestCase):
                                     "patient_family_semantic_turn_context"])
             pipeline.assert_not_called()
 
+    def test_paired_discard_and_dissent_never_leave_for_embedding_or_reply(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+               "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+               "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
+        headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "d" * 40}
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient", side_effect=AssertionError("discard must not call hosted API"),
+        ), patch(
+            "kof5_tts.api.run_synthetic_text_pipeline",
+            side_effect=AssertionError("discard must not call LLM/TTS"),
+        ):
+            for transcript, label in (("수민아 제주도 기억나?", "AMBIENT"),
+                                      ("수민아 제주도 기억나?", "UNCERTAIN"),
+                                      ("수민아 그만해", "DIRECTED")):
+                result = self.client.post(path, json={"transcript": transcript, "label": label},
+                                          headers=headers)
+                self.assertEqual(result.status_code, 200)
+                self.assertIsNone(result.json()["reply"])
+                self.assertIsNone(result.json()["audio_mp3_base64"])
+
     def test_semantic_fact_reaches_real_reply_pipeline_without_word_overlap(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",

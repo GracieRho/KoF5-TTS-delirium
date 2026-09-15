@@ -497,10 +497,19 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
         raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
     credentials = _internal_demo_credentials(request)
     speech = await _read_text_turn(request)
+    now = datetime.now(timezone.utc)
+    event = ConversationSession().hear(speech.transcript, speech.label, now)
+    if event in {"discarded", "closed", "patient_dissent"}:
+        return {"transcript": speech.transcript, "reply": None, "audio_mp3_base64": None}
     hospital = hospital_fact_question(speech.transcript)
-    # One invoker RPC checks authorization and exactly one fact namespace each turn.
-    known_fact = (await _paired_hospital_fact(request, patient_id, speech.transcript) if hospital
-                  else await _paired_semantic_memory(request, patient_id, speech.transcript))
+    # Deterministic policy replies do not require family transcript embeddings.
+    if hospital:
+        known_fact = await _paired_hospital_fact(request, patient_id, speech.transcript)
+    elif policy_reply(speech.transcript, event, now) is not None:
+        await _device_preflight(request, patient_id)
+        known_fact = ""
+    else:
+        known_fact = await _paired_semantic_memory(request, patient_id, speech.transcript)
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
