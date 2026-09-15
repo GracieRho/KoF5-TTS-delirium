@@ -158,6 +158,23 @@
           <div id="synthetic-drafts" class="facts"></div>
           <div id="synthetic-message-status" class="status" role="status" aria-live="polite"></div>
         </section>
+        <section id="synthetic-context-section" class="pairing" aria-labelledby="synthetic-context-title" hidden>
+          <h3 id="synthetic-context-title">합성 병원 맥락 제안·승인</h3>
+          <p class="small">고정 합성 환자의 이번 입원에만 적용합니다. 다른 담당 직원이 원문을 승인하면 병원 맥락 사실로 기록됩니다. 실제 환자 정보는 입력하지 마세요.</p>
+          <form id="synthetic-context-form">
+            <label for="synthetic-context-category">정보 종류</label>
+            <select id="synthetic-context-category"><option value="hospital">병원</option><option value="ward">병동</option><option value="room">병실</option><option value="test_schedule">검사 일정</option><option value="visit_schedule">면회 일정</option></select>
+            <label for="synthetic-context-text">확인한 원문 (200자 이내)</label>
+            <textarea id="synthetic-context-text" required maxlength="200"></textarea>
+            <label for="synthetic-context-source">합성 출처 참조 (TEST-로 시작)</label>
+            <input id="synthetic-context-source" required maxlength="55" autocomplete="off" placeholder="TEST-HOSPITAL-975">
+            <button id="synthetic-context-button" class="primary" type="submit">합성 맥락 제안 등록</button>
+          </form>
+          <button id="synthetic-context-review-button" type="button" hidden>병원 기록 직접 확인 후 새 제안 입력 재개</button>
+          <h3>다른 담당 직원의 승인 대기</h3>
+          <div id="synthetic-context-drafts" class="facts"></div>
+          <div id="synthetic-context-status" class="status" role="status" aria-live="polite"></div>
+        </section>
         <section id="pairing-section" class="pairing" aria-labelledby="pairing-title" hidden>
           <h3 id="pairing-title">합성 iPad 연결 시험</h3>
           <p class="small">담당 직원과 고정 합성 환자에 한해 iPad의 Supabase Auth 사용자 ID를 연결합니다. 실제 환자 사용은 허용되지 않습니다.</p>
@@ -174,9 +191,10 @@
   </main>
   <script>
     const state = { config: null, token: null, generation: 0, request: 0,
-      registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, alertRequest: 0, voiceRequest: 0,
+      registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, contextRequest: 0, alertRequest: 0, voiceRequest: 0,
       transcriptRequest: 0,
       patients: [], selected: null, pairingPatient: null, messagePatient: null, messageEncounterId: null,
+      contextPatient: null, contextBusy: false, contextUncertain: false,
       alertPatient: null, alertEncounterId: null, alertBusy: false,
       voicePatient: null, voiceEncounterId: null, voiceReady: false,
       voiceCapture: null, voicePendingStream: null,
@@ -190,10 +208,30 @@
     const encounter = patient => patient.encounter_id ?
       `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
     const delivery = { pending: '전달 대기', delivered: '전달됨', cancelled: '취소됨' };
-    const factLabel = { hospital: '병원', room: '병실', test: '검사', visiting: '면회', schedule: '일정' };
+    const factLabel = { hospital: '병원', ward: '병동', room: '병실', test_schedule: '검사 일정', visit_schedule: '면회 일정', test: '검사', visiting: '면회', schedule: '일정' };
+    const contextCategories = ['hospital', 'ward', 'room', 'test_schedule', 'visit_schedule'];
+    const syntheticSource = /^TEST-[A-Z0-9_-]{1,50}$/;
     const hospitalTime = timestamp => new Intl.DateTimeFormat('ko-KR', {
       dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul', hourCycle: 'h23',
     }).format(new Date(timestamp)) + ' (한국 시간)';
+
+    function resetContext(preserve = false) {
+      ++state.contextRequest;
+      state.contextPatient = null;
+      state.contextBusy = false;
+      if (!preserve) {
+        state.contextUncertain = false;
+        $('synthetic-context-category').value = 'hospital';
+        $('synthetic-context-text').value = '';
+        $('synthetic-context-source').value = '';
+      }
+      $('synthetic-context-section').hidden = true;
+      $('synthetic-context-button').disabled = state.contextUncertain;
+      $('synthetic-context-review-button').hidden = true;
+      $('synthetic-context-drafts').replaceChildren();
+      $('synthetic-context-status').textContent = state.contextUncertain
+        ? '제안 등록 결과를 다시 확인하고 있습니다. 현재 입력은 유지합니다.' : '';
+    }
 
     function clearSession(message = '로그아웃했습니다.') {
       stopVoiceCapture(true);
@@ -204,6 +242,7 @@
       ++state.queueRequest;
       ++state.pairingRequest;
       ++state.messageRequest;
+      resetContext();
       ++state.alertRequest;
       ++state.voiceRequest;
       ++state.transcriptRequest;
@@ -354,12 +393,17 @@
         && patient.patient_id === syntheticPatientId;
       const recoverDraft = preserveForm && state.messageUncertain
         && state.uncertainDraft?.encounter_id === patient.encounter_id ? state.uncertainDraft : null;
+      const preserveContext = !!state.token && !!state.staffUserId && state.selected === patient.patient_id
+        && state.contextPatient?.patient_id === patient.patient_id
+        && state.contextPatient.encounter_id === patient.encounter_id
+        && patient.patient_id === syntheticPatientId && !!patient.encounter_id;
       const generation = state.generation;
       const request = ++state.request;
       const token = state.token;
       state.selected = patient.patient_id;
       ++state.pairingRequest;
       ++state.messageRequest;
+      resetContext(preserveContext);
       ++state.alertRequest;
       ++state.voiceRequest;
       ++state.transcriptRequest;
@@ -428,7 +472,7 @@
       try {
         const id = encodeURIComponent(patient.patient_id);
         const [facts, messages] = await Promise.all([
-          supabase(`/rest/v1/hospital_context_current?patient_id=eq.${id}&select=category,content,encounter_id,verified_at,valid_until`, token, generation),
+          supabase(`/rest/v1/hospital_context_current?patient_id=eq.${id}&select=fact_id,category,content,encounter_id,verified_at,valid_until,synthetic_source_ref`, token, generation),
           supabase(`/rest/v1/hospital_message_list?patient_id=eq.${id}&select=approved_text,approved_by_staff_ref,approved_at,due_at,delivery_status,delivered_at,cancelled_at,encounter_id`, token, generation),
         ]);
         if (!current()) return;
@@ -451,7 +495,9 @@
             || new Date(a.due_at) - new Date(b.due_at));
         for (const fact of currentFacts)
           add($('facts'), factLabel[fact.category] || fact.category, fact.content,
-            `검증 기록 ${hospitalTime(fact.verified_at)} · 유효 종료 ${fact.valid_until ? hospitalTime(fact.valid_until) : '기한 없음'}`);
+            `검증 기록 ${hospitalTime(fact.verified_at)} · 유효 종료 ${fact.valid_until ? hospitalTime(fact.valid_until) : '기한 없음'}`
+            + (patient.patient_id === syntheticPatientId && syntheticSource.test(fact.synthetic_source_ref || '')
+              ? ` · 합성 출처 ${fact.synthetic_source_ref}` : ''));
         for (const message of currentMessages) {
           const syntheticPlayback = patient.patient_id === syntheticPatientId
             && message.delivery_status === 'delivered';
@@ -484,6 +530,8 @@
               state.pairingPatient = patient;
               $('pairing-section').hidden = false;
               if (state.staffUserId) {
+                await loadContextDrafts(patient, token, generation, current, preserveContext);
+                if (!current()) return;
                 try {
                   const drafts = await supabase(draftPath(patient), token, generation);
                   if (!current()) return;
@@ -511,9 +559,11 @@
             } else if (preserveForm && current()) {
               discardSyntheticDraftInput();
             }
+            if (!ready.some(row => row.patient_id === patient.patient_id && row.encounter_id === patient.encounter_id) && current()) resetContext();
           } catch (_) {
             if (current()) {
               if (preserveForm) discardSyntheticDraftInput();
+              resetContext();
               $('detail-status').textContent += ' 합성 iPad 연결 자격은 확인되지 않았습니다.';
             }
           }
@@ -524,6 +574,152 @@
     }
 
     const draftPath = patient => `/rest/v1/synthetic_hospital_message_draft?patient_id=eq.${encodeURIComponent(patient.patient_id)}&encounter_id=eq.${encodeURIComponent(patient.encounter_id)}&status=eq.draft&select=draft_id,proposed_text,schedule_mode,requested_due_at,proposed_by_auth_user_id,proposed_at,status&order=proposed_at.desc&limit=20`;
+    const contextPath = patient => `/rest/v1/synthetic_hospital_context_draft?patient_id=eq.${encodeURIComponent(patient.patient_id)}&encounter_id=eq.${encodeURIComponent(patient.encounter_id)}&status=eq.draft&select=draft_id,patient_id,encounter_id,category,proposed_text,source_ref,proposed_by_auth_user_id,proposed_at,status&order=proposed_at.desc&limit=20`;
+    const contextById = id => `/rest/v1/synthetic_hospital_context_draft?draft_id=eq.${encodeURIComponent(id)}&select=draft_id,patient_id,encounter_id,category,proposed_text,source_ref,proposed_by_auth_user_id,status,approved_by_auth_user_id`;
+
+    async function contextRead(path, token, current) {
+      const response = await fetch(state.config.url + path, { headers: {
+        apikey: state.config.publishable_key, Authorization: `Bearer ${token}`, 'Accept-Profile': 'api',
+      } });
+      if (!current()) return null;
+      if ([401, 403].includes(response.status)) {
+        clearSession('합성 맥락 직원 권한이 유효하지 않아 환자 정보를 숨겼습니다.');
+        return null;
+      }
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    }
+
+    function contextCurrent(generation, detailRequest, actionRequest, token, patient, staffId) {
+      return generation === state.generation && detailRequest === state.request
+        && actionRequest === state.contextRequest && token === state.token
+        && state.selected === patient.patient_id && state.contextPatient === patient
+        && patient.encounter_id === state.contextPatient.encounter_id && staffId === state.staffUserId
+        && !$('synthetic-context-section').hidden;
+    }
+
+    function renderContextDrafts(rows, patient) {
+      $('synthetic-context-drafts').replaceChildren();
+      const drafts = rows.filter(row => row.patient_id === patient.patient_id
+        && row.encounter_id === patient.encounter_id && row.status === 'draft'
+        && uuid.test(row.draft_id || '') && contextCategories.includes(row.category)
+        && typeof row.proposed_text === 'string' && syntheticSource.test(row.source_ref || ''));
+      for (const draft of drafts) {
+        const card = document.createElement('article');
+        card.className = 'fact';
+        const title = document.createElement('h3');
+        title.textContent = factLabel[draft.category];
+        const body = document.createElement('p');
+        body.textContent = draft.proposed_text;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `합성 출처 ${draft.source_ref} · 작성자 ${draft.proposed_by_auth_user_id} · ${hospitalTime(draft.proposed_at)}`;
+        card.append(title, body, meta);
+        if (draft.proposed_by_auth_user_id !== state.staffUserId) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = '확인한 원문 승인';
+          button.addEventListener('click', () => approveContextDraft(draft, button));
+          card.append(button);
+        } else {
+          const note = document.createElement('div');
+          note.className = 'meta';
+          note.textContent = '내 제안은 다른 담당 직원의 승인이 필요합니다.';
+          card.append(note);
+        }
+        $('synthetic-context-drafts').append(card);
+      }
+      $('synthetic-context-status').textContent = rows.length >= 20
+        ? '최근 제안 20건만 표시했습니다. 전체 승인 대기 건수는 확인되지 않았습니다.'
+        : `승인 대기 제안 ${drafts.length}건을 확인했습니다.`;
+    }
+
+    async function loadContextDrafts(patient, token, generation, detailCurrent, preserve) {
+      try {
+        const rows = await contextRead(contextPath(patient), token, detailCurrent);
+        if (!detailCurrent()) return;
+        if (!Array.isArray(rows)) throw new Error('invalid draft list');
+        state.contextPatient = patient;
+        $('synthetic-context-section').hidden = false;
+        renderContextDrafts(rows, patient);
+        if (state.contextUncertain) {
+          $('synthetic-context-button').disabled = true;
+          $('synthetic-context-review-button').hidden = false;
+          $('synthetic-context-status').textContent = '이전 등록 결과를 확정할 수 없습니다. 병원 기록을 직접 확인한 뒤 새 제안을 입력하세요. 현재 입력은 유지합니다.';
+        }
+      } catch (_) {
+        if (!detailCurrent()) return;
+        if (preserve) {
+          state.contextPatient = patient;
+          $('synthetic-context-section').hidden = false;
+          $('synthetic-context-button').disabled = true;
+          $('synthetic-context-status').textContent = '제안 목록을 읽지 못했습니다. 현재 입력은 유지하지만 제출할 수 없습니다. 환자를 다시 선택하세요.';
+        }
+        $('detail-status').textContent += ' 합성 맥락 제안을 읽지 못했습니다.';
+      }
+    }
+
+    function contextUnconfirmed(message) {
+      state.contextUncertain = true;
+      $('synthetic-context-button').disabled = true;
+      $('synthetic-context-review-button').hidden = true;
+      $('synthetic-context-status').textContent = message;
+    }
+
+    async function approveContextDraft(draft, button) {
+      const patient = state.contextPatient;
+      if (!patient || state.contextBusy || button.disabled || $('synthetic-context-section').hidden
+          || state.selected !== patient.patient_id || patient.patient_id !== syntheticPatientId
+          || draft.proposed_by_auth_user_id === state.staffUserId || !uuid.test(draft.draft_id || '')) return;
+      const generation = state.generation, detailRequest = state.request;
+      const actionRequest = ++state.contextRequest, token = state.token, staffId = state.staffUserId;
+      const current = () => contextCurrent(generation, detailRequest, actionRequest, token, patient, staffId);
+      state.contextBusy = true;
+      button.disabled = true;
+      $('synthetic-context-status').textContent = '승인된 제안과 병원 맥락 기록을 확인하고 있습니다.';
+      try {
+        const id = encodeURIComponent(draft.draft_id);
+        const response = await fetch(state.config.url + `/rest/v1/synthetic_hospital_context_draft?draft_id=eq.${id}&status=eq.draft`, {
+          method: 'PATCH', headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`,
+            'Content-Profile': 'api', 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ status: 'approved' }),
+        });
+        if (!current()) return;
+        if ([401, 403].includes(response.status)) return clearSession('합성 맥락 승인 권한이 유효하지 않아 환자 정보를 숨겼습니다.');
+        if (!response.ok) throw new Error(String(response.status));
+        const [verified, facts] = await Promise.all([
+          contextRead(contextById(draft.draft_id), token, current),
+          contextRead(`/rest/v1/hospital_context_current?fact_id=eq.${id}&patient_id=eq.${encodeURIComponent(patient.patient_id)}&select=fact_id,patient_id,encounter_id,category,content,synthetic_source_ref`, token, current),
+        ]);
+        if (!current()) return;
+        if (verified.length !== 1 || verified[0].status !== 'approved'
+            || verified[0].approved_by_auth_user_id !== staffId
+            || verified[0].patient_id !== patient.patient_id || verified[0].encounter_id !== patient.encounter_id
+            || verified[0].category !== draft.category || verified[0].proposed_text !== draft.proposed_text
+            || verified[0].source_ref !== draft.source_ref || facts.length !== 1
+            || facts[0].fact_id !== draft.draft_id || facts[0].patient_id !== patient.patient_id
+            || facts[0].encounter_id !== patient.encounter_id || facts[0].category !== draft.category
+            || facts[0].content !== draft.proposed_text
+            || facts[0].synthetic_source_ref !== draft.source_ref) throw new Error('unconfirmed approval');
+        state.contextBusy = false;
+        await showPatient(patient);
+        if (state.selected === patient.patient_id && state.contextPatient?.patient_id === patient.patient_id
+            && !$('synthetic-context-section').hidden)
+          $('synthetic-context-status').textContent = '합성 맥락 승인과 현재 병원 사실 기록을 확인했습니다.';
+      } catch (_) {
+        if (current()) {
+          $('synthetic-context-section').hidden = true;
+          $('synthetic-context-drafts').replaceChildren();
+          state.contextPatient = null;
+          $('detail-status').textContent += ' 승인 결과를 확인하지 못했습니다. 환자를 다시 선택하세요.';
+        }
+      } finally {
+        if (current()) {
+          state.contextBusy = false;
+          button.disabled = false;
+        }
+      }
+    }
 
     async function alertRpc(name, payload, token, generation) {
       const response = await fetch(state.config.url + `/rest/v1/rpc/${name}`, {
@@ -1094,6 +1290,7 @@
       ++state.queueRequest;
       ++state.pairingRequest;
       ++state.messageRequest;
+      resetContext();
       ++state.alertRequest;
       ++state.voiceRequest;
       state.selected = null;
@@ -1288,6 +1485,77 @@
       $('synthetic-message-review-button').hidden = true;
       $('synthetic-message-button').disabled = false;
       $('synthetic-message-status').textContent = '조회 목록을 검토했습니다. 새 초안 제출 전 병원 기록에 같은 원문이 없는지 다시 확인하세요.';
+    });
+    $('synthetic-context-review-button').addEventListener('click', () => {
+      if (!state.contextUncertain || $('synthetic-context-review-button').hidden
+          || $('synthetic-context-section').hidden || !state.contextPatient
+          || state.selected !== state.contextPatient.patient_id) return;
+      state.contextUncertain = false;
+      $('synthetic-context-review-button').hidden = true;
+      $('synthetic-context-button').disabled = false;
+      $('synthetic-context-status').textContent = '병원 기록을 확인했습니다. 같은 제안을 다시 등록하지 마세요.';
+    });
+    $('synthetic-context-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const patient = state.contextPatient;
+      const category = $('synthetic-context-category').value;
+      const text = $('synthetic-context-text').value;
+      const source = $('synthetic-context-source').value;
+      if (!patient || !state.token || !state.staffUserId || state.contextBusy || state.contextUncertain
+          || $('synthetic-context-button').disabled || $('synthetic-context-section').hidden
+          || state.selected !== patient.patient_id || patient.patient_id !== syntheticPatientId
+          || !patient.encounter_id) return;
+      if (!contextCategories.includes(category) || !text.trim() || text !== text.trim()
+          || text.length > 200 || !syntheticSource.test(source)) {
+        $('synthetic-context-status').textContent = '원문 공백·200자 제한과 TEST- 합성 출처를 확인하세요.';
+        return;
+      }
+      const payload = { patient_id: patient.patient_id, encounter_id: patient.encounter_id,
+        category, proposed_text: text, source_ref: source };
+      const generation = state.generation, detailRequest = state.request;
+      const actionRequest = ++state.contextRequest, token = state.token, staffId = state.staffUserId;
+      const current = () => contextCurrent(generation, detailRequest, actionRequest, token, patient, staffId);
+      state.contextBusy = true;
+      $('synthetic-context-button').disabled = true;
+      $('synthetic-context-status').textContent = '합성 병원 맥락 제안 기록을 확인하고 있습니다.';
+      try {
+        const response = await fetch(state.config.url + '/rest/v1/synthetic_hospital_context_draft', {
+          method: 'POST', headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`,
+            'Content-Profile': 'api', 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(payload),
+        });
+        if (!current()) return;
+        if ([401, 403].includes(response.status)) return clearSession('합성 맥락 제안 권한이 유효하지 않아 환자 정보를 숨겼습니다.');
+        if (response.status !== 201) throw new Error(String(response.status));
+        const inserted = await response.json();
+        if (!current()) return;
+        const id = Array.isArray(inserted) && inserted.length === 1 && inserted[0].draft_id;
+        if (!uuid.test(id || '')) throw new Error('missing draft id');
+        const verified = await contextRead(contextById(id), token, current);
+        if (!current()) return;
+        if (verified.length !== 1 || verified[0].draft_id !== id
+            || verified[0].patient_id !== patient.patient_id || verified[0].encounter_id !== patient.encounter_id
+            || verified[0].category !== category || verified[0].proposed_text !== text
+            || verified[0].source_ref !== source || verified[0].status !== 'draft'
+            || verified[0].proposed_by_auth_user_id !== staffId) throw new Error('unconfirmed draft');
+        const rows = await contextRead(contextPath(patient), token, current);
+        if (!current()) return;
+        if (!Array.isArray(rows)) throw new Error('invalid list');
+        renderContextDrafts(rows, patient);
+        if ($('synthetic-context-category').value === category
+            && $('synthetic-context-text').value === text && $('synthetic-context-source').value === source) {
+          $('synthetic-context-text').value = '';
+          $('synthetic-context-source').value = '';
+        }
+        $('synthetic-context-status').textContent = '합성 맥락 제안을 DB에서 확인했습니다. 다른 담당 직원의 승인이 필요합니다.';
+      } catch (_) {
+        if (current()) contextUnconfirmed('제안 등록 결과를 확인하지 못했습니다. 현재 입력은 유지합니다. 병원 기록을 직접 확인하기 전에는 다시 제출하지 마세요.');
+      } finally {
+        if (current()) {
+          state.contextBusy = false;
+          $('synthetic-context-button').disabled = state.contextUncertain;
+        }
+      }
     });
     $('synthetic-message-mode').addEventListener('change', () => {
       const scheduled = $('synthetic-message-mode').value === 'scheduled';

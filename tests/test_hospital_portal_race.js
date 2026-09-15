@@ -33,6 +33,8 @@ async function run() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -131,6 +133,8 @@ async function run() {
   assert.match(detailReads.find(url => url.includes('hospital_message_list?patient_id=eq.B')), /approved_by_staff_ref,approved_at.*delivered_at,cancelled_at/);
   assert.deepEqual(displayed(), ['B 병실']);
   assert.equal(elements.facts.children[0].children[0].textContent, '병실', 'known hospital fact category is legible in Korean');
+  assert.doesNotMatch(elements.facts.children[0].children[2].textContent, /합성 출처|null/,
+    'other patients do not show a missing synthetic source');
   assert.match(elements.facts.children[0].children[2].textContent, /검증 기록.*12:00.*유효 종료.*12:00/,
     'staff can inspect the verified and expiry time of a current hospital fact');
   assert.equal(elements.messages.children[0].children[1].textContent, '가상 B 예약 원문',
@@ -301,6 +305,8 @@ async function runPairing() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -430,6 +436,8 @@ async function runSyntheticMessage() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -760,6 +768,8 @@ async function runSyntheticAlert() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -924,6 +934,8 @@ async function runSyntheticVoice() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -1175,6 +1187,8 @@ async function runSyntheticTodayTranscript() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-context-section', 'synthetic-context-form', 'synthetic-context-category', 'synthetic-context-text',
+    'synthetic-context-source', 'synthetic-context-button', 'synthetic-context-review-button', 'synthetic-context-drafts', 'synthetic-context-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
     'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
@@ -1285,6 +1299,164 @@ async function runSyntheticTodayTranscript() {
   console.log('Hospital fixed-synthetic today transcript read and staff race: PASS');
 }
 
+async function runSyntheticContext() {
+  const ids = [...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]);
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975', encounter_id: '00000000-0000-4000-8000-000000000976',
+    staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975', ward_ref: '시험병동' };
+  const other = { patient_id: '00000000-0000-4000-8000-000000000977', encounter_id: '00000000-0000-4000-8000-000000000978',
+    staff_display_name: '가상 다른 환자', ehr_patient_ref: 'TEST-977' };
+  const proposer = '00000000-0000-4000-8000-000000000991';
+  const approver = '00000000-0000-4000-8000-000000000992';
+  const draftId = '00000000-0000-4000-8000-000000000901';
+  let user = proposer, ready = true, postStatus = 201, patchStatus = 204, exactReadStatus = 200;
+  let latePost = null, latePatch = null, lateList = null;
+  let draft = null, fact = null, factSourceOverride = null;
+  const posts = [], patches = [];
+  async function fetch(url, options = {}) {
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: `synthetic-${user}`, user: { id: user } });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture, other]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list')) return reply(200, []);
+    if (url.includes('/rpc/synthetic_alert_staff_ready')) return reply(200, [{ ready: false }]);
+    if (url.includes('/rpc/synthetic_voice_enrollment_ready')) return reply(200, [{ ready: false }]);
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(200, ready ? [
+      { patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }] : []);
+    if (url.includes('/hospital_context_current?fact_id=eq.')) return reply(200, fact ? [fact] : []);
+    if (url.includes('/hospital_context_current?patient_id=eq.')) return reply(200, fact ? [fact] : []);
+    if (url.includes('/synthetic_hospital_context_draft') && options.method === 'POST') {
+      const payload = JSON.parse(options.body);
+      posts.push({ payload, options });
+      const response = latePost ? await latePost.promise : reply(postStatus, [{ draft_id: draftId }]);
+      if (response.status === 201) draft = { ...payload, draft_id: draftId,
+        proposed_by_auth_user_id: user, proposed_at: '2026-09-16T01:00:00Z', status: 'draft' };
+      return response;
+    }
+    if (url.includes('/synthetic_hospital_context_draft') && options.method === 'PATCH') {
+      patches.push({ url, payload: JSON.parse(options.body) });
+      const response = latePatch ? await latePatch.promise : reply(patchStatus, null);
+      if (response.ok && draft && user !== draft.proposed_by_auth_user_id && patchStatus === 204) {
+        draft.status = 'approved';
+        draft.approved_by_auth_user_id = user;
+        fact = { fact_id: draftId, patient_id: fixture.patient_id, encounter_id: fixture.encounter_id,
+          category: draft.category, content: draft.proposed_text, synthetic_source_ref: factSourceOverride || draft.source_ref,
+          verified_at: '2026-09-16T02:00:00Z', valid_until: null };
+      }
+      return response;
+    }
+    if (url.includes('/synthetic_hospital_context_draft?draft_id=eq.'))
+      return reply(exactReadStatus, exactReadStatus === 200 && draft ? [draft] : []);
+    if (url.includes('/synthetic_hospital_context_draft?'))
+      return lateList ? lateList.promise : reply(200, draft && draft.status === 'draft' ? [draft] : []);
+    throw new Error(`unexpected context URL ${url}`);
+  }
+  vm.runInNewContext(script, { document, fetch, console });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const selectFixture = () => elements.patients.children[0].handlers.click();
+  const submit = () => elements['synthetic-context-form'].handlers.submit({ preventDefault() {} });
+  elements.email.value = 'synthetic@example.invalid'; elements.password.value = 'synthetic';
+  await login();
+  await elements.patients.children[1].handlers.click();
+  assert.equal(elements['synthetic-context-section'].hidden, true, 'other patient cannot propose context');
+  ready = false;
+  await selectFixture();
+  assert.equal(elements['synthetic-context-section'].hidden, true, 'not-ready fixture hides context editor');
+  ready = true;
+  await selectFixture();
+  assert.equal(elements['synthetic-context-section'].hidden, false, 'ready fixture exposes context editor');
+  lateList = pending();
+  const staleList = selectFixture(); await pause();
+  await elements.patients.children[1].handlers.click();
+  lateList.resolve(reply(403, { message: 'stale patient denial' })); await staleList; lateList = null;
+  assert.equal(elements['patient-card'].hidden, false, 'late context denial cannot close another patient view');
+  await selectFixture();
+  elements['synthetic-context-text'].value = '  앞뒤 공백  ';
+  elements['synthetic-context-source'].value = 'TEST-EHR-975';
+  await submit();
+  assert.equal(posts.length, 0, 'untrimmed proposal is rejected before POST');
+  elements['synthetic-context-category'].value = 'test_schedule';
+  elements['synthetic-context-text'].value = '가상 CT 검사는 오후 3시입니다.';
+  elements['synthetic-context-source'].value = 'TEST-EHR-975';
+  await submit();
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].payload, { patient_id: fixture.patient_id, encounter_id: fixture.encounter_id,
+    category: 'test_schedule', proposed_text: '가상 CT 검사는 오후 3시입니다.', source_ref: 'TEST-EHR-975' });
+  assert.equal(posts[0].options.headers.Prefer, 'return=representation');
+  assert.equal(elements['synthetic-context-drafts'].children[0].children[1].textContent, draft.proposed_text);
+  assert.equal(elements['synthetic-context-drafts'].children[0].children[3].handlers.click, undefined,
+    'proposer cannot approve own proposal');
+  elements.logout.handlers.click();
+  user = approver; elements.email.value = 'approver@example.invalid'; elements.password.value = 'synthetic';
+  await login(); await selectFixture();
+  const button = elements['synthetic-context-drafts'].children[0].children[3];
+  assert.equal(typeof button.handlers.click, 'function', 'distinct staff sees approval');
+  await button.handlers.click();
+  assert.deepEqual(patches[0].payload, { status: 'approved' });
+  assert.match(patches[0].url, /draft_id=eq.*status=eq.draft/);
+  assert.equal(fact.fact_id, draftId, 'approved exact draft becomes exact fact');
+  assert.equal(elements.facts.children[0].children[1].textContent, draft.proposed_text);
+  assert.match(elements.facts.children[0].children[2].textContent, /합성 출처 TEST-EHR-975/,
+    'approved fixture fact displays the verified synthetic source');
+  assert.match(elements['synthetic-context-status'].textContent, /DB|기록/);
+  assert.equal(elements['synthetic-context-section'].hidden, false);
+  // A successful write status with a mismatched exact fact source is never confirmation.
+  draft.status = 'draft'; fact = null; patchStatus = 204; factSourceOverride = 'TEST-WRONG';
+  await selectFixture();
+  await elements['synthetic-context-drafts'].children[0].children[3].handlers.click();
+  assert.equal(elements['synthetic-context-section'].hidden, true, 'mismatched fact source hides uncertain approval');
+  factSourceOverride = null;
+  await selectFixture();
+  postStatus = 500;
+  elements['synthetic-context-text'].value = '실패 후 보존할 합성 원문';
+  elements['synthetic-context-source'].value = 'TEST-SECOND';
+  await submit();
+  assert.equal(elements['synthetic-context-text'].value, '실패 후 보존할 합성 원문');
+  assert.equal(elements['synthetic-context-button'].disabled, true, 'uncertain POST blocks blind retry');
+  const beforeRetry = posts.length;
+  await submit(); assert.equal(posts.length, beforeRetry);
+  elements.logout.handlers.click();
+  user = proposer; postStatus = 201;
+  elements.email.value = 'proposer@example.invalid'; elements.password.value = 'synthetic';
+  await login(); await selectFixture();
+  latePost = pending();
+  elements['synthetic-context-text'].value = '늦은 합성 제안';
+  elements['synthetic-context-source'].value = 'TEST-LATE';
+  const saving = submit(); await pause();
+  await elements.patients.children[1].handlers.click();
+  latePost.resolve(reply(201, [{ draft_id: draftId }])); await saving;
+  assert.equal(elements['synthetic-context-section'].hidden, true, 'late POST cannot cross patient');
+  await selectFixture();
+  latePost = pending();
+  elements['synthetic-context-text'].value = '로그아웃 전 합성 제안';
+  elements['synthetic-context-source'].value = 'TEST-LOGOUT';
+  const loggingOut = submit(); await pause();
+  elements.logout.handlers.click();
+  latePost.resolve(reply(201, [{ draft_id: draftId }])); await loggingOut;
+  assert.equal(elements['synthetic-context-section'].hidden, true, 'late POST cannot restore after logout');
+  assert.equal(elements['synthetic-context-text'].value, '');
+  latePost = null;
+  user = approver; elements.email.value = 'approver@example.invalid'; elements.password.value = 'synthetic';
+  await login(); await selectFixture();
+  if (elements['synthetic-context-drafts'].children.length) {
+    latePatch = pending();
+    const lateApproval = elements['synthetic-context-drafts'].children[0].children[3].handlers.click();
+    await pause(); elements.logout.handlers.click();
+    latePatch.resolve(reply(403, { message: 'old session denied' })); await lateApproval; latePatch = null;
+    user = approver; elements.email.value = 'approver@example.invalid'; elements.password.value = 'synthetic';
+    await login(); await selectFixture();
+    assert.equal(elements['patient-card'].hidden, false, 'late approval denial cannot close a new session');
+  }
+  patchStatus = 403;
+  if (elements['synthetic-context-drafts'].children.length) {
+    await elements['synthetic-context-drafts'].children[0].children[3].handlers.click();
+    assert.equal(elements['patient-card'].hidden, true, 'current approval denial hides session');
+  }
+  console.log('Hospital synthetic context proposal, exact approval, denial and race: PASS');
+}
+
 run().then(runPairing).then(runSyntheticMessage).then(runSyntheticAlert).then(runSyntheticVoice)
-  .then(runSyntheticTodayTranscript)
+  .then(runSyntheticTodayTranscript).then(runSyntheticContext)
   .catch(error => { console.error(error); process.exitCode = 1; });
