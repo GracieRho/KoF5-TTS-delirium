@@ -17,7 +17,7 @@
 다음은 실측 또는 기관 검토 전까지 확정하지 않습니다.
 
 - STT·LLM·음성 복제 제공업체와 한국어 품질·지연 시간
-- 태블릿 플랫폼, 배포 인프라 및 네트워크 장애 시 동작
+- iPad Flutter의 실제 마이크·VAD·재생 중단 품질과 Vercel 배포·재연결·네트워크 장애 시 동작
 - 병실 주변 음성의 전송·보관 범위, 동의·철회 절차
 - 실제 환자 대상 시험 계획과 임상 콘텐츠 승인
 
@@ -39,7 +39,7 @@
 └── AGENTS.md              # 저장소에서 작업할 때의 기본 원칙
 ```
 
-폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR-0001](architecture/decisions/0001-cloud-first-familiar-voice-mvp.md)에서 확인할 수 있습니다.
+폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR 목록](architecture/decisions/README.md)에서 확인할 수 있습니다. 병원 환자 등록·화자 특징의 최소 컬럼은 [병원 등록 설계](docs/delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)에 정리했습니다.
 
 ## 합성 대화 흐름 확인
 

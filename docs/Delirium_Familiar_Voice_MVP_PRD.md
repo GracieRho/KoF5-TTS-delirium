@@ -13,4 +13,6 @@
 
 **환자 대상 시험 전 필수 문서:** [안전·윤리 Blocking Gate](delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md). 기능 구현 완료만으로 시험을 시작하지 않으며, 정체성 고지·동의·병실 주변 음성 처리·의료진 알림의 네 게이트를 모두 확정해야 합니다.
 
-클라우드 중심 전환과 MVP 정책의 결정 기록은 [ADR-0001](../architecture/decisions/0001-cloud-first-familiar-voice-mvp.md)을 따릅니다. 제품 기능은 구현 초안이며 임상·기관 검토가 필요한 절차는 게이트 문서에서 정의합니다.
+**병원 등록 설계 보충:** [환자 정보·목소리 프로필 테이블](delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)은 FHIR 기반 병원 정보 범주, 최소 MVP 컬럼, 약 30초 녹음과 화자 유사도 경계를 정리합니다. 원문 0–65절의 보충 설계이며 실제 병원 EHR·임상 자료를 연결한 것은 아닙니다.
+
+클라우드 중심 전환은 [ADR-0001](../architecture/decisions/0001-cloud-first-familiar-voice-mvp.md), iPad·기기 내 감지·Vercel 우선 경로는 [ADR-0002](../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따릅니다. 병원 환자·목소리 프로필은 [ADR-0003 제안](../architecture/decisions/0003-hospital-registry-patient-voice-profile.md)에서 검증 중입니다. 제품 기능은 구현 초안이며 임상·기관 검토가 필요한 절차는 게이트 문서에서 정의합니다.

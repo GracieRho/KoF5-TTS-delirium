@@ -131,6 +131,8 @@ else:
 
 # 10. Speaker Verification
 
+병원 환자 등록 화면에서 약 30초의 환자 목소리를 받는 설계는 [병원 환자·목소리 프로필](08-hospital-patient-registry-and-voice.md)에 추가한다. 등록 UI는 구현 대상이지만, 화자 유사도를 활성화 신호로 실제 적용할지는 고령 환자의 짧은 발화·컨디션 변화에 대한 오검출/누락 측정 뒤 결정한다.
+
 MVP v1에서는 **optional feature**로 둔다.
 
 환자 음성을 등록할 수 있다면 patient speaker embedding을 생성한다.

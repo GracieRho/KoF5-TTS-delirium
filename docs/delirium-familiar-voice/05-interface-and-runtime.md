@@ -70,6 +70,8 @@ voice animation
 ## Hospital
 
 - Patient list
+- Patient registration / current encounter
+- Patient voice profile enrollment / refresh / withdrawal
 - Patient dashboard
 - Conversation history
 - Message composer
@@ -104,10 +106,14 @@ PATCH /memories/{id}
 ```text
 GET  /hospital/patients
 GET  /hospital/patients/{id}
+POST /hospital/patients/{id}/voice-profile
+DELETE /hospital/patients/{id}/voice-profile
 POST /hospital/patients/{id}/message
 POST /hospital/patients/{id}/schedule
 PATCH /hospital/patients/{id}/context
 ```
+
+환자 목소리 등록·삭제 API는 병원 직원 권한, 유효한 환자/대리인 동의·assent, 거부 및 원본 폐기 검사가 선행돼야 한다. 컬럼과 권한은 [병원 환자·목소리 프로필 설계](08-hospital-patient-registry-and-voice.md)에 둔다. 최초 iPad 경로는 후보 구간별 HTTP 처리부터 측정하고, 위 WS 초안은 지연 평가 뒤 선택한다.
 
 ---
 
