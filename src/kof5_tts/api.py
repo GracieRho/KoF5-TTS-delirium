@@ -95,6 +95,10 @@ class SpeechTurn(BaseModel):
     label: Literal["DIRECTED", "AMBIENT", "UNCERTAIN"]
 
 
+class PairedSpeechTurn(SpeechTurn):
+    client_turn_id: UUID
+
+
 def _patient(patient_id: str) -> None:
     if patient_id != SYNTHETIC_PATIENT:
         raise HTTPException(status_code=404, detail="합성 환자 ID만 사용할 수 있습니다")
@@ -257,6 +261,27 @@ async def _paired_clone_credentials(request: Request, patient_id: str) -> CloudC
         )
     except (ValueError, TypeError):
         raise HTTPException(status_code=503, detail="승인된 합성 음성·공급자 설정을 확인하지 못했습니다") from None
+
+
+async def _record_synthetic_directed_turn(request: Request, patient_id: str, speech: PairedSpeechTurn) -> None:
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/record_synthetic_directed_turn',
+                json={"p_patient_id": patient_id, "p_client_turn_id": str(speech.client_turn_id),
+                      "p_transcript": speech.transcript.strip()},
+                headers=_api_headers(config, _device_bearer(request)),
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="합성 대화 기록 권한이 중단됐습니다")
+            response.raise_for_status()
+            if _bounded_json(response, 1024) is not True:
+                raise HTTPException(status_code=403, detail="합성 대화 기록이 거절됐습니다")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="합성 대화 기록이 실패했습니다") from None
 
 
 async def _paired_turn_rows(
@@ -762,7 +787,7 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
     }
 
 
-async def _read_text_turn(request: Request) -> SpeechTurn:
+async def _read_text_turn(request: Request, model: type[SpeechTurn] = SpeechTurn) -> SpeechTurn:
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         raise HTTPException(status_code=415, detail="JSON 전사만 허용합니다")
     body = bytearray()
@@ -771,7 +796,7 @@ async def _read_text_turn(request: Request) -> SpeechTurn:
             raise HTTPException(status_code=413, detail="짧은 전사만 허용합니다")
         body.extend(chunk)
     try:
-        speech = SpeechTurn.model_validate_json(bytes(body))
+        speech = model.model_validate_json(bytes(body))
     except ValidationError:
         raise HTTPException(status_code=422, detail="짧은 한국어 전사와 활성화 판정이 필요합니다") from None
     if not speech.transcript.strip():
@@ -810,12 +835,17 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     if patient_id != SYNTHETIC_DB_PATIENT:
         raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
     _internal_demo_auth(request)
-    speech = await _read_text_turn(request)
+    speech = await _read_text_turn(request, PairedSpeechTurn)
+    if speech.client_turn_id.version != 4:
+        raise HTTPException(status_code=422, detail="합성 대화 UUIDv4가 필요합니다")
+    speech.transcript = speech.transcript.strip()
     now = datetime.now(timezone.utc)
     event = ConversationSession().hear(speech.transcript, speech.label, now)
     if event in {"discarded", "closed", "patient_dissent"}:
         return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     credentials = await _paired_clone_credentials(request, patient_id)
+    if event == "turn":
+        await _record_synthetic_directed_turn(request, patient_id, speech)
     hospital = hospital_fact_question(speech.transcript)
     # Deterministic policy replies do not require family transcript embeddings.
     if hospital:

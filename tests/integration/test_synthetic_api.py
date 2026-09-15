@@ -22,6 +22,7 @@ READY_CLONE = {"authorized": True,
                "clone_id": "00000000-0000-4000-8000-000000000914",
                "provider": "elevenlabs", "voice_id": "guardian-clone-975"}
 SERVICE_KEY = "sb_secret_" + "s" * 32
+PAIRED_TURN_ID = "00000000-0000-4000-8000-000000000999"
 
 
 class SyntheticApiTests(unittest.TestCase):
@@ -299,6 +300,13 @@ class SyntheticApiTests(unittest.TestCase):
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 self.assertEqual(request.headers["apikey"], SERVICE_KEY)
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+                self.assertEqual(json.loads(request.read()), {
+                    "p_patient_id": SYNTHETIC_DB_PATIENT, "p_client_turn_id": PAIRED_TURN_ID,
+                    "p_transcript": "제주도 언제 갔었어?",
+                })
+                return httpx.Response(200, json=True)
             if not request.url.path.endswith("/embeddings"):
                 self.assertEqual(request.headers["apikey"], "sb_publishable_local")
             if request.url.path.endswith("/patient_device_context"):
@@ -329,21 +337,22 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.api.run_synthetic_text_pipeline", return_value=("2024년 5월에 갔었어.", b"mp3")
         ) as pipeline:
             self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
-                                              json={"transcript": "제주도 언제 갔었어?", "label": "DIRECTED"},
+                                              json={"transcript": "제주도 언제 갔었어?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID},
                                               headers=headers).status_code, 404)
             self.assertEqual(self.client.post(path, json={"transcript": "제주도 언제 갔었어?",
-                                                          "label": "DIRECTED"},
+                                                          "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID},
                                               headers={k: v for k, v in headers.items()
                                                        if k != "Authorization"}).status_code, 401)
             pipeline.assert_not_called()
-            turn = {"transcript": "제주도 언제 갔었어?", "label": "DIRECTED"}
+            turn = {"transcript": "제주도 언제 갔었어?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             result = self.client.post(path, json=turn, headers=headers)
             self.assertEqual(result.status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "2024년 5월 제주도에 함께 갔었다.")
             self.assertEqual(result.json()["audio_mp3_base64"], "bXAz")
             self.assertEqual([path.rsplit("/", 1)[-1] for path, _ in calls],
                              ["patient_device_context", "synthetic_patient_tts_voice_ready",
-                              "embeddings", "patient_family_semantic_turn_context"])
+                              "record_synthetic_directed_turn", "embeddings",
+                              "patient_family_semantic_turn_context"])
             memory_rows = []
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "", "each turn gets fresh memory")
@@ -383,6 +392,9 @@ class SyntheticApiTests(unittest.TestCase):
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 self.assertEqual(request.headers["apikey"], SERVICE_KEY)
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+                return httpx.Response(200, json=True)
             if not request.url.path.endswith("/embeddings"):
                 self.assertEqual(request.headers["content-profile"], "api")
             if request.url.path.endswith("/patient_hospital_turn_context"):
@@ -405,11 +417,11 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.api.httpx.AsyncClient",
             side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline", return_value=("합성 답", b"mp3")) as pipeline:
-            hospital_turn = {"transcript": "수민아 CT 검사는 몇 시야?", "label": "DIRECTED"}
+            hospital_turn = {"transcript": "수민아 CT 검사는 몇 시야?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "CT 검사는 오늘 14시입니다.")
             self.assertEqual(pipeline.call_args.kwargs["namespace"], "hospital_context")
-            family_turn = {"transcript": "수민아 제주도 언제 갔어?", "label": "DIRECTED"}
+            family_turn = {"transcript": "수민아 제주도 언제 갔어?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             self.assertEqual(self.client.post(path, json=family_turn, headers=headers).status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "2024년 제주도 여행")
             self.assertEqual(pipeline.call_args.kwargs["namespace"], "family_context")
@@ -445,6 +457,8 @@ class SyntheticApiTests(unittest.TestCase):
                                                   "encounter_id": "synthetic-encounter"}])
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                return httpx.Response(200, json=True)
             self.assertTrue(request.url.path.endswith("/patient_hospital_turn_context"))
             return httpx.Response(200, json=[{"authorized": True, "facts": [{
                 "category": "visit_schedule", "content": approved,
@@ -460,7 +474,7 @@ class SyntheticApiTests(unittest.TestCase):
             side_effect=AssertionError("approved hospital fact must not reach LLM"),
         ):
             result = self.client.post(path, json={
-                "transcript": "수민아 면회 예약은 몇 시야?", "label": "DIRECTED",
+                "transcript": "수민아 면회 예약은 몇 시야?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID,
             }, headers=headers)
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["reply"], approved)
@@ -560,6 +574,8 @@ class SyntheticApiTests(unittest.TestCase):
                                                   "encounter_id": "synthetic-encounter"}])
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                return httpx.Response(200, json=True)
             if request.url.path.endswith("/embeddings"):
                 return (httpx.Response(200, json={"model": "text-embedding-3-small",
                                                    "data": [{"index": 0, "embedding": [0.1] * 1536}]})
@@ -573,15 +589,16 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.api.httpx.AsyncClient",
             side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline") as pipeline:
-            turn = {"transcript": "수민아 우리 휴가 어디였지?", "label": "DIRECTED"}
+            turn = {"transcript": "수민아 우리 휴가 어디였지?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 502)
             self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
-                                    "embeddings"])
+                                    "record_synthetic_directed_turn", "embeddings"])
             provider_ok = True
             seen.clear()
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
             self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
-                                    "embeddings", "patient_family_semantic_turn_context"])
+                                    "record_synthetic_directed_turn", "embeddings",
+                                    "patient_family_semantic_turn_context"])
             pipeline.assert_not_called()
 
     def test_paired_discard_and_dissent_never_leave_for_embedding_or_reply(self) -> None:
@@ -604,7 +621,8 @@ class SyntheticApiTests(unittest.TestCase):
             for transcript, label in (("수민아 제주도 기억나?", "AMBIENT"),
                                       ("수민아 제주도 기억나?", "UNCERTAIN"),
                                       ("수민아 그만해", "DIRECTED")):
-                result = self.client.post(path, json={"transcript": transcript, "label": label},
+                result = self.client.post(path, json={"transcript": transcript, "label": label,
+                                                      "client_turn_id": PAIRED_TURN_ID},
                                           headers=headers)
                 self.assertEqual(result.status_code, 200)
                 self.assertEqual(result.json()["transcript"], "", "discarded transcript must not echo")
@@ -633,6 +651,8 @@ class SyntheticApiTests(unittest.TestCase):
             seen.append(request.url.path.rsplit("/", 1)[-1])
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                return httpx.Response(200, json=True)
             self.assertTrue(request.url.path.endswith("/patient_device_context"),
                             "policy-only speech must not call embeddings or family facts")
             return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
@@ -647,10 +667,11 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"mp3",
         ):
             result = self.client.post(path, json={"transcript": "수민아 무슨 약을 먹어야 해?",
-                                                  "label": "DIRECTED"}, headers=headers)
+                                                  "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}, headers=headers)
         self.assertEqual(result.status_code, 200)
         self.assertIn("의료진", result.json()["reply"])
-        self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready"])
+        self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                "record_synthetic_directed_turn"])
 
     def test_semantic_fact_reaches_real_reply_pipeline_without_word_overlap(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
@@ -673,6 +694,9 @@ class SyntheticApiTests(unittest.TestCase):
             if request.url.path.endswith("/synthetic_patient_tts_voice_ready"):
                 self.assertEqual(request.headers["apikey"], SERVICE_KEY)
                 return httpx.Response(200, json=[READY_CLONE])
+            if request.url.path.endswith("/record_synthetic_directed_turn"):
+                self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+                return httpx.Response(200, json=True)
             if request.url.path.endswith("/embeddings"):
                 self.assertEqual(json.loads(request.read())["input"], transcript)
                 return httpx.Response(200, json={"model": "text-embedding-3-small",
@@ -705,13 +729,13 @@ class SyntheticApiTests(unittest.TestCase):
             "kof5_tts.api.httpx.Client",
             side_effect=lambda **_: sync_class(transport=httpx.MockTransport(reply_and_voice)),
         ):
-            result = self.client.post(path, json={"transcript": transcript, "label": "DIRECTED"},
+            result = self.client.post(path, json={"transcript": transcript, "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID},
                                       headers=headers)
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["reply"], "흑돼지를 좋아했어.")
         self.assertEqual(result.json()["audio_mp3_base64"], "c3ludGhldGljLW1wMw==")
         self.assertEqual(hosted, ["patient_device_context", "synthetic_patient_tts_voice_ready",
-                                  "embeddings",
+                                  "record_synthetic_directed_turn", "embeddings",
                                   "patient_family_semantic_turn_context"])
 
     def test_due_hospital_message_voices_only_atomic_approved_original(self) -> None:
@@ -820,12 +844,66 @@ class SyntheticApiTests(unittest.TestCase):
                 selected = rows
                 for path in paths:
                     seen.clear()
-                    request_json = {"transcript": "수민아 제주도 기억나?", "label": "DIRECTED"} if path.endswith("/text") else None
+                    request_json = {"transcript": "수민아 제주도 기억나?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID} if path.endswith("/text") else None
                     response = self.client.post(path, json=request_json, headers=headers)
                     self.assertEqual(response.status_code, expected, name)
                     self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready"], name)
             reply.assert_not_called()
             speech.assert_not_called()
+
+    def test_directed_record_requires_v4_and_fails_closed_before_semantic_provider(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "OPENAI_API_KEY": "test-openai", "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "d" * 40}
+        turn = {"transcript": " 수민아 제주도 기억나? ", "label": "DIRECTED",
+                "client_turn_id": PAIRED_TURN_ID}
+        record_status = 200
+        record_result = False
+        seen: list[str] = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            route = request.url.path.rsplit("/", 1)[-1]
+            seen.append(route)
+            if route == "patient_device_context":
+                return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
+                                                  "encounter_id": "synthetic-encounter"}])
+            if route == "synthetic_patient_tts_voice_ready":
+                return httpx.Response(200, json=[READY_CLONE])
+            if route == "record_synthetic_directed_turn":
+                self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+                self.assertEqual(request.headers["content-profile"], "api")
+                self.assertEqual(json.loads(request.read()), {
+                    "p_patient_id": SYNTHETIC_DB_PATIENT, "p_client_turn_id": PAIRED_TURN_ID,
+                    "p_transcript": "수민아 제주도 기억나?",
+                })
+                return httpx.Response(record_status, json=record_result)
+            raise AssertionError("failed record must stop before embedding/facts/LLM/TTS")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api.run_synthetic_text_pipeline") as pipeline:
+            self.assertEqual(self.client.post(path, json={k: v for k, v in turn.items()
+                                                          if k != "client_turn_id"}, headers=headers).status_code, 422)
+            self.assertEqual(self.client.post(path, json={**turn,
+                                                          "client_turn_id": "00000000-0000-1000-8000-000000000999"},
+                                              headers=headers).status_code, 422)
+            self.assertEqual(seen, [], "invalid turn ID cannot reach DB")
+            self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
+            self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                    "record_synthetic_directed_turn"])
+            seen.clear()
+            record_status = 500
+            self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 503)
+            self.assertEqual(seen, ["patient_device_context", "synthetic_patient_tts_voice_ready",
+                                    "record_synthetic_directed_turn"])
+            pipeline.assert_not_called()
 
     def test_guardian_voice_pending_before_provider_and_absence_before_deleted(self) -> None:
         from base64 import b64encode
