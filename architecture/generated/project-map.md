@@ -17,6 +17,7 @@ flowchart LR
   voice --> tablet["태블릿 재생"]
 
   subgraph code["코드 레이어"]
+    layer_companion["companion (1)"]
     layer_preprocessing["preprocessing (3)"]
     layer_root["root (1)"]
   end
@@ -24,7 +25,7 @@ flowchart LR
 
 ## 현재 카탈로그
 
-- Python 모듈: **4**
+- Python 모듈: **5**
 - 설정 파일: **0**
 - 프로젝트 실행 스크립트: **3**
 
@@ -33,6 +34,7 @@ flowchart LR
 | Module | Layer | Path | Internal imports |
 | --- | --- | --- | --- |
 | `kof5_tts` | root | `src/kof5_tts/__init__.py` | — |
+| `kof5_tts.companion` | companion | `src/kof5_tts/companion.py` | — |
 | `kof5_tts.preprocessing` | preprocessing | `src/kof5_tts/preprocessing/__init__.py` | `kof5_tts.preprocessing.audio` |
 | `kof5_tts.preprocessing.aihub` | preprocessing | `src/kof5_tts/preprocessing/aihub.py` | — |
 | `kof5_tts.preprocessing.audio` | preprocessing | `src/kof5_tts/preprocessing/audio.py` | — |

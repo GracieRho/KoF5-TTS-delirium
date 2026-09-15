@@ -48,6 +48,12 @@
         "imports": []
       },
       {
+        "module": "kof5_tts.companion",
+        "path": "src/kof5_tts/companion.py",
+        "layer": "companion",
+        "imports": []
+      },
+      {
         "module": "kof5_tts.preprocessing",
         "path": "src/kof5_tts/preprocessing/__init__.py",
         "layer": "preprocessing",
