@@ -217,6 +217,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   Future<bool> _stopReply({String successStatus = '음성 응답 재생을 중단했습니다.'}) {
+    _autoResumeOwnerGeneration = null;
     final pending = _replyStop;
     if (pending != null) return pending;
     final future = _performStopReply(successStatus);
@@ -538,6 +539,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   void _resumeAfterReplyIfReady(int generation) {
     if (_sending ||
+        _replyStop != null ||
         !_foreground ||
         !_ownVoiceTrial ||
         !_autoTextTrial ||

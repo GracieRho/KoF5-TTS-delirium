@@ -21,8 +21,11 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     final finishes = <Completer<bool>>[];
+    final delayedStop = Completer<Object?>();
     var playCalls = 0;
     var textCalls = 0;
+    var stopCalls = 0;
+    var delayStop = false;
     const audioChannel = MethodChannel('kof5/trial_audio');
     messenger.setMockMethodCallHandler(OnDeviceSpeech.channel, (call) async {
       switch (call.method) {
@@ -46,6 +49,8 @@ void main() {
           finishes.add(pending);
           return pending.future;
         case 'stop':
+          stopCalls++;
+          if (delayStop) return delayedStop.future;
           return null;
       }
       throw MissingPluginException();
@@ -90,6 +95,28 @@ void main() {
       fake.feedCandidate();
       await _until(tester, () => finishes.length == 2);
       expect((textCalls, playCalls, fake.stops), (2, 2, 2));
+      delayStop = true;
+      await tester.ensureVisible(find.text('음성 응답 중단'));
+      await tester.tap(find.text('음성 응답 중단'));
+      await _until(tester, () => stopCalls == 1);
+      finishes.last.complete(true); // Natural finish races a requested stop.
+      await tester.pump();
+      expect(
+        fake.starts,
+        2,
+        reason: 'requested stop cancels automatic rearm immediately',
+      );
+      delayedStop.complete(null);
+      await _until(
+        tester,
+        () => find.text('음성 응답 재생을 중단했습니다.').evaluate().isNotEmpty,
+      );
+      delayStop = false;
+      await tester.ensureVisible(find.text('마이크 시험 시작'));
+      await tester.tap(find.text('마이크 시험 시작'));
+      await _until(tester, () => fake.starts == 3);
+      fake.feedCandidate();
+      await _until(tester, () => finishes.length == 3);
       await tester.ensureVisible(find.byType(CheckboxListTile));
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
@@ -102,7 +129,7 @@ void main() {
       );
       expect(
         fake.starts,
-        2,
+        3,
         reason: 'withdrawal cannot rearm always-listening',
       );
       await tester.pumpWidget(const SizedBox());
