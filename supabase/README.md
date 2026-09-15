@@ -6,13 +6,15 @@
 
 여섯째 마이그레이션의 읽기 전용 `api.hospital_registration_ready`는 로그인한 직원의 **현재 registrar 기관과 기관·안전 승인 게이트 준비 여부**만 보여준다. 승인 참조·타 기관 직원 목록은 반환하지 않는다. 병원 웹 등록 폼은 `ready=true`인 기관에만 나타나고, POST 직전에 준비 여부를 다시 읽는다. 등록 시 환자 번호·성명·선택 생년월일만 보내며, DB 제약/RLS가 중복·타 기관·철회를 최종 차단한다. 403이면 화면에서 세션과 환자 정보를 지우고, 로그아웃 뒤 늦은 응답은 목록·폼을 복원하지 않는다. 이것은 로컬 합성 시험 경로이며 실환자 등록/병원 EHR 연결을 입증하지 않는다.
 
-일곱째 `api.guardian_memory_search`는 호출자 RLS를 쓰는 보호자 본인 작성·유효·일반 가족 기억의 최대 3건 문자열 검색이다. 피해야 할 주제와 민감·만료 기억은 제외한다. 실제 환자 대화 검색, pgvector·임베딩·의미 검색은 연결하지 않았다. 여덟째 `kof5.safety_audit_event`는 안전 이벤트 9종의 최소 저장 경계이며 발화·오디오·자유 텍스트 칼럼과 앱 역할의 직접 읽기/쓰기 권한이 없다. 승인된 기록자·보존/삭제 정책·실제 감사 기록 흐름은 아직 없다.
+일곱째 `api.guardian_memory_search`는 호출자 RLS를 쓰는 보호자 본인 작성·유효·일반 가족 기억의 최대 3건 문자열 검색이다. 피해야 할 주제와 민감·만료 기억은 제외한다. 별도의 [고정 합성 환자 semantic RAG 초안](migrations/20260916123000_synthetic_family_embedding_rag.sql)은 임시 embedding 모델과 미보정 0.75 임계값을 쓰며, 한국어 검색 정확도·실환자 경로는 검증되지 않았다([ADR-0009 제안](../architecture/decisions/0009-provisional-synthetic-family-semantic-rag.md)). 여덟째 `kof5.safety_audit_event`는 안전 이벤트 9종의 최소 저장 경계이며 발화·오디오·자유 텍스트 칼럼과 앱 역할의 직접 읽기/쓰기 권한이 없다. 승인된 기록자·보존/삭제 정책·실제 감사 기록 흐름은 아직 없다.
 
 아홉째 비공개 `kof5.usable_patient_voice_profile`은 현재 진행 중 입원·활성 환자·유효한 환자 음성 기능 동의/assent가 모두 있을 때만 암호화 특징 참조를 조회한다. 철회·만료 뒤에는 기존 프로필이 active로 남아도 조회되지 않고, 철회 기록을 다시 active로 바꾸지 못한다. 앱 역할에는 조회 권한이 없다. 이것은 내부 합성 시험의 **음성 기능 동의 한 범위**만 검증하며 환자 참여/병실 주변 음성 동의, 기관 승인, 실제 특징 객체 삭제·임상 절차를 대신하지 않는다.
 
 열째 비공개 `kof5.voice_profile_with_trial_consents`는 그 기능 동의 조회에 **별도 환자 참여·병실 주변 음성 처리 동의**와 현재 기관 안전 승인 참조를 추가한다. 각 동의가 만료·철회되거나 승인 게이트가 만료되면 0행을 반환하며 앱 역할에 SELECT를 주지 않는다. 이 DB 조건만으로 [정체성 고지·의료진 경보 게이트](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)가 충족되지는 않는다.
 
 열한째 마이그레이션은 철회·삭제된 환자 음성 프로필을 재활성화할 수 없게 한다. 실제 특징 객체 삭제는 별도의 승인된 처리 흐름이 필요하다.
+
+고정 합성 환자의 [보호자 음성 lifecycle 초안](migrations/20260916143000_synthetic_guardian_voice_lifecycle.sql)은 별도 복제 동의·Auth 연결, 공급자 중립 `pending/verification_pending/created/deletion_pending/deleted/failed` 상태와 exact voice ID 목록 부재 확인 시각을 분리한다([ADR-0010 제안](../architecture/decisions/0010-guardian-voice-lifecycle-and-deletion-proof.md)). 원본/키는 DB에 두지 않고, 실제 공급업체 선정·보존/삭제 계약·실제 보호자 샘플 처리는 [Gate07](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md) 이전에 진행하지 않는다.
 
 열두째 합성 장치 결속은 Supabase Auth의 익명 로그인 사용자를 `authenticated` 역할로 받되, 검증된 담당 `care_staff`가 `api.patient_device_pairing`에 **장치 Auth 사용자 UUID·고정 합성 환자 UUID `00000000-0000-4000-8000-000000000975`·현재 입원 UUID·8시간 이내 만료**를 기록할 때만 활성화한다. 병원 화면은 `api.synthetic_device_pairing_ready`의 `patient_id, encounter_id` 한정 조회로 폼 자격을 확인하고, INSERT RLS가 최종 검사한다. 장치는 자기 Auth JWT와 publishable 키로 `api.patient_device_context`를 읽고 `api.patient_family_search(p_patient_id,p_term)`를 호출한다. 후자는 현재 입원·기관 승인·환자 참여/주변 음성/환자 목소리 기능 동의 및 assent·유효한 보호자 연결을 매 요청 확인하고, 유효한 일반 기억의 `category,content` 최대 3건만 반환한다. 기존 `api.family_context`는 익명 장치에 숨겨 검색 제한을 우회할 수 없게 했다. 결속은 환자/입원 간 이동 불가이고 철회 뒤 재활성화 불가다. **실제 환자 UUID는 DB에서 기본 차단**하며 이를 켜는 클라이언트 스위치가 없다. 이 로컬 합성 계약은 [실제 환자 안전 게이트](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)의 정체성 고지·의료진 경보/ACK, 병원 승인 업무와 실제 음성/동의 절차를 입증하지 않는다.
 

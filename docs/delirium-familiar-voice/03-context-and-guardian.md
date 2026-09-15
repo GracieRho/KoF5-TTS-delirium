@@ -2,7 +2,7 @@
 
 이 제품에서 TTS보다 중요한 부분이다.
 
-구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. 기존 `companion.relevant_facts`는 합성 `Fact` 목록을 검색한다. 새 [합성 iPad 기기 연결 설계](../../architecture/decisions/0006-ipad-anonymous-device-pairing.md)는 병원 담당자가 현재 입원에 연결한 익명 Auth 기기 JWT를 확인하고, `patient_family_turn_context`로 기기 권한과 보호자 DB의 일반 기억 최대 세 건을 매 턴 같이 확인해 FastAPI의 합성 글 응답에 공급한다. 로컬 GoTrue/Data API→FastAPI 모의 공급자 경로와 철회 차단은 통과했다. 실제 iPad·원격 공급자·실제 환자 기억은 사용하지 않았고, 한국어 검색 품질 측정·dynamic follow-up·pgvector/임베딩 모델은 남아 있다.
+구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. 기존 `companion.relevant_facts`와 문자열 포함 검색은 서로 다른 표현의 한국어 질문을 찾지 못할 수 있다. 고정 합성 환자에는 별도 [pgvector 가족 기억 색인](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)을 추가했다. 보호자 화면은 일반 기억이 저장된 뒤 실제 `fact_id`를 확인했을 때만 서버 색인을 요청하고, 서버는 보호자 JWT·현재 연결·사실을 확인한 다음 임시 모델 `text-embedding-3-small`로 색인한다. 결속된 iPad 기기 JWT의 [단일 의미 검색 RPC](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)는 현재 입원·동의·보호자 연결과 일반 가족 기억을 한 DB 조회에서 대조해 최대 세 건을 반환한다. 로컬 pgTAP 37개와 GoTrue/Data API의 색인·검색·수정·철회 검사가 통과했다. 실제 한국어 임베딩 정확도, 임상 내용 검토, dynamic follow-up, 실제 iPad·원격 공급자·환자 기억은 검증되지 않았다.
 
 환자의 memory context는 fine-tuning하지 않고 RAG 구조로 관리한다.
 
