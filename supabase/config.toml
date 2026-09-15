@@ -1,0 +1,12 @@
+project_id = "kof5-familiar-voice-mvp"
+
+[api]
+# Patient/voice tables live in the private kof5 schema, outside the Data API.
+schemas = ["public", "graphql_public"]
+
+[db]
+# Match this to the dedicated remote project's actual PostgreSQL major version before linking.
+major_version = 17
+
+[auth]
+enable_anonymous_sign_ins = false
