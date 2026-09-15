@@ -34,8 +34,13 @@ def main() -> None:
         assert status == 200, f"local synthetic registrar login: {status}"
         token = session["access_token"]
         endpoint = f"{url}/rest/v1/hospital_patient_registration"
+        readiness = f"{url}/rest/v1/hospital_registration_ready?select=hospital_ref,ready"
         payload = {"hospital_ref": hospital, "ehr_patient_ref": patient_ref,
                    "staff_display_name": "가상 환자"}
+        status, rows = request(readiness, "GET", public, token, schema="api")
+        assert status == 200 and rows == [{"hospital_ref": hospital, "ready": False}], f"default-deny readiness: {status}"
+        status, _ = request(readiness, "GET", public, schema="api")
+        assert status in (401, 403), f"anonymous readiness: {status}"
         status, _ = request(endpoint, "POST", public, token, payload, schema="api")
         assert status in (401, 403), f"registration without institution gate: {status}"
 
@@ -46,6 +51,8 @@ def main() -> None:
             VALUES ('{hospital}', 'approved', 'TEST-INSTITUTION', 'TEST-SAFETY',
                     now() - interval '1 minute');
         """)
+        status, rows = request(readiness, "GET", public, token, schema="api")
+        assert status == 200 and rows == [{"hospital_ref": hospital, "ready": True}], f"approved readiness: {status}"
         status, _ = request(endpoint, "POST", public, token, payload, schema="api")
         assert status == 201, f"approved synthetic registrar insert: {status}"
         recorded = sql(f"SELECT registered_by_staff_ref FROM kof5.hospital_patient "
@@ -60,6 +67,8 @@ def main() -> None:
         assert status in (401, 403), f"anonymous registration: {status}"
         sql(f"UPDATE kof5.hospital_staff_membership SET status='revoked', revoked_at=now() "
             f"WHERE auth_user_id='{user_id}' AND hospital_ref='{hospital}';")
+        status, rows = request(readiness, "GET", public, token, schema="api")
+        assert status == 200 and rows == [], f"revoked registrar readiness: {status}"
         status, _ = request(endpoint, "POST", public, token,
                             {**payload, "ehr_patient_ref": patient_ref + '-AFTER'}, schema="api")
         assert status in (401, 403), f"revoked registrar registration: {status}"
