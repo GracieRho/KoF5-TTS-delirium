@@ -74,6 +74,8 @@ class CloudPrototypeTests(unittest.TestCase):
         for transcript, expected_hosts, expected_reply in (
             ("그만해.", ["api.deepgram.com"], None),
             ("숨이 너무 차.", ["api.deepgram.com", "api.elevenlabs.io"], "기존 호출 버튼"),
+            ("지금 몇 시야?", ["api.deepgram.com", "api.elevenlabs.io"], "지금은"),
+            ("무슨 약을 먹어야 해?", ["api.deepgram.com", "api.elevenlabs.io"], "의료진에게 확인"),
         ):
             with self.subTest(transcript=transcript):
                 hosts = []

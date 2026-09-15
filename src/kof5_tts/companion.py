@@ -80,6 +80,31 @@ def orientation_date(now: datetime, zone: str = "Asia/Seoul") -> str:
     return f"오늘은 {local.month}월 {local.day}일 {WEEKDAYS[local.weekday()]}이야."
 
 
+def orientation_time(now: datetime, zone: str = "Asia/Seoul") -> str:
+    """Use the same trusted clock for a short Korean time answer."""
+    _require_aware(now)
+    local = now.astimezone(ZoneInfo(zone))
+    period = "오전" if local.hour < 12 else "오후"
+    return f"지금은 {period} {local.hour % 12 or 12}시 {local.minute}분이야."
+
+
+def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
+    """Shared deterministic replies that must precede any free-form generation."""
+    _require_aware(now)
+    if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
+        return "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
+    if any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹")):
+        return "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."
+    if any(word in transcript for word in ("너 진짜", "실제 수민", "전화한 거")):
+        return "나는 실제 가족과 통화하는 사람이 아니라 AI 음성 대화 도우미야."
+    if any(word in transcript for word in ("몇 시", "시간이 몇")):
+        return orientation_time(now)
+    if any(word in transcript for word in ("며칠", "날짜")):
+        return orientation_date(now)
+    # ponytail: keyword policy covers only internal synthetic cases; clinical review and measured safety eval precede patient use.
+    return None
+
+
 @dataclass(frozen=True)
 class HospitalMessage:
     patient_id: str

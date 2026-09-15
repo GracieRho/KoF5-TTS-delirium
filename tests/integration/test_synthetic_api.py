@@ -55,6 +55,18 @@ class SyntheticApiTests(unittest.TestCase):
             "transcript": "오늘이 며칠이야?", "label": "UNCERTAIN",
         }).json()
         self.assertTrue(date["text"].startswith("오늘은 "))
+        time_answer = self.client.post(f"{root}/turn", json={
+            "transcript": "수민아 지금 몇 시야?", "label": "UNCERTAIN",
+        }).json()
+        self.assertTrue(time_answer["text"].startswith("지금은 "))
+        medical = self.client.post(f"{root}/turn", json={
+            "transcript": "무슨 약을 먹어야 해?", "label": "UNCERTAIN",
+        }).json()
+        self.assertIn("의료진에게 확인", medical["text"])
+        identity = self.client.post(f"{root}/turn", json={
+            "transcript": "너 진짜 수민이야?", "label": "UNCERTAIN",
+        }).json()
+        self.assertIn("AI 음성 대화 도우미", identity["text"])
         memory = self.client.post(f"{root}/turn", json={
             "transcript": "제주도 언제 갔었지?", "label": "UNCERTAIN",
         }).json()

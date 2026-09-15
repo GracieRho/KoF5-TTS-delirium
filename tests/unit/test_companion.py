@@ -15,6 +15,8 @@ from kof5_tts.companion import (  # noqa: E402
     HospitalMessage,
     due_hospital_message,
     orientation_date,
+    orientation_time,
+    policy_reply,
     relevant_facts,
 )
 
@@ -83,6 +85,11 @@ class ConversationSessionTests(unittest.TestCase):
                          "오늘은 9월 15일 화요일이야.")
         self.assertEqual(orientation_date(datetime(2026, 9, 14, 16, tzinfo=timezone.utc)),
                          "오늘은 9월 15일 화요일이야.")
+        self.assertEqual(orientation_time(datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)),
+                         "지금은 오후 3시 20분이야.")
+        self.assertEqual(policy_reply("수민아 지금 몇 시야?", "turn",
+                                      datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)),
+                         "지금은 오후 3시 20분이야.")
 
     def test_approved_hospital_text_and_risk_event_never_claim_staff_ack(self) -> None:
         now = datetime(2026, 9, 15, 15, 20, tzinfo=ZoneInfo("Asia/Seoul"))

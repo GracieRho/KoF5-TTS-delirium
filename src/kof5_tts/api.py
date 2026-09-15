@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from kof5_tts.companion import ConversationSession, Fact, orientation_date, relevant_facts
+from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
 SYNTHETIC_PATIENT = "synthetic_patient"
 FAMILY_FACT = Fact(
@@ -45,12 +45,11 @@ def _patient(patient_id: str) -> None:
 def _reply(event: str, transcript: str, now: datetime) -> str | None:
     if event in {"discarded", "closed", "patient_dissent"}:
         return None
-    if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
-        return "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
+    override = policy_reply(transcript, event, now)
+    if override is not None:
+        return override
     if transcript.strip().startswith("수민아"):
         return "응, 왜?"
-    if any(word in transcript for word in ("며칠", "날짜")):
-        return orientation_date(now)
     facts = relevant_facts([FAMILY_FACT], SYNTHETIC_PATIENT, "family_context", transcript, now)
     return facts[0].content if facts else "지금 확인된 정보가 없어서 모르겠어."
 

@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
-from kof5_tts.companion import ConversationSession, orientation_date
+from kof5_tts.companion import ConversationSession, policy_reply
 
 
 @dataclass(frozen=True)
@@ -108,15 +108,8 @@ def run_synthetic_pipeline(
     event = ConversationSession().hear(transcript, "DIRECTED", now)
     if event in {"patient_dissent", "closed", "discarded"}:
         return transcript, None, None
-    if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
-        reply = "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
-    elif any(word in transcript for word in ("며칠", "날짜")):
-        reply = orientation_date(now)
-    elif any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹")):
-        reply = "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."
-    elif any(word in transcript for word in ("너 진짜", "실제 수민", "전화한 거")):
-        reply = "나는 실제 가족과 통화하는 사람이 아니라 AI 음성 대화 도우미야."
-    else:
+    reply = policy_reply(transcript, event, now)
+    if reply is None:
         # ponytail: keyword and length guards are an internal-test ceiling; clinical review and measured safety eval precede patients.
         reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
     audio = synthesize_mp3(client, reply, credentials)
