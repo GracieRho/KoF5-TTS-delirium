@@ -110,6 +110,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   final _publishableKey = TextEditingController();
   StreamSubscription<Uint8List>? _subscription;
   Timer? _candidateExpiry;
+  Timer? _bargeInExpiry;
   Timer? _sessionExpiry;
   HttpClient? _cloudClient;
   HttpClient? _deviceClient;
@@ -145,6 +146,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _cloudStatus = '자가 음성 시험을 확인하면 발화 후보 한 건을 직접 보낼 수 있습니다.';
   var _cloudTranscript = '';
   var _cloudReply = '';
+  String? _lastCandidatePlaybackLatency;
   var _localEnabled = false;
   var _recognizing = false;
   var _speechStopUnconfirmed = false;
@@ -205,9 +207,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _publishableKey.clear();
     _candidateExpiry?.cancel();
     _candidateExpiry = null;
+    _bargeInExpiry?.cancel();
+    _bargeInExpiry = null;
     _heldCandidate = null;
     _ownVoiceTrial = false;
     _sending = false;
+    _lastCandidatePlaybackLatency = null;
     final stoppingPlayback = _playedReply;
     if (mounted) {
       setState(() {
@@ -704,9 +709,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _activation.reset();
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
+    _bargeInExpiry?.cancel();
+    _bargeInExpiry = null;
     if (mounted) {
       setState(() {
         _localTranscript = '';
+        _cloudTranscript = '';
         _cloudStatus = '60초 무응답으로 대화 창을 닫았습니다. 이름을 다시 부르면 새 시험을 시작합니다.';
       });
     }
@@ -714,6 +722,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   Future<bool> _stopReply({String successStatus = '음성 응답 재생을 중단했습니다.'}) {
     _autoResumeOwnerGeneration = null;
+    if (_lastCandidatePlaybackLatency != null) {
+      _lastCandidatePlaybackLatency = null;
+      if (mounted) setState(() {});
+    }
     final pending = _replyStop;
     if (pending != null) return pending;
     final future = _performStopReply(successStatus);
@@ -730,6 +742,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       await _player.stop().timeout(const Duration(seconds: 5));
       if (_playbackOwnerGeneration == owner) {
         _playedReply = false;
+        _lastCandidatePlaybackLatency = null;
         _autoResumeOwnerGeneration = null;
         if (mounted) setState(() => _cloudStatus = successStatus);
       }
@@ -749,6 +762,13 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (!mounted || !_foreground || !_listening) return;
     final candidate = _detector.add(pcm);
     if (candidate == null || !mounted) return;
+    if (_pendingBargeInText != null) {
+      _bargeInExpiry?.cancel();
+      _bargeInExpiry = null;
+      _pendingBargeInText = null;
+      _pendingBargeInGeneration = null;
+      _localTranscript = '';
+    }
     final interrupting =
         _bargeInTrial &&
         _playedReply &&
@@ -793,7 +813,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         !_speechStopUnconfirmed &&
         _speechStop == null &&
         _ownVoiceTrial) {
-      unawaited(_recognizeCandidate(candidate));
+      final candidateClock = _autoTextTrial ? (Stopwatch()..start()) : null;
+      unawaited(_recognizeCandidate(candidate, candidateClock: candidateClock));
     }
   }
 
@@ -878,10 +899,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _recognizeCandidate(
     Uint8List candidate, {
     bool fromPlayback = false,
+    Stopwatch? candidateClock,
   }) async {
     final generation = ++_localGeneration;
     _recognizing = true;
-    setState(() => _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.');
+    setState(() {
+      _localTranscript = '';
+      _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.';
+    });
     String? directedText;
     SyntheticRiskCandidate? directedRisk;
     try {
@@ -894,9 +919,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           generation != _localGeneration) {
         return;
       }
+      final recognized = transcript ?? '';
       setState(() {
-        _localTranscript = transcript ?? '';
-        _localStatus = _localTranscript.isEmpty
+        _localTranscript = _autoTextTrial ? '' : recognized;
+        _localStatus = recognized.isEmpty
             ? '기기 내에서 말을 확인하지 못했습니다. 후보 오디오는 자동 전송하지 않습니다.'
             : _proactivePaused
             ? '서버가 이 시험의 자동 글 전송을 중단했습니다. 기기 내 전사만 유지합니다.'
@@ -904,28 +930,31 @@ class _PatientMicDemoState extends State<PatientMicDemo>
             ? 'iPad 기기 내 전사 완료 · 환자 역할에게 향한 글만 판정합니다.'
             : 'iPad 기기 내 전사 완료 · 글과 오디오 모두 자동 전송하지 않습니다.';
       });
-      if (_autoTextTrial && SyntheticActivation.isDissent(_localTranscript)) {
+      if (_autoTextTrial && SyntheticActivation.isDissent(recognized)) {
         _proactivePaused = true;
         _dissentStopped = true;
         _activation.reset();
         _pendingBargeInText = null;
         _pendingBargeInGeneration = null;
+        _bargeInExpiry?.cancel();
+        _bargeInExpiry = null;
         setState(() {
+          _localTranscript = '';
+          _cloudTranscript = '';
           _localStatus = '그만하라는 발화 후보를 확인했습니다. 자동 글 시험을 중단합니다.';
           _cloudStatus = '거부 후보로 듣기와 응답을 중단합니다. 다시 시험하려면 내 목소리 동의를 새로 확인하세요.';
         });
         unawaited(_stopMicAndReply());
         return;
       }
-      final riskPhrase = SyntheticRiskCandidate.matchPhrase(_localTranscript);
+      final riskPhrase = SyntheticRiskCandidate.matchPhrase(recognized);
       if (riskPhrase != null) {
         _activation.reset();
-        final risk = SyntheticRiskCandidate.fromDirectedOwnVoice(
-          _localTranscript,
-        );
+        final risk = SyntheticRiskCandidate.fromDirectedOwnVoice(recognized);
         if (fromPlayback) {
           _pendingBargeInText = risk?.transcript;
           _pendingBargeInGeneration = risk == null ? null : _trialGeneration;
+          _armBargeInExpiry();
         } else if (_autoTextTrial && !_proactivePaused) {
           directedRisk = risk;
         }
@@ -941,22 +970,32 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           _cloudStatus = _callButtonAdvice;
         });
       } else if (fromPlayback) {
-        _pendingBargeInText = _localTranscript.isEmpty
-            ? null
-            : _localTranscript;
+        final eligible =
+            !_proactivePaused &&
+            recognized.isNotEmpty &&
+            _activation.accepts(recognized, DateTime.now());
+        _pendingBargeInText = !eligible ? null : recognized;
         _pendingBargeInGeneration = _pendingBargeInText == null
             ? null
             : _trialGeneration;
-        setState(
-          () => _localStatus = _pendingBargeInText == null
-              ? '재생 중 후보를 기기에서 확인하지 못했습니다. 서버 전송은 하지 않습니다.'
-              : '재생 중 후보를 기기에서 전사했습니다. 내 목소리인지 확인하기 전 서버 전송은 하지 않습니다.',
-        );
+        _armBargeInExpiry();
+        setState(() {
+          _localTranscript = eligible ? recognized : '';
+          _localStatus = _pendingBargeInText == null
+              ? '재생 중 후보가 활성화 규칙에 맞지 않아 글을 폐기했습니다.'
+              : '재생 중 후보를 기기에서 전사했습니다. 내 목소리인지 확인하기 전 서버 전송은 하지 않습니다.';
+        });
       } else if (_autoTextTrial &&
           !_proactivePaused &&
-          _localTranscript.isNotEmpty &&
-          _activation.accepts(_localTranscript, DateTime.now())) {
-        directedText = _localTranscript;
+          recognized.isNotEmpty &&
+          _activation.accepts(recognized, DateTime.now())) {
+        directedText = recognized;
+        setState(() => _localTranscript = recognized);
+      } else if (_autoTextTrial) {
+        setState(() {
+          _localTranscript = '';
+          _cloudTranscript = '';
+        });
       }
     } catch (_) {
       if (mounted && generation == _localGeneration) {
@@ -970,7 +1009,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _foreground &&
         generation == _localGeneration &&
         _autoTextTrial) {
-      unawaited(_sendTextTrial(directedText));
+      unawaited(_sendTextTrial(directedText, candidateClock: candidateClock));
     }
     if (directedRisk != null &&
         mounted &&
@@ -1011,7 +1050,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }, textOnly: false);
   }
 
-  Future<void> _sendTextTrial(String transcript) async {
+  Future<void> _sendTextTrial(
+    String transcript, {
+    Stopwatch? candidateClock,
+  }) async {
     if (!_autoTextTrial ||
         !_ownVoiceTrial ||
         _proactivePaused ||
@@ -1055,38 +1097,44 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       _cloudStatus = 'iPad 판정 후 글만 보내기 위해 마이크를 중단하고 있습니다.';
       _cloudTranscript = '';
       _cloudReply = '';
+      _lastCandidatePlaybackLatency = null;
     });
     if (!await _stopForTrial(generation)) return;
-    await _runTrialRequest(generation, (client) {
-      if (_pairedOnlyTrial) {
-        final session = _deviceSession;
-        if (!_pairedReady || session == null) {
-          throw const FormatException('paired device authorization expired');
+    await _runTrialRequest(
+      generation,
+      (client) {
+        if (_pairedOnlyTrial) {
+          final session = _deviceSession;
+          if (!_pairedReady || session == null) {
+            throw const FormatException('paired device authorization expired');
+          }
+          final endpoint = Uri.parse(_endpoint.text.trim()).replace(
+            path: '/internal/synthetic/paired/$syntheticPatientId/text',
+          );
+          return widget.pairedTextTrial(
+            client,
+            endpoint,
+            _token.text,
+            transcript,
+            'DIRECTED',
+            session.accessToken,
+            syntheticPatientId,
+          );
         }
         final endpoint = Uri.parse(
           _endpoint.text.trim(),
-        ).replace(path: '/internal/synthetic/paired/$syntheticPatientId/text');
-        return widget.pairedTextTrial(
+        ).replace(path: '/internal/synthetic/text');
+        return widget.textTrial(
           client,
           endpoint,
           _token.text,
           transcript,
           'DIRECTED',
-          session.accessToken,
-          syntheticPatientId,
         );
-      }
-      final endpoint = Uri.parse(
-        _endpoint.text.trim(),
-      ).replace(path: '/internal/synthetic/text');
-      return widget.textTrial(
-        client,
-        endpoint,
-        _token.text,
-        transcript,
-        'DIRECTED',
-      );
-    }, textOnly: true);
+      },
+      textOnly: true,
+      candidateClock: candidateClock,
+    );
   }
 
   Future<void> _sendSyntheticRiskAlert(SyntheticRiskCandidate candidate) async {
@@ -1185,6 +1233,23 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
+  void _armBargeInExpiry() {
+    _bargeInExpiry?.cancel();
+    _bargeInExpiry = null;
+    if (_pendingBargeInText == null) return;
+    final generation = _trialGeneration;
+    _bargeInExpiry = Timer(const Duration(seconds: 30), () {
+      if (!mounted || generation != _trialGeneration) return;
+      setState(() {
+        _pendingBargeInText = null;
+        _pendingBargeInGeneration = null;
+        _localTranscript = '';
+        _localStatus = '끼어든 글의 확인 시간이 지나 후보를 폐기했습니다.';
+      });
+      _bargeInExpiry = null;
+    });
+  }
+
   void _confirmBargeInText() {
     final transcript = _pendingBargeInText;
     if (transcript == null ||
@@ -1203,8 +1268,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
     _pendingBargeInText = null;
     _pendingBargeInGeneration = null;
+    _bargeInExpiry?.cancel();
+    _bargeInExpiry = null;
     if (!_activation.accepts(transcript, DateTime.now())) {
-      setState(() => _cloudStatus = '끼어든 글이 내부 활성화 규칙에 맞지 않아 전송하지 않았습니다.');
+      setState(() {
+        _localTranscript = '';
+        _cloudTranscript = '';
+        _cloudStatus = '끼어든 글이 내부 활성화 규칙에 맞지 않아 전송하지 않았습니다.';
+      });
       return;
     }
     unawaited(_sendTextTrial(transcript));
@@ -1217,6 +1288,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       _bargeInTrial = false;
       _pendingBargeInText = null;
       _pendingBargeInGeneration = null;
+      _bargeInExpiry?.cancel();
+      _bargeInExpiry = null;
+      _localTranscript = '';
       _cloudStatus = sharedMic
           ? '끼어들기 실험을 끄고 일반 듣기로 전환하고 있습니다.'
           : '재생 중 끼어들기 실험을 껐습니다.';
@@ -1264,6 +1338,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     int generation,
     Future<SyntheticCloudReply> Function(HttpClient) send, {
     required bool textOnly,
+    Stopwatch? candidateClock,
   }) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
@@ -1273,7 +1348,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       final result = await send(client).timeout(const Duration(seconds: 70));
       if (!mounted || !_foreground || generation != _trialGeneration) return;
       setState(() {
-        _cloudTranscript = result.transcript;
+        _cloudTranscript = result.reply == null ? '' : result.transcript;
         _cloudReply = result.reply ?? '';
         _cloudStatus = result.mp3 == null
             ? result.reply == null
@@ -1311,6 +1386,20 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         await _player
             .play(result.mp3!, concurrentMic: concurrentMicStarted)
             .timeout(const Duration(seconds: 10));
+        if (candidateClock != null &&
+            mounted &&
+            _foreground &&
+            _ownVoiceTrial &&
+            _autoTextTrial &&
+            generation == _trialGeneration &&
+            _playbackOwnerGeneration == generation &&
+            _playedReply) {
+          candidateClock.stop();
+          setState(() {
+            _lastCandidatePlaybackLatency =
+                '기기 발화 후보 확정 → 재생 시작 명령 확인: ${candidateClock.elapsedMilliseconds} ms';
+          });
+        }
         if (concurrentMicStarted) {
           setState(() => _sending = false);
         }
@@ -1400,7 +1489,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   Future<void> _stop({bool keepDeviceAuth = false}) async {
+    _lastCandidatePlaybackLatency = null;
+    _pendingBargeInText = null;
+    _pendingBargeInGeneration = null;
+    _bargeInExpiry?.cancel();
+    _bargeInExpiry = null;
     if (!keepDeviceAuth) {
+      _localTranscript = '';
+      _cloudTranscript = '';
       _clearDeviceAuth();
       if (mounted) setState(() {});
     }
@@ -1458,6 +1554,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _trialGeneration++;
+    _lastCandidatePlaybackLatency = null;
     _localGeneration++;
     if (_recognizing ||
         _localEnabled ||
@@ -1466,6 +1563,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       unawaited(_cancelLocalSpeech());
     }
     _candidateExpiry?.cancel();
+    _bargeInExpiry?.cancel();
     _sessionExpiry?.cancel();
     _subscription?.cancel();
     _recorder.dispose();
@@ -2008,6 +2106,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   ),
                                 ),
                               ),
+                              if (_lastCandidatePlaybackLatency != null) ...[
+                                const SizedBox(height: 8),
+                                Text(_lastCandidatePlaybackLatency!),
+                              ],
                               const SizedBox(height: 12),
                               Semantics(
                                 liveRegion: true,
