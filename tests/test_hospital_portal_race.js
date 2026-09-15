@@ -42,6 +42,7 @@ async function run() {
   let latePost = null;
   let lateReadiness = null;
   const registrationPosts = [];
+  const detailReads = [];
   async function fetch(url, options = {}) {
     if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
     if (url.includes('/auth/v1/token')) return reply(200, { access_token: `session-${++logins}` });
@@ -54,19 +55,33 @@ async function run() {
         staff_display_name: registrationPosts.at(-1).payload.staff_display_name, encounter_id: null });
       return reply(postStatus, null);
     }
+    if (url.includes('hospital_context_current') || url.includes('hospital_message_list')) {
+      assert.equal(options.method || 'GET', 'GET', 'hospital information remains read-only');
+      detailReads.push(url);
+    }
     if (url.includes('hospital_context_current?patient_id=eq.A')) {
       if (++aFacts === 1) return oldA.promise;
-      return reply(200, [{ encounter_id: 'A', category: 'room', content: '새 세션 A' }]);
+      return reply(200, [{ encounter_id: 'A', category: 'room', content: '새 세션 A',
+        verified_at: '2026-09-15T03:00:00Z', valid_until: null }]);
     }
     if (url.includes('hospital_message_list?patient_id=eq.A')) return reply(200, [
-      { encounter_id: 'A', approved_text: '가상 오후 예약', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+      { encounter_id: 'A', approved_text: '가상 오후 예약', approved_by_staff_ref: 'TEST-APPROVER',
+        approved_at: '2026-09-15T03:00:00Z', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
     ]);
     if (url.includes('hospital_context_current?patient_id=eq.B')) {
       if (++bFacts === 2) return staleB.promise;
-      return reply(200, [{ encounter_id: 'B', category: 'room', content: 'B 병실' }]);
+      return reply(200, [{ encounter_id: 'B', category: 'room', content: 'B 병실',
+        verified_at: '2026-09-15T03:00:00Z', valid_until: '2026-09-16T03:00:00Z' }]);
     }
     if (url.includes('hospital_message_list?patient_id=eq.B')) return reply(200, [
-      { encounter_id: 'B', approved_text: '가상 B 예약', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+      { encounter_id: 'B', approved_text: '가상 B 전달 기록', approved_by_staff_ref: 'TEST-APPROVER',
+        approved_at: '2026-09-15T03:00:00Z', due_at: '2026-09-15T04:00:00Z',
+        delivery_status: 'delivered', delivered_at: '2026-09-15T04:30:00Z' },
+      { encounter_id: 'B', approved_text: '가상 B 예약 원문', approved_by_staff_ref: 'TEST-APPROVER',
+        approved_at: '2026-09-15T03:00:00Z', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+      { encounter_id: 'B', approved_text: '가상 B 취소 기록', approved_by_staff_ref: 'TEST-APPROVER',
+        approved_at: '2026-09-15T03:00:00Z', due_at: '2026-09-15T07:00:00Z',
+        delivery_status: 'cancelled', cancelled_at: '2026-09-15T03:30:00Z' },
     ]);
     throw new Error(`unexpected URL ${url}`);
   }
@@ -89,7 +104,19 @@ async function run() {
   const aRead = elements.patients.children[0].handlers.click();
   await pause();
   await elements.patients.children[1].handlers.click();
+  assert.match(detailReads.find(url => url.includes('hospital_context_current?patient_id=eq.B')), /verified_at,valid_until/);
+  assert.match(detailReads.find(url => url.includes('hospital_message_list?patient_id=eq.B')), /approved_by_staff_ref,approved_at.*delivered_at,cancelled_at/);
   assert.deepEqual(displayed(), ['B 병실']);
+  assert.equal(elements.facts.children[0].children[0].textContent, '병실', 'known hospital fact category is legible in Korean');
+  assert.match(elements.facts.children[0].children[2].textContent, /검증 기록.*12:00.*유효 종료.*12:00/,
+    'staff can inspect the verified and expiry time of a current hospital fact');
+  assert.equal(elements.messages.children[0].children[1].textContent, '가상 B 예약 원문',
+    'pending approved message appears first with exact source wording');
+  assert.match(elements.messages.children[1].children[2].textContent, /승인자 참조 TEST-APPROVER.*전달 기록.*13:30/,
+    'delivered status includes approval attribution and timestamp');
+  assert.match(elements.messages.children[2].children[2].textContent, /취소 기록.*12:30/,
+    'cancelled message keeps its cancellation timestamp');
+  assert.match(elements['detail-status'].textContent, /승인 사실 1건.*메시지 3건.*전달 대기 1건/);
   oldA.resolve(reply(200, [{ encounter_id: 'A', category: 'room', content: '오래된 A 병실' }]));
   await aRead;
   assert.deepEqual(displayed(), ['B 병실'], 'late A fact cannot appear for B');

@@ -59,6 +59,17 @@ def main() -> None:
         ):
             status, rows = request(f"{base}/{path}?select={field}", "GET", public, token, schema="api")
             assert status == 200 and rows == [{field: expected}], f"staff {path}: {status}"
+        status, facts = request(
+            f"{base}/hospital_context_current?patient_id=eq.{patient}&select=category,content,encounter_id,verified_at,valid_until",
+            "GET", public, token, schema="api",
+        )
+        assert status == 200 and len(facts) == 1 and facts[0]["verified_at"] and facts[0]["valid_until"] is None
+        status, messages = request(
+            f"{base}/hospital_message_list?patient_id=eq.{patient}&select=approved_text,approved_by_staff_ref,approved_at,due_at,delivery_status,delivered_at,cancelled_at,encounter_id",
+            "GET", public, token, schema="api",
+        )
+        assert status == 200 and len(messages) == 1 and messages[0]["approved_by_staff_ref"] == "TEST-APPROVER"
+        assert messages[0]["approved_at"] and messages[0]["due_at"] and messages[0]["delivery_status"] == "pending"
         status, _ = request(f"{base}/hospital_patient_list?select=patient_id", "GET", public, schema="api")
         assert status in (401, 403), f"anonymous patient read: {status}"
 

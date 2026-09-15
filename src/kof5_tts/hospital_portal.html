@@ -43,6 +43,7 @@
     .fact { padding: 16px 18px; border: 1px solid #e0e8df; border-radius: 12px; background: #fafcf9; }
     .fact h3 { color: #3a6956; }
     .fact p { margin: 0; white-space: pre-wrap; }
+    .fact .meta { margin-top: 12px; font-size: 13px; color: #63736a; line-height: 1.5; }
     .divider { border: 0; border-top: 1px solid #e4e9e3; margin: 24px 0; }
     @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
     @media (max-width: 520px) { header { padding: 18px 20px; } main { padding: 32px 15px 50px; } .card { padding: 24px 20px; } }
@@ -97,6 +98,7 @@
       <section class="card" id="detail-card" aria-labelledby="detail-title" hidden>
         <h2 id="detail-title">현재 입원 정보</h2>
         <p id="detail-summary"></p>
+        <p class="small">현재 유효한 병원 사실과 이번 입원의 승인 메시지 기록을 확인합니다. 생성·승인·발송·변경은 기관 승인 업무 흐름에서 처리합니다.</p>
         <hr class="divider">
         <h3>직원 승인 사실</h3>
         <div id="facts" class="facts"></div>
@@ -116,6 +118,7 @@
     const encounter = patient => patient.encounter_id ?
       `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
     const delivery = { pending: '전달 대기', delivered: '전달됨', cancelled: '취소됨' };
+    const factLabel = { hospital: '병원', room: '병실', test: '검사', visiting: '면회', schedule: '일정' };
     const hospitalTime = timestamp => new Intl.DateTimeFormat('ko-KR', {
       dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul', hourCycle: 'h23',
     }).format(new Date(timestamp)) + ' (한국 시간)';
@@ -190,27 +193,40 @@
       try {
         const id = encodeURIComponent(patient.patient_id);
         const [facts, messages] = await Promise.all([
-          supabase(`/rest/v1/hospital_context_current?patient_id=eq.${id}&select=category,content,encounter_id`, token, generation),
-          supabase(`/rest/v1/hospital_message_list?patient_id=eq.${id}&select=approved_text,due_at,delivery_status,encounter_id`, token, generation),
+          supabase(`/rest/v1/hospital_context_current?patient_id=eq.${id}&select=category,content,encounter_id,verified_at,valid_until`, token, generation),
+          supabase(`/rest/v1/hospital_message_list?patient_id=eq.${id}&select=approved_text,approved_by_staff_ref,approved_at,due_at,delivery_status,delivered_at,cancelled_at,encounter_id`, token, generation),
         ]);
         if (!current()) return;
-        const add = (container, title, content) => {
+        const add = (container, title, content, meta) => {
           const card = document.createElement('article');
           card.className = 'fact';
           const heading = document.createElement('h3');
           heading.textContent = title;
           const body = document.createElement('p');
           body.textContent = content;
-          card.append(heading, body);
+          const note = document.createElement('div');
+          note.className = 'meta';
+          note.textContent = meta;
+          card.append(heading, body, note);
           container.append(card);
         };
-        for (const fact of facts.filter(item => !item.encounter_id || item.encounter_id === patient.encounter_id))
-          add($('facts'), fact.category, fact.content);
-        for (const message of messages.filter(item => item.encounter_id === patient.encounter_id))
-          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · ${hospitalTime(message.due_at)}`, message.approved_text);
+        const currentFacts = facts.filter(item => !item.encounter_id || item.encounter_id === patient.encounter_id);
+        const currentMessages = messages.filter(item => item.encounter_id === patient.encounter_id)
+          .sort((a, b) => (a.delivery_status === 'pending' ? 0 : 1) - (b.delivery_status === 'pending' ? 0 : 1)
+            || new Date(a.due_at) - new Date(b.due_at));
+        for (const fact of currentFacts)
+          add($('facts'), factLabel[fact.category] || fact.category, fact.content,
+            `검증 기록 ${hospitalTime(fact.verified_at)} · 유효 종료 ${fact.valid_until ? hospitalTime(fact.valid_until) : '기한 없음'}`);
+        for (const message of currentMessages) {
+          const stateTime = message.delivery_status === 'delivered' ? `전달 기록 ${hospitalTime(message.delivered_at)}`
+            : message.delivery_status === 'cancelled' ? `취소 기록 ${hospitalTime(message.cancelled_at)}` : '전달 상태 대기';
+          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · 예약 ${hospitalTime(message.due_at)}`,
+            message.approved_text,
+            `승인 기록 ${hospitalTime(message.approved_at)} · 승인자 참조 ${message.approved_by_staff_ref} · ${stateTime}`);
+        }
         if (!$('facts').children.length) $('facts').textContent = '현재 유효한 승인 사실이 없습니다.';
         if (!$('messages').children.length) $('messages').textContent = '현재 입원의 승인 메시지가 없습니다.';
-        $('detail-status').textContent = '병원 승인 정보만 표시했습니다.';
+        $('detail-status').textContent = `유효한 승인 사실 ${currentFacts.length}건 · 이번 입원 메시지 ${currentMessages.length}건 (전달 대기 ${currentMessages.filter(message => message.delivery_status === 'pending').length}건).`;
         $('detail-card').hidden = false;
       } catch (_) {
         if (current()) $('detail-status').textContent = '병원 정보를 읽지 못했습니다. 권한과 연결을 다시 확인하세요.';
