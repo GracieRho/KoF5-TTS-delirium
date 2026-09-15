@@ -6,7 +6,7 @@
 
 - `demo_companion_text.py`: 합성 사실·발화로 PRD의 첫 대화 흐름을 확인(오디오·클라우드 호출 없음)
 - `run_backend.py`: `127.0.0.1`에서 합성 환자 전용 텍스트 API를 실행
-- `demo_cloud_pipeline.py`: 합성 WAV와 동의된 시험용 voice ID로 후보 hosted API 왕복을 측정(MP3는 Git 제외 `runs/`에 저장)
+- `demo_cloud_pipeline.py`: 합성 WAV와 동의된 시험용 voice ID로 후보 WAV 준비 후 hosted API 응답 완료까지 단조 시계로 측정(MP3는 Git 제외 `runs/`에 저장). 실제 공급업체 호출만 실측이며 로컬 mock 검사는 계측 경로 검증일 뿐 지연 KPI가 아닙니다. 완성 MP3까지의 시간은 PRD의 발화 종료→첫 TTS 오디오 3초 목표와 측정 구간이 다릅니다.
 - `generate_architecture.py`: 코드·설정 목록과 MVP 목표 흐름을 `architecture/generated/`에 생성
 - `test_generate_architecture.py`: 생성기의 기본 동작과 결정성 검증
 - `download_aihub.py`: AI Hub 데이터셋·파일 목록 조회 및 승인 데이터 다운로드
