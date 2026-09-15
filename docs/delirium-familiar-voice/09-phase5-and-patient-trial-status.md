@@ -16,7 +16,7 @@
 
 병원 화면의 [첫 합성 음성 시험 준비 조회](../../supabase/migrations/20260916110000_synthetic_voice_enrollment_ready.sql)는 담당 직원·현재 입원·기관 승인·환자 참여/음성 기능 동의와 assent·입원 중 거부 없음을 확인한다. **활성 프로필을 선행 조건으로 요구하지 않으며** 기존 프로필 상태는 정보로만 보여준다. 브라우저의 30초 이내 시험자 본인 음성 채집은 중단 시 마이크 트랙과 오디오 참조를 폐기하고 업로드·특징 추출·프로필 생성·실제 환자 사용을 하지 않는다([ADR-0008](../../architecture/decisions/0008-synthetic-first-voice-enrollment-readiness.md)).
 
-별도 보호자 웹의 고정 합성 환자 자가 음성 시험은 본인 Auth JWT·검증된 연결·활성 `guardian_voice_clone` 동의를 확인하며 공급자 업로드 스위치는 기본 꺼져 있다. 20~30초 PCM16 WAV 세 샘플의 웹 채집·서버 등록/대조/삭제는 로컬·모의 검사만 통과했다. 서버는 `pending`을 공급자 전송 전에 기록하고 같은 요청의 재전송을 막으며, `DELETE` 응답이 아닌 원격 목록 부재 확인 뒤에만 `deleted`를 기록한다([ADR-0010 제안](../../architecture/decisions/0010-guardian-voice-lifecycle-and-deletion-proof.md)). 실제 공급자 업로드·삭제·원본/백업 보존 확인, 실제 보호자 음성·임상 사용은 미검증이다.
+별도 보호자 웹의 고정 합성 환자 자가 음성 시험은 본인 Auth JWT·검증된 연결·활성 `guardian_voice_clone` 동의를 확인하며 공급자 업로드 스위치는 기본 꺼져 있다. 20~30초 PCM16 WAV 세 샘플의 웹 채집·서버 등록/대조/삭제는 로컬·모의 검사만 통과했다. 서버는 `pending`을 공급자 전송 전에 기록하고 같은 요청의 재전송을 막는다. 생성 중 이름 검색 0건은 삭제 증거가 아니며, 정확한 ID의 DELETE 성공과 그 뒤의 완전한 목록 부재를 확인할 때만 `deleted`를 기록한다([ADR-0010 제안](../../architecture/decisions/0010-guardian-voice-lifecycle-and-deletion-proof.md)). 실제 공급자 업로드·삭제·원본/백업 보존 확인, 실제 보호자 음성·임상 사용은 미검증이다.
 
 기기와 가족 기억을 매 턴 확인하는 [단일 의미 검색 RPC](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)는 호출 시점의 DB 스냅샷에서 `authorized`와 최대 3건의 일반 기억을 함께 반환한다. [FastAPI 합성 경로](../../src/kof5_tts/api.py)는 외부 임베딩 전에 기기 배정을 사전 확인하고, 임베딩 뒤 RPC가 `authorized=false`를 반환하거나 실패하면 답변·TTS 호출을 중단한다. 사전 확인 뒤 철회가 일어나면 이미 시작한 외부 임베딩을 취소하는 보장은 없다. 로컬 합성 Auth/Data API→FastAPI 모의 공급자 검사와 실제 iPad·원격 공급자·환자 시험은 서로 다른 검증 단계다.
 

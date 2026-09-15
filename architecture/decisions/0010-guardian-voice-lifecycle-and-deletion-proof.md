@@ -9,7 +9,7 @@
 
 별도 `guardian_voice_clone` 동의와 검증된 보호자 Auth 연결을 요구한다. [DB lifecycle 초안](../../supabase/migrations/20260916143000_synthetic_guardian_voice_lifecycle.sql)은 공급자 slug·`voice_id`·`pending`/`verification_pending`/`created`/`deletion_pending`/`deleted`/`failed` 상태만 보관하고 원본 음성·전사·API 키를 저장하지 않는다. 공급자 POST 전에 고유 요청을 `pending`으로 기록하고 불확실한 결과는 재등록 대신 조회로 조정한다. 유효한 연결·동의와 확인된 clone만 TTS에 사용하며 철회나 삭제 대기 때 즉시 사용을 차단한다.
 
-공급자 DELETE의 성공 응답만으로 `deleted`로 표시하지 않는다. 정확한 `voice_id`가 공급자 계정의 조회 목록에서 더는 보이지 않는지 확인한 뒤에만 삭제 확인 시각을 남긴다. 조회가 실패하거나 ID가 아직 보이면 `deletion_pending`을 유지한다. 현재 [자가 음성 CLI](../../scripts/demo_voice_enrollment.py)와 [시험 공급자 helper](../../src/kof5_tts/cloud_prototype.py)는 이 API 후조건을 모의 응답으로 검사한다. 이는 **계정 목록에서의 부재**이며 공급자 내부 샘플·백업·보존 자료의 삭제 증명은 아니다.
+공급자 DELETE의 성공 응답만으로 `deleted`로 표시하지 않는다. 공급자 생성 요청이 진행 중이면 이름 검색 0건도 완료 증거가 아니므로 정확한 `voice_id`가 확인될 때까지 `deletion_pending`을 유지한다. ID가 확인되면 먼저 그 ID의 DELETE `status=ok`를 받고, 이어 완전한 ID 조회에서 부재를 확인한 뒤에만 삭제 확인 시각을 남긴다. DELETE 404·시간 초과·조회 실패는 완료로 간주하지 않는다. 이전 DELETE 성공을 DB에 영속 기록하지 않았으므로, 성공 후 DB 확인이 실패한 재시도에서 404가 나오면 대기 상태와 운영자 확인이 필요하다. 현재 [자가 음성 CLI](../../scripts/demo_voice_enrollment.py)와 [시험 공급자 helper](../../src/kof5_tts/cloud_prototype.py)는 이 API 후조건을 모의 응답으로 검사한다. 이는 **계정 목록에서의 부재**이며 공급자 내부 샘플·백업·보존 자료의 삭제 증명은 아니다.
 
 ## 환자 시험 전 남은 조건
 
