@@ -117,6 +117,9 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
     claims = findall(r"\d{1,4}(?:년|월|일|시|호)?|오늘|내일|어제|곧|다음 주|CT|검사|퇴원|수술|병실|진료|결과", text)
     if any(claim not in known_fact for claim in claims):
         raise ValueError("LLM response adds an unverified fact claim")
+    # ponytail: this demo has only historical travel; allow whereabouts after a valid, structured fact exists.
+    if search(r"[가-힣A-Za-z0-9]{2,}에\s*(?:있어|있습니다|계셔|계십니다)", text):
+        raise ValueError("LLM response adds an unverified current location")
     return text
 
 

@@ -144,6 +144,24 @@ class CloudPrototypeTests(unittest.TestCase):
                         )
                 self.assertEqual(hosts, ["api.openai.com"])
 
+    def test_historical_family_fact_cannot_become_current_location(self) -> None:
+        hosts = []
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "completed", "output": [{
+                    "type": "message", "content": [{"type": "output_text", "text": "수민이는 제주도에 있어."}],
+                }]})
+            raise AssertionError("unverified whereabouts must not reach TTS")
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            with self.assertRaisesRegex(ValueError, "unverified current location"):
+                run_synthetic_text_pipeline(
+                    client, "우리 제주도 언제 갔었지?", "DIRECTED",
+                    "2024년 5월에 수민과 제주도 여행을 갔다.",
+                    CloudCredentials("d", "o", "e", "v", True),
+                )
+        self.assertEqual(hosts, ["api.openai.com"])
+
     def test_missing_consent_and_invalid_audio_never_reach_providers(self) -> None:
         with self.assertRaises(ValueError):
             CloudCredentials("d", "o", "e", "v", False)
