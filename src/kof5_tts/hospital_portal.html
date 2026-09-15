@@ -480,6 +480,12 @@
       if (stream) for (const track of stream.getTracks()) track.stop();
     }
 
+    function stopOwnedPendingVoiceStream(stream) {
+      if (!stream) return;
+      if (state.voicePendingStream === stream) state.voicePendingStream = null;
+      for (const track of stream.getTracks()) track.stop();
+    }
+
     function suspendVoiceCapture() {
       ++state.voiceRequest;
       stopVoiceCapture(true);
@@ -493,10 +499,10 @@
       $('synthetic-voice-status').textContent = '화면이 숨겨져 마이크 시험을 중단했습니다. 다시 선택해 준비 상태를 확인하세요.';
     }
 
-    function stopVoiceCapture(silent = false, reason = '수동 중단') {
-      const capture = state.voiceCapture;
-      if (!capture) return;
-      state.voiceCapture = null;
+    function stopVoiceCapture(silent = false, reason = '수동 중단', capture = state.voiceCapture) {
+      if (!capture?.recorder) return;
+      const currentCapture = state.voiceCapture === capture;
+      if (currentCapture) state.voiceCapture = null;
       capture.active = false;
       clearInterval(capture.tick);
       clearTimeout(capture.deadline);
@@ -509,7 +515,7 @@
       const seconds = (Date.now() - capture.startedAt) / 1000;
       capture.stream = null;
       capture.recorder = null;
-      if (!silent) {
+      if (!silent && currentCapture) {
         $('synthetic-voice-duration').textContent = `${seconds.toFixed(1)}초 / 30초 시험 목표`;
         $('synthetic-voice-status').textContent = `${reason}. 마이크를 중단하고 앱의 오디오 참조를 해제했습니다. 추가 보관·전송, 환자 화자 확인·프로필 생성은 하지 않았습니다.`;
         $('synthetic-voice-start').disabled = !state.voiceReady;
@@ -517,14 +523,14 @@
       }
     }
 
-    async function voiceReadyRpc(token, generation) {
+    async function voiceReadyRpc(token, current) {
       const response = await fetch(state.config.url + '/rest/v1/rpc/synthetic_voice_enrollment_ready', {
         method: 'POST', headers: { apikey: state.config.publishable_key,
           Authorization: `Bearer ${token}`, 'Content-Profile': 'api', 'Content-Type': 'application/json' },
         body: '{}',
       });
       if (!response.ok) {
-        if (generation === state.generation && token === state.token && [401, 403].includes(response.status))
+        if (current() && [401, 403].includes(response.status))
           clearSession('합성 음성 시험 직원 권한이 유효하지 않아 정보를 숨겼습니다.');
         throw new Error(String(response.status));
       }
@@ -550,7 +556,7 @@
       state.voiceReady = false;
       if (!token || !staffId || patientId !== syntheticPatientId || !encounterId) return;
       try {
-        const rows = await voiceReadyRpc(token, generation);
+        const rows = await voiceReadyRpc(token, current);
         if (!current()) return;
         if (!Array.isArray(rows) || rows.length !== 1 || rows[0].patient_id !== patientId
             || !voiceProfileLabel[rows[0].voice_profile_state]
@@ -587,8 +593,9 @@
       $('synthetic-voice-start').disabled = true;
       $('synthetic-voice-status').textContent = '직원 자격을 다시 확인한 뒤 시험자 본인 마이크 권한을 요청합니다.';
       let stream = null;
+      let localCapture = null;
       try {
-        const rows = await voiceReadyRpc(token, generation);
+        const rows = await voiceReadyRpc(token, current);
         if (!current() || !voiceForeground()) return;
         if (!Array.isArray(rows) || rows.length !== 1 || rows[0].ready !== true
             || rows[0].patient_id !== syntheticPatientId) {
@@ -604,14 +611,14 @@
           return;
         }
         state.voicePendingStream = stream;
-        const fresh = await voiceReadyRpc(token, generation);
+        const fresh = await voiceReadyRpc(token, current);
         if (!current() || !voiceForeground()) {
-          stopPendingVoiceStream();
+          stopOwnedPendingVoiceStream(stream);
           return;
         }
         if (!Array.isArray(fresh) || fresh.length !== 1 || fresh[0].ready !== true
             || fresh[0].patient_id !== syntheticPatientId) {
-          stopPendingVoiceStream();
+          stopOwnedPendingVoiceStream(stream);
           state.voiceReady = false;
           $('synthetic-voice-section').hidden = true;
           return;
@@ -619,6 +626,7 @@
         const recorder = new MediaRecorder(stream);
         const capture = { stream, recorder, chunks: [], startedAt: Date.now(),
           active: true, tick: null, deadline: null };
+        localCapture = capture;
         recorder.ondataavailable = event => {
           if (capture.active && current() && event.data?.size) capture.chunks.push(event.data);
         };
@@ -626,7 +634,7 @@
         recorder.onstop = () => { if (state.voiceCapture === capture) stopVoiceCapture(false, '마이크 종료'); };
         recorder.start(1000);
         state.voiceCapture = capture;
-        state.voicePendingStream = null;
+        if (state.voicePendingStream === stream) state.voicePendingStream = null;
         capture.tick = setInterval(() => {
           if (!current() || state.voiceCapture !== capture) return;
           const seconds = (Date.now() - capture.startedAt) / 1000;
@@ -640,9 +648,8 @@
         $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
         $('synthetic-voice-status').textContent = '시험자 본인 음성을 메모리에서만 녹음 중입니다. 중단 시 앱의 오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
       } catch (_) {
-        stopVoiceCapture(true);
-        stopPendingVoiceStream();
-        if (stream) for (const track of stream.getTracks()) track.stop();
+        if (localCapture) stopVoiceCapture(true, '요청 오류', localCapture);
+        stopOwnedPendingVoiceStream(stream);
         if (current()) {
           if (stream) {
             state.voiceReady = false;

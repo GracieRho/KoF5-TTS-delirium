@@ -924,6 +924,9 @@ async function runSyntheticVoice() {
   let ready = false;
   let state = 'none';
   let readinessStatus = 200;
+  let readinessCalls = 0;
+  let deferReadyAt = null;
+  let deferredReady = null;
   let permissionPending = null;
   let micCalls = 0;
   let nowMs = 0;
@@ -965,6 +968,7 @@ async function runSyntheticVoice() {
       assert.equal(options.method, 'POST');
       assert.equal(options.headers['Content-Profile'], 'api');
       assert.equal(options.body, '{}', 'readiness RPC transmits no audio');
+      if (++readinessCalls === deferReadyAt) return deferredReady.promise;
       return reply(readinessStatus, [{ ready, patient_id: fixture.patient_id, voice_profile_state: state }]);
     }
     if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
@@ -1019,22 +1023,73 @@ async function runSyntheticVoice() {
 
   await selectFixture();
   permissionPending = pending();
+  const oldPermission = permissionPending;
   const hiddenPermission = start();
   await pause();
   document.hidden = true;
   document.visibilityState = 'hidden';
   document.handlers.visibilitychange();
-  const hiddenStream = makeStream();
-  permissionPending.resolve(hiddenStream);
-  await hiddenPermission;
-  assert.equal(hiddenStream.track.stopped, true,
-    'permission granted after tab hidden cannot create a recorder');
-  assert.equal(recorders.length, 2);
-  assert.equal(elements['synthetic-voice-section'].hidden, true);
-  assert.equal(elements['synthetic-voice-start'].disabled, true);
   document.hidden = false;
   document.visibilityState = 'visible';
   permissionPending = null;
+  await selectFixture();
+  await start();
+  const newerCapture = streams.at(-1);
+  const hiddenStream = makeStream();
+  oldPermission.resolve(hiddenStream);
+  await hiddenPermission;
+  assert.equal(hiddenStream.track.stopped, true,
+    'stale A permission stream is closed after B capture starts');
+  assert.equal(newerCapture.track.stopped, false, 'stale A cannot close newer B microphone');
+  assert.equal(elements['patient-card'].hidden, false);
+  elements['synthetic-voice-stop'].handlers.click();
+
+  await selectFixture();
+  permissionPending = pending();
+  const oldDeniedPermission = permissionPending;
+  const deniedOldStart = start();
+  await pause();
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  document.handlers.visibilitychange();
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  permissionPending = null;
+  await selectFixture();
+  await start();
+  const bAfterDenial = streams.at(-1);
+  oldDeniedPermission.resolve(Promise.reject(new Error('old mic permission denied')));
+  await deniedOldStart;
+  assert.equal(bAfterDenial.track.stopped, false,
+    'late A permission rejection cannot stop active B capture');
+  assert.equal(elements['patient-card'].hidden, false);
+  elements['synthetic-voice-stop'].handlers.click();
+
+  await selectFixture();
+  deferredReady = pending();
+  deferReadyAt = readinessCalls + 2;
+  const staleFreshReady = start();
+  await pause();
+  const aWaitingForReady = streams.at(-1);
+  assert.equal(aWaitingForReady.track.stopped, false);
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  document.handlers.visibilitychange();
+  assert.equal(aWaitingForReady.track.stopped, true, 'hidden tab stops A pending stream');
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  await selectFixture();
+  await start();
+  const bAfterReady = streams.at(-1);
+  deferredReady.resolve(reply(403, null));
+  await staleFreshReady;
+  assert.equal(bAfterReady.track.stopped, false,
+    'stale A readiness 403/pending cleanup cannot stop B track');
+  assert.equal(elements['patient-card'].hidden, false,
+    'stale A 403 cannot clear B current staff session');
+  deferReadyAt = null;
+  deferredReady = null;
+  elements['synthetic-voice-stop'].handlers.click();
 
   await selectFixture();
   await start();
@@ -1055,7 +1110,8 @@ async function runSyntheticVoice() {
   await revokedDuringPermission;
   assert.equal(revokedStream.track.stopped, true,
     'fresh readiness denial after permission wait closes the returned stream');
-  assert.equal(recorders.length, 3, 'revoked consent cannot start a MediaRecorder');
+  assert.equal(recorders.at(-1).stream === revokedStream, false,
+    'revoked consent cannot start a MediaRecorder');
   assert.equal(elements['synthetic-voice-section'].hidden, true);
   ready = true;
   permissionPending = null;
@@ -1072,7 +1128,7 @@ async function runSyntheticVoice() {
   await pendingStart;
   assert.equal(lateStream.track.stopped, true, 'late mic permission response closes tracks after logout');
   assert.equal(elements['synthetic-voice-section'].hidden, true);
-  assert.equal(recorders.length, 3, 'late permission creates no recorder');
+  assert.equal(recorders.at(-1).stream === lateStream, false, 'late permission creates no recorder');
   permissionPending = null;
 
   elements.email.value = 'voice-staff@example.invalid';
