@@ -16,7 +16,8 @@ import httpx
 
 import _bootstrap  # noqa: F401
 from kof5_tts.cloud_prototype import (
-    delete_test_voice, enroll_test_voice, find_test_voice, validate_test_voice_samples,
+    delete_test_voice, enroll_test_voice, find_test_voice, test_voice_present,
+    validate_test_voice_samples,
 )
 
 MANIFEST = Path(__file__).resolve().parents[1] / "runs" / "internal-test-voice.json"
@@ -108,13 +109,15 @@ def main(argv: list[str] | None = None) -> int:
             record = json.loads(MANIFEST.read_text(encoding="utf-8"))
             if not isinstance(record, dict) or not isinstance(record.get("name"), str) or not re.fullmatch(
                 r"KoF5 internal self-voice test [0-9a-f]{32}", record["name"]
-            ):
+            ) or record.get("status") not in ("pending", "created", "recovered", "deletion_pending"):
                 parser.error("시험 clone 기록이 손상됐습니다")
             voice_id = record.get("voice_id")
             if voice_id is not None and (
                 not isinstance(voice_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id)
             ):
                 parser.error("시험 clone ID 기록이 손상됐습니다")
+            if record["status"] == "deletion_pending" and voice_id is None:
+                parser.error("삭제 확인 중인 시험 clone ID 기록이 필요합니다")
             with httpx.Client(timeout=30) as client:
                 if voice_id is None:
                     voice_id = find_test_voice(client, record["name"], key)
@@ -123,8 +126,17 @@ def main(argv: list[str] | None = None) -> int:
                     save_manifest({"status": "recovered", "name": record["name"],
                                    "voice_id": voice_id, "requires_verification": None})
                 if args.action == "reconcile":
+                    if record["status"] == "deletion_pending":
+                        parser.error("삭제 확인 중입니다. delete --confirm-delete를 다시 실행하세요")
                     print(f"시험 voice ID 복구: {voice_id} · 검증 상태 미확인")
                     return 0
+                if record["status"] == "deletion_pending":
+                    if not test_voice_present(client, voice_id, key):
+                        MANIFEST.unlink()
+                        print("시험 clone 공급자 삭제 확인")
+                        return 0
+                else:
+                    save_manifest({**record, "status": "deletion_pending", "voice_id": voice_id})
                 delete_test_voice(client, voice_id, key)
             MANIFEST.unlink()
     except httpx.HTTPError:

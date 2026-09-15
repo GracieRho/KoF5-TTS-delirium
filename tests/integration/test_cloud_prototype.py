@@ -442,7 +442,10 @@ class CloudPrototypeTests(unittest.TestCase):
             if request.method == "POST":
                 return httpx.Response(200, json={"voice_id": "internal-voice-123",
                                                  "requires_verification": True})
-            return httpx.Response(200, json={"status": "ok"})
+            if request.method == "DELETE":
+                return httpx.Response(200, json={"status": "ok"})
+            self.assertEqual(request.url.params.get_list("voice_ids"), ["internal-voice-123"])
+            return httpx.Response(200, json={"voices": [], "has_more": False})
 
         samples = [make_synthetic_wav(20) for _ in range(3)]
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
@@ -455,6 +458,23 @@ class CloudPrototypeTests(unittest.TestCase):
         self.assertIn(TEST_VOICE_NAME.encode(), calls[0].content)
         self.assertEqual((calls[1].method, calls[1].url.path),
                          ("DELETE", "/v1/voices/internal-voice-123"))
+        self.assertEqual((calls[2].method, calls[2].url.path),
+                         ("GET", "/v2/voices"))
+
+    def test_delete_response_does_not_prove_voice_absence(self) -> None:
+        for lookup in (
+            httpx.Response(200, json={"voices": [{"voice_id": "own-id"}], "has_more": False}),
+            httpx.Response(503, json={"detail": "lookup unavailable"}),
+        ):
+            with self.subTest(status=lookup.status_code):
+                def respond(request: httpx.Request) -> httpx.Response:
+                    if request.method == "DELETE":
+                        return httpx.Response(200, json={"status": "ok"})
+                    self.assertEqual(request.url.params.get_list("voice_ids"), ["own-id"])
+                    return lookup
+                with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+                    with self.assertRaises((ValueError, httpx.HTTPStatusError)):
+                        delete_test_voice(client, "own-id", "test-key")
 
     def test_voice_enrollment_rejects_unconsented_short_or_invalid_response(self) -> None:
         samples = [make_synthetic_wav(20) for _ in range(3)]

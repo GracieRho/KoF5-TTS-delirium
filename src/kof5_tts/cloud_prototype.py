@@ -243,7 +243,7 @@ def find_test_voice(client: httpx.Client, test_name: str, key: str) -> str | Non
 
 
 def delete_test_voice(client: httpx.Client, voice_id: str, key: str) -> None:
-    """Remove a task-owned test clone by its provider ID."""
+    """Remove a task-owned test clone and confirm its ID is no longer listed."""
     if not key or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
         raise ValueError("provider key and valid test voice ID are required")
     response = client.delete(
@@ -254,6 +254,27 @@ def delete_test_voice(client: httpx.Client, voice_id: str, key: str) -> None:
     body = response.json()
     if not isinstance(body, dict) or body.get("status") != "ok":
         raise ValueError("provider did not confirm test voice deletion")
+    if test_voice_present(client, voice_id, key):
+        raise ValueError("provider still lists the test voice after deletion")
+
+
+def test_voice_present(client: httpx.Client, voice_id: str, key: str) -> bool:
+    """Check the exact ID in the provider's filtered voice list."""
+    if not key or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
+        raise ValueError("provider key and valid test voice ID are required")
+    response = client.get(
+        "https://api.elevenlabs.io/v2/voices",
+        headers={"xi-api-key": key},
+        params={"voice_ids": [voice_id], "include_total_count": "false"},
+    )
+    response.raise_for_status()
+    body = response.json()
+    if (not isinstance(body, dict) or not isinstance(body.get("voices"), list)
+            or body.get("has_more") is not False
+            or any(not isinstance(voice, dict) or voice.get("voice_id") != voice_id
+                   for voice in body["voices"])):
+        raise ValueError("provider test voice lookup is inconclusive")
+    return bool(body["voices"])
 
 
 def run_synthetic_pipeline(

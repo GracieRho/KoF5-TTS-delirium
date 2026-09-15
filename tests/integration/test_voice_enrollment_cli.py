@@ -95,6 +95,39 @@ class TestVoiceEnrollmentCli(unittest.TestCase):
                 self.assertEqual(json.loads(manifest.read_text())["voice_id"], "known-id")
                 self.assertIsNone(json.loads(manifest.read_text())["requires_verification"])
 
+    def test_delete_pending_survives_stale_lookup_then_finishes_without_second_delete(self) -> None:
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {
+            "ELEVENLABS_API_KEY": "test-key",
+        }):
+            manifest = Path(directory) / "internal-test-voice.json"
+            manifest.write_text(json.dumps({
+                "status": "created", "name": "KoF5 internal self-voice test " + "a" * 32,
+                "voice_id": "own-id",
+            }))
+            calls = []
+            def respond(request: httpx.Request) -> httpx.Response:
+                calls.append(request.method)
+                if request.method == "DELETE":
+                    return httpx.Response(200, json={"status": "ok"})
+                self.assertEqual(request.url.params.get_list("voice_ids"), ["own-id"])
+                return httpx.Response(200, json={
+                    "voices": [{"voice_id": "own-id"}] if calls.count("GET") == 1 else [],
+                    "has_more": False,
+                })
+            real_client = httpx.Client
+            with patch.object(cli, "MANIFEST", manifest), patch.object(
+                cli.httpx, "Client", side_effect=lambda **_: real_client(
+                    transport=httpx.MockTransport(respond)
+                ),
+            ):
+                self.assertEqual(self.run_cli(["delete", "--confirm-delete"]), 2)
+                pending = json.loads(manifest.read_text())
+                self.assertEqual((pending["status"], pending["voice_id"]),
+                                 ("deletion_pending", "own-id"))
+                self.assertEqual(self.run_cli(["delete", "--confirm-delete"]), 0)
+                self.assertFalse(manifest.exists())
+            self.assertEqual(calls, ["DELETE", "GET", "GET"])
+
     def test_corrupt_ownership_record_never_deletes_provider_voice(self) -> None:
         with TemporaryDirectory() as directory, patch.dict(os.environ, {
             "ELEVENLABS_API_KEY": "test-key",
