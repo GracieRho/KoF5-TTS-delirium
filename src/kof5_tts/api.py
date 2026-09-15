@@ -337,6 +337,7 @@ async def _paired_session_row(request: Request, patient_id: str) -> tuple[Conver
 async def _paired_session_commit(
     request: Request, patient_id: str, speech: PairedSpeechTurn,
     session: ConversationSession, session_id: str | None, version: int,
+    *, refusal: bool = False,
 ) -> tuple[str, int]:
     """CAS the Python routing result before any hosted reply or audio."""
     config = guardian_config()
@@ -363,7 +364,8 @@ async def _paired_session_commit(
                 raise HTTPException(status_code=409, detail="합성 대화 순서가 바뀌거나 중복됐습니다")
             if (not isinstance(row.get("session_id"), str)
                     or type(row.get("version")) is not int
-                    or row["version"] != version + 1):
+                    or row["version"] < (1 if refusal else version + 1)
+                    or (not refusal and row["version"] != version + 1)):
                 raise ValueError("invalid committed session")
             UUID(row["session_id"])
             return row["session_id"], row["version"]
@@ -976,12 +978,21 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     if speech.label == "AMBIENT":
         return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     now = datetime.now(timezone.utc)
+    # An explicit refusal is monotonic admission state, even if another device
+    # owns the conversational CAS row. Submit it before session read; the DB
+    # still rejects an unpaired, expired, or withdrawn device.
+    if ConversationSession().hear(speech.transcript, "DIRECTED", now) == "patient_dissent":
+        paused = ConversationSession(proactive_paused=True)
+        await _paired_session_commit(request, patient_id, speech, paused, None, 0,
+                                     refusal=True)
+        return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     session, session_id, version = await _paired_session_row(request, patient_id)
     event = session.hear(speech.transcript, speech.label, now)
     if event == "discarded":
         return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     if event in {"closed", "patient_dissent"}:
-        await _paired_session_commit(request, patient_id, speech, session, session_id, version)
+        await _paired_session_commit(request, patient_id, speech, session, session_id, version,
+                                     refusal=event == "patient_dissent")
         return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     credentials = await _paired_clone_credentials(request, patient_id)
     committed_id, committed_version = await _paired_session_commit(

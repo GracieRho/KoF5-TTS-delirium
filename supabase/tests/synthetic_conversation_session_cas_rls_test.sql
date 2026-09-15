@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(32);
+SELECT plan(43);
 
 -- All IDs and references are fixed synthetic values; transaction rolls back.
 INSERT INTO auth.users (id, is_anonymous) VALUES
@@ -94,6 +94,11 @@ SELECT ok((SELECT authorized IS FALSE
     FROM api.synthetic_conversation_session_read(
         '00000000-0000-4000-8000-000000000975')),
     'unpaired anonymous device is denied');
+SELECT ok((SELECT authorized IS FALSE AND committed IS FALSE
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975', NULL, 0,
+        'IDLE', true, '00000000-0000-4000-8000-000000000853')),
+    'unpaired device cannot latch a fabricated refusal');
 SELECT set_config('request.jwt.claim.sub',
     '00000000-0000-4000-8000-000000000994', true);
 SELECT set_config('request.jwt.claims',
@@ -209,6 +214,11 @@ SELECT ok((SELECT authorized IS FALSE AND committed IS FALSE
         'ACTIVE_LISTENING', false,
         '00000000-0000-4000-8000-000000000847')),
     'withdrawn consent stops CAS commit before provider work');
+SELECT ok((SELECT authorized IS FALSE AND committed IS FALSE
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975', NULL, 0,
+        'IDLE', true, '00000000-0000-4000-8000-000000000854')),
+    'withdrawn consent cannot be bypassed by stale refusal latch');
 RESET ROLE;
 ROLLBACK TO SAVEPOINT withdrawal_test;
 
@@ -263,6 +273,89 @@ SELECT ok((SELECT authorized IS TRUE AND state = 'ACTIVE_LISTENING'
     'new device reads its own transferred active session');
 RESET ROLE;
 ROLLBACK TO SAVEPOINT takeover_test;
+
+-- Ordinary A and refusal B both read version four. A's earlier CAS must
+-- never turn B's clinically important refusal into a lost 409.
+SAVEPOINT stale_dissent_test;
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000994', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000994","is_anonymous":true}', true);
+SELECT ok((SELECT authorized IS TRUE AND committed IS TRUE AND version = 5
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975',
+        (SELECT session_id FROM api.synthetic_conversation_session_read(
+            '00000000-0000-4000-8000-000000000975')), 4,
+        'ACTIVE_LISTENING', false,
+        '00000000-0000-4000-8000-000000000855')),
+    'ordinary A wins its fresh version-four CAS');
+SELECT ok((SELECT authorized IS TRUE AND committed IS TRUE AND version = 6
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975',
+        (SELECT session_id FROM api.synthetic_conversation_session_read(
+            '00000000-0000-4000-8000-000000000975')), 4,
+        'IDLE', true, '00000000-0000-4000-8000-000000000856')),
+    'later patient refusal B latches despite stale expected version four');
+RESET ROLE;
+SELECT is((SELECT count(*)::integer FROM kof5.safety_audit_event
+    WHERE patient_id = '00000000-0000-4000-8000-000000000975'
+      AND event_type = 'patient_dissent'), 1,
+    'stale refusal and shared audit record commit atomically');
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000994', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000994","is_anonymous":true}', true);
+SELECT ok((SELECT authorized IS TRUE AND state = 'IDLE'
+           AND proactive_paused IS TRUE
+    FROM api.synthetic_conversation_session_read(
+        '00000000-0000-4000-8000-000000000975')),
+    'read immediately after stale refusal shows terminal patient pause');
+SELECT ok((SELECT authorized IS FALSE AND committed IS FALSE
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975', NULL, 0,
+        'ACTIVE_LISTENING', false,
+        '00000000-0000-4000-8000-000000000857')),
+    'subsequent ordinary turn cannot reopen TTS routing');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT stale_dissent_test;
+
+-- A second currently paired anonymous iPad can also report refusal even if
+-- another live iPad owns the normal-turn CAS row.
+SAVEPOINT competing_device_dissent_test;
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000996', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000996","is_anonymous":true}', true);
+SELECT ok((SELECT authorized IS TRUE AND committed IS TRUE AND version = 5
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975', NULL, 0,
+        'IDLE', true, '00000000-0000-4000-8000-000000000858')),
+    'other current iPad latches refusal despite live owner and stale token');
+SELECT ok((SELECT authorized IS TRUE AND proactive_paused IS TRUE
+    FROM api.synthetic_conversation_session_read(
+        '00000000-0000-4000-8000-000000000975')),
+    'other iPad reads admission-wide terminal pause after its report');
+RESET ROLE;
+SELECT is((SELECT count(*)::integer FROM kof5.safety_audit_event
+    WHERE patient_id = '00000000-0000-4000-8000-000000000975'
+      AND event_type = 'patient_dissent'), 1,
+    'cross-device refusal records one shared audit event');
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',
+    '00000000-0000-4000-8000-000000000994', true);
+SELECT set_config('request.jwt.claims',
+    '{"sub":"00000000-0000-4000-8000-000000000994","is_anonymous":true}', true);
+SELECT ok((SELECT authorized IS FALSE AND committed IS FALSE
+    FROM api.synthetic_conversation_session_commit(
+        '00000000-0000-4000-8000-000000000975', NULL, 0,
+        'ACTIVE_LISTENING', false,
+        '00000000-0000-4000-8000-000000000859')),
+    'previous owner cannot continue after other iPad reports refusal');
+RESET ROLE;
+ROLLBACK TO SAVEPOINT competing_device_dissent_test;
 
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub',

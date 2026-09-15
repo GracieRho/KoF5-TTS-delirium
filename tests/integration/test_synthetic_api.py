@@ -317,6 +317,127 @@ class SyntheticApiTests(unittest.TestCase):
         self.assertIn("synthetic_conversation_session_read", seen)
         self.assertIn("synthetic_conversation_session_commit", seen)
 
+    def test_stale_patient_refusal_latches_after_normal_turn_wins_cas(self) -> None:
+        """A newer normal turn must not cause an older explicit refusal to vanish."""
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
+               "OPENAI_API_KEY": "test-openai", "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"X-Internal-Demo-Token": "t" * 32,
+                   "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "a" * 40}
+        initial = {"authorized": True,
+                   "encounter_id": "00000000-0000-4000-8000-000000000976",
+                   "session_id": None, "version": 0, "state": "IDLE",
+                   "last_activity": None, "proactive_paused": False}
+        current = dict(initial)
+        reads = 0
+        commits = 0
+        strict_normal_advanced = False
+        other_active_owner = False
+        withdrawn = False
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            nonlocal reads, commits
+            route = request.url.path.rsplit("/", 1)[-1]
+            if route == "synthetic_conversation_session_read":
+                reads += 1
+                if withdrawn or other_active_owner:
+                    return httpx.Response(200, json=[{
+                        "authorized": False, "encounter_id": None,
+                        "session_id": None, "version": None, "state": None,
+                        "last_activity": None, "proactive_paused": False,
+                    }])
+                return httpx.Response(200, json=[dict(current)])
+            if route == "synthetic_conversation_session_commit":
+                body = json.loads(request.read())
+                commits += 1
+                if withdrawn:
+                    return httpx.Response(200, json=[{
+                        "authorized": False, "committed": False,
+                        "session_id": None, "version": None,
+                    }])
+                if body["p_proactive_paused"]:
+                    self.assertEqual(body["p_expected_session_id"], None)
+                    self.assertEqual(body["p_expected_version"], 0)
+                    current.update({"version": current["version"] + 1,
+                                    "state": "IDLE", "last_activity": None,
+                                    "proactive_paused": True})
+                    return httpx.Response(200, json=[{
+                        "authorized": True, "committed": True,
+                        "session_id": current["session_id"],
+                        "version": current["version"],
+                    }])
+                if strict_normal_advanced:
+                    return httpx.Response(200, json=[{
+                        "authorized": True, "committed": True,
+                        "session_id": current["session_id"], "version": 3,
+                    }])
+                current.update({"session_id": "00000000-0000-4000-8000-000000000971",
+                                "version": 1, "state": "ACTIVE_LISTENING",
+                                "last_activity": datetime.now(timezone.utc).isoformat()})
+                return httpx.Response(200, json=[{
+                    "authorized": True, "committed": True,
+                    "session_id": current["session_id"], "version": 1,
+                }])
+            if route == "patient_device_context":
+                return httpx.Response(200, json=[{
+                    "patient_id": SYNTHETIC_DB_PATIENT,
+                    "encounter_id": current["encounter_id"],
+                }])
+            if route == "synthetic_patient_tts_voice_ready":
+                return httpx.Response(200, json=[READY_CLONE])
+            if route == "record_synthetic_directed_turn":
+                return httpx.Response(200, json=True)
+            raise AssertionError(f"unexpected hosted route: {route}")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api.run_synthetic_text_pipeline",
+                 return_value=("가상 응답", b"mp3")) as pipeline:
+            first = {"transcript": "수민아", "label": "DIRECTED",
+                     "client_turn_id": PAIRED_TURN_ID}
+            self.assertEqual(self.client.post(path, json=first, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_count, 1)
+            strict_normal_advanced = True
+            self.assertEqual(self.client.post(path, json={**first,
+                "client_turn_id": "00000000-0000-4000-8000-000000000998"},
+                headers=headers).status_code, 503,
+                "normal turn still requires exactly expected version+1")
+            self.assertEqual(pipeline.call_count, 1)
+            strict_normal_advanced = False
+            other_active_owner = True
+            reads_before_refusal = reads
+            refusal = {"transcript": "그만해", "label": "DIRECTED",
+                       "client_turn_id": "00000000-0000-4000-8000-000000000997"}
+            response = self.client.post(path, json=refusal, headers=headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"transcript": "", "reply": None,
+                                               "audio_mp3_base64": None})
+            self.assertTrue(current["proactive_paused"])
+            self.assertEqual(reads, reads_before_refusal,
+                             "other active owner cannot suppress pre-read refusal latch")
+            self.assertEqual(pipeline.call_count, 1,
+                             "stale explicit refusal never reaches provider")
+            before_ambient = commits
+            self.assertEqual(self.client.post(path, json={**refusal,
+                "label": "AMBIENT",
+                "client_turn_id": "00000000-0000-4000-8000-000000000995"},
+                headers=headers).status_code, 200)
+            self.assertEqual(commits, before_ambient,
+                             "AMBIENT refusal words never submit a latch")
+            withdrawn = True
+            self.assertEqual(self.client.post(path, json={**refusal,
+                "client_turn_id": "00000000-0000-4000-8000-000000000996"},
+                headers=headers).status_code, 403)
+            self.assertEqual(commits, 4,
+                             "withdrawn device refusal reaches DB but is not committed")
+            self.assertEqual(pipeline.call_count, 1)
+
     def test_internal_audio_requires_auth_and_valid_synthetic_wav_before_provider(self) -> None:
         path = "/internal/synthetic/audio"
         with patch.dict(os.environ, {"KOF5_INTERNAL_DEMO_TOKEN": ""}):

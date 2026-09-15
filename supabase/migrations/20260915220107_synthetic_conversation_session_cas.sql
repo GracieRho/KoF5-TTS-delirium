@@ -194,6 +194,33 @@ BEGIN
         RETURN QUERY SELECT true, false, NULL::uuid, NULL::integer;
         RETURN;
     END IF;
+    IF p_proactive_paused THEN
+        -- A valid, current patient refusal is a monotonic admission latch.
+        -- Do not let an ordinary turn's earlier CAS win erase a later dissent,
+        -- or let another simultaneously paired iPad's ownership block it.
+        -- The unique admission row serializes insert/update contenders; its
+        -- existing owner/session ID is retained on conflict. Only routing
+        -- state and a turn UUID are stored, never the utterance.
+        INSERT INTO kof5.synthetic_conversation_session AS s (
+            patient_id, encounter_id, device_user_id, version, state,
+            last_activity, proactive_paused, last_client_turn_id
+        ) VALUES (
+            p_patient_id, v_encounter, v_device, 1, 'IDLE', NULL, true,
+            p_client_turn_id
+        ) ON CONFLICT (patient_id, encounter_id) DO UPDATE
+        SET state = 'IDLE', last_activity = NULL, proactive_paused = true,
+            version = CASE WHEN s.version < 2147483647
+                           THEN s.version + 1 ELSE s.version END,
+            last_client_turn_id = EXCLUDED.last_client_turn_id
+        RETURNING s.session_id, s.version INTO v_session_id, v_version;
+        -- Same transaction: all existing dissent-gated TTS/queue routes close
+        -- before the RPC can report success. A later ordinary commit rechecks
+        -- this audit and the terminal session pause.
+        INSERT INTO kof5.safety_audit_event (patient_id, event_type)
+        VALUES (p_patient_id, 'patient_dissent');
+        RETURN QUERY SELECT true, true, v_session_id, v_version;
+        RETURN;
+    END IF;
     SELECT s.* INTO v_existing FROM kof5.synthetic_conversation_session s
     WHERE s.patient_id = p_patient_id AND s.encounter_id = v_encounter
     FOR UPDATE;
@@ -212,10 +239,6 @@ BEGIN
         ) ON CONFLICT (patient_id, encounter_id) DO NOTHING
         RETURNING kof5.synthetic_conversation_session.session_id
         INTO v_session_id;
-        IF v_session_id IS NOT NULL AND p_proactive_paused THEN
-            INSERT INTO kof5.safety_audit_event (patient_id, event_type)
-            VALUES (p_patient_id, 'patient_dissent');
-        END IF;
         RETURN QUERY SELECT true, v_session_id IS NOT NULL, v_session_id,
                             CASE WHEN v_session_id IS NOT NULL THEN 1
                                  ELSE NULL::integer END;
@@ -268,10 +291,6 @@ BEGIN
             last_client_turn_id = p_client_turn_id
         WHERE s.patient_id = p_patient_id AND s.encounter_id = v_encounter
         RETURNING s.session_id, s.version INTO v_session_id, v_version;
-    END IF;
-    IF p_proactive_paused AND NOT v_existing.proactive_paused THEN
-        INSERT INTO kof5.safety_audit_event (patient_id, event_type)
-        VALUES (p_patient_id, 'patient_dissent');
     END IF;
     RETURN QUERY SELECT true, true, v_session_id, v_version;
 END;
