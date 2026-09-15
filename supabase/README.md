@@ -18,11 +18,11 @@
 
 열두째 합성 장치 결속은 Supabase Auth의 익명 로그인 사용자를 `authenticated` 역할로 받되, 검증된 담당 `care_staff`가 `api.patient_device_pairing`에 **장치 Auth 사용자 UUID·고정 합성 환자 UUID `00000000-0000-4000-8000-000000000975`·현재 입원 UUID·8시간 이내 만료**를 기록할 때만 활성화한다. 병원 화면은 `api.synthetic_device_pairing_ready`의 `patient_id, encounter_id` 한정 조회로 폼 자격을 확인하고, INSERT RLS가 최종 검사한다. 장치는 자기 Auth JWT와 publishable 키로 `api.patient_device_context`를 읽고 `api.patient_family_search(p_patient_id,p_term)`를 호출한다. 후자는 현재 입원·기관 승인·환자 참여/주변 음성/환자 목소리 기능 동의 및 assent·유효한 보호자 연결을 매 요청 확인하고, 유효한 일반 기억의 `category,content` 최대 3건만 반환한다. 기존 `api.family_context`는 익명 장치에 숨겨 검색 제한을 우회할 수 없게 했다. 결속은 환자/입원 간 이동 불가이고 철회 뒤 재활성화 불가다. **실제 환자 UUID는 DB에서 기본 차단**하며 이를 켜는 클라이언트 스위치가 없다. 이 로컬 합성 계약은 [실제 환자 안전 게이트](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)의 정체성 고지·의료진 경보/ACK, 병원 승인 업무와 실제 음성/동의 절차를 입증하지 않는다.
 
-합성 대화의 가족 기억 조회는 `api.patient_family_turn_context(p_patient_id,p_term)` 한 번으로 수행한다. 장치 JWT와 publishable 키로 `api` 스키마 RPC를 호출하면 정확히 한 행의 `authorized:boolean,facts:jsonb`가 반환된다. `authorized=true,facts=[]`는 유효한 장치·동의에 해당 기억이 없다는 뜻이고, 동의 철회·결속 만료·입원 종료·다른 환자 UUID는 `authorized=false,facts=[]`로 반환되어 서버가 모델 호출을 중단할 수 있다. `facts`는 최대 3건의 일반 기억뿐이다. 조회 시점 이후 발생하는 철회를 이미 시작한 모델 호출까지 취소하는 보장은 이 계약에 없으며, 실제 환자 적용에는 별도 임상 안전 절차가 필요하다.
+합성 대화의 일반 가족 기억 조회는 `api.patient_family_semantic_turn_context(p_patient_id,p_query_embedding)` 한 번으로 수행한다. 장치 JWT와 publishable 키로 `api` 스키마 RPC를 호출하면 정확히 한 행의 `authorized:boolean,facts:jsonb`가 반환된다. `authorized=true,facts=[]`는 유효한 장치·동의에 해당 기억이 없다는 뜻이고, 동의 철회·결속 만료·입원 종료·다른 환자 UUID는 `authorized=false,facts=[]`로 반환되어 서버가 모델 호출을 중단할 수 있다. `facts`는 최대 3건의 일반 기억뿐이며 vector와 점수는 클라이언트에 내지 않는다. 임베딩 전 기기 배정 사전 확인과 DB 스냅샷의 재확인은 적용했지만, 사전 확인 직후 철회된 이미 시작한 외부 임베딩을 취소하는 보장은 없다.
 
 - `kof5` 스키마는 Data API에 노출하지 않는다. 모든 테이블에 `FORCE ROW LEVEL SECURITY`를 적용한다. 인증된 직원은 **검증된 현재 기관 자격**이 있는 경우에만 해당 기관 환자를 읽고, 담당 직원은 **검증된 현재 배정 환자**만 읽는다. `api.hospital_patient_list`는 호출자 RLS를 따르는 읽기 전용 뷰다. 동의·음성 테이블에는 클라이언트 읽기 권한을 주지 않았다. 전용 원격 프로젝트에서는 `api` 스키마를 Data API 설정에도 별도로 노출해야 한다.
 - 원본 음성과 임베딩 본문은 테이블에 두지 않는다. 샘플에는 일시 암호화 객체 참조와 폐기 시각만, 프로필에는 암호화된 특징 참조와 모델 버전만 둔다.
-- 보호자는 자기 환자 연결의 상태만 읽는다. **검증된 유효 연결**이 있을 때에만 자기 가족 기억을 읽고 기록·수정·문자열 검색할 수 있으며, 환자 번호·생년월일·입원·동의·음성 메타데이터는 읽을 수 없다. 철회/만료 즉시 가족 기억 접근도 차단한다. 원문은 `family_fact`에 저장하고, 의미 검색/임베딩 모델은 아직 정하지 않았다.
+- 보호자는 **검증된 유효 연결**이 있을 때에만 자기 가족 기억을 읽고 기록·수정·문자열 검색할 수 있으며, 환자 번호·생년월일·입원 정보는 읽을 수 없다. 철회/만료 즉시 가족 기억 접근도 차단한다. 고정 합성 환자 본인의 음성 복제 메타데이터는 별도 상태 RPC로만 읽으며 공급자 voice ID·오디오는 내지 않는다. 가족 원문은 `family_fact`에 저장하고, 별도 임시 1536차원 색인은 합성 평가에만 사용한다.
 - 병원 사실의 공개 뷰는 직원 승인·유효 기간·현재 입원을 확인한다. 병실·검사 사실은 특정 입원에 묶고, 입원 참조가 없는 사실은 병원 이름(`hospital`)만 허용한다. 병원 이름도 진행 중인 입원이 없으면 조회되지 않는다. 병원 메시지는 승인 원문·예약 시각·전달 상태를 분리하고, 승인 문구와 승인자·시각은 수정할 수 없다. 직원도 클라이언트에서 사실·메시지를 직접 등록하거나 승인할 수 없다. 실제 기관 승인/취소·전달·감사 API는 아직 구현 전이다.
 - 직원 자격과 담당 배정을 **누가 검증·기록하는지**, 유효한 동의·환자 assent/거부, 보호자 연결, 철회 시 삭제 트랜잭션과 감사 기록은 아직 구현되지 않았다. 실제 환자 자료 입력 전에 기관 승인 절차가 필요하다.
 - 마이그레이션을 기존 `yai-hub-production` 프로젝트에 적용하지 않는다. 이 MVP 전용 프로젝트의 PostgreSQL 버전·지역·계획과 기관 데이터 처리 조건을 확인한 뒤 연결한다. 실제 환자 자료는 [안전 게이트](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md) 통과 전 입력하지 않는다.
@@ -34,7 +34,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/smoke/registry_constraints.sql
 ```
 
-2026-09-16 현재 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 열 마이그레이션이 적용됐고, 기존 123개와 분리 동의·기관 승인 경계 11개인 pgTAP **134개**가 통과했다. 퇴원 후 사실·메시지 차단과 재입원 시 이전 입원 정보 제외도 검사했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 기억 등록·수정·검색/철회/비로그인 차단과 연결 없는 신규 계정 차단, 직원 승인 조회 필드, 등록자 Auth/기관 승인 게이트의 준비 상태 전환·참조 위조·중복·철회가 통과했다. 검사 뒤 환자·동의·음성 프로필·기억·감사·Auth 계정·승인 게이트 행은 모두 0건이었다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
+2026-09-16 현재 **이 작업 전용 로컬 Supabase PostgreSQL 17**에서 전체 migration을 빈 DB로 재적용하고 pgTAP **392개/14파일**이 통과했다. 로컬 GoTrue/Data API에서 고정 합성 환자의 서버 전용 색인·기기 의미 검색·사실 수정/동의 철회, 보호자 음성 `pending` 선기록·멱등 재시도·검증/삭제 대기·별도 동의 철회 후 TTS 차단·원격 부재 표시 전이를 검사했다. 시험 환자·색인·clone·Auth 계정은 모두 0건으로 정리했다. 실제 공급자 음성 생성/삭제, 원격 프로젝트, 기관 직원 승인·실제 환자 처리는 검증하지 않았다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke/registry_constraints.sql
