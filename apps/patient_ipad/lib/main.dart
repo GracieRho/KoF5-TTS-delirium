@@ -474,6 +474,25 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _hospitalStatus = '승인 원문 음성을 이 iPad에서 재생하고 있습니다.';
       });
       await _player.play(mp3).timeout(const Duration(seconds: 10));
+      if (!_hospitalReady(session, generation) ||
+          !_playedReply ||
+          _dueHospitalMessage?.id != message.id) {
+        // A late native play result may arrive after withdrawal already sent
+        // stop. Reissue stop before any completion wait or new microphone use.
+        try {
+          await _player.stop().timeout(const Duration(seconds: 5));
+          _playedReply = false;
+        } catch (_) {
+          _playedReply = true;
+          if (mounted) {
+            setState(
+              () => _hospitalStatus =
+                  '늦은 병원 음성 재생 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.',
+            );
+          }
+        }
+        return;
+      }
       final finished = await _player.waitFinished().timeout(
         const Duration(seconds: 90),
       );
