@@ -14,4 +14,10 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/tests/registry_constraints.sql
 ```
 
-2026-09-15 검증은 임시 PostgreSQL 18.4와 기존 `postgres:17` 이미지의 별도 작업 컨테이너에서 두 명령과 RLS 차단 테스트가 통과했다. 작업 컨테이너·익명 볼륨은 제거했다. Supabase 전용 프로젝트의 Auth/Storage, advisor 및 원격 마이그레이션은 아직 검증하지 않았다. CLI advisor는 임시 DB Unix 소켓 URI를 해석하지 못했고 비TLS 루프백 DB 연결도 거절했다.
+2026-09-15 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 마이그레이션과 합성 RLS/제약 테스트가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. Supabase CLI의 로컬 advisor는 `No issues found`, 마이그레이션 목록은 `20260915120212` 적용을 확인했다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 로컬 Supabase DB에서는 아래처럼 컨테이너 내부 `psql`로 테스트한다. 실제 전용 원격 프로젝트의 Auth/Storage·권한 정책·마이그레이션은 아직 검증하지 않았다.
+
+```bash
+docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/registry_constraints.sql
+supabase db advisors --local
+supabase migration list --local
+```

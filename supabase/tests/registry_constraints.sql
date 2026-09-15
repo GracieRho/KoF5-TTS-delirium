@@ -132,6 +132,8 @@ BEGIN
 END $$;
 
 CREATE ROLE kof5_registry_smoke_reader;
+-- Supabase's local postgres role can create roles but is not a superuser.
+GRANT kof5_registry_smoke_reader TO postgres WITH SET TRUE;
 GRANT USAGE ON SCHEMA kof5 TO kof5_registry_smoke_reader;
 GRANT SELECT ON kof5.hospital_patient TO kof5_registry_smoke_reader;
 SET ROLE kof5_registry_smoke_reader;

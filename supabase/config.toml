@@ -7,6 +7,9 @@ schemas = ["public", "graphql_public"]
 [db]
 # Match this to the dedicated remote project's actual PostgreSQL major version before linking.
 major_version = 17
+# Keep this task's local DB clear of the shared yai-hub Supabase DB on 54322.
+port = 54339
+shadow_port = 54340
 
 [auth]
 enable_anonymous_sign_ins = false
