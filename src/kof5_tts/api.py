@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from kof5_tts.cloud_prototype import (
-    CloudCredentials, run_synthetic_pipeline, run_synthetic_text_pipeline, validate_short_wav,
+    CloudCredentials, run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
+    validate_short_wav,
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
@@ -173,6 +174,37 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
         raise HTTPException(status_code=503, detail="기기 권한·가족 기억 조회가 실패했습니다") from None
 
 
+async def _paired_due_message(request: Request, patient_id: str, message_id: str) -> str:
+    config = guardian_config()
+    headers = {
+        "apikey": config["publishable_key"], "Authorization": _device_bearer(request),
+        "Accept-Profile": "api", "Content-Profile": "api",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/synthetic_due_hospital_message',
+                json={"_patient_id": patient_id, "_message_id": message_id}, headers=headers,
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            response.raise_for_status()
+            rows = response.json()
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("due message response is invalid")
+            row = rows[0]
+            if row.get("authorized") is not True:
+                raise HTTPException(status_code=403, detail="승인된 예약 메시지를 사용할 수 없습니다")
+            text = row.get("approved_text")
+            if row.get("message_id") != message_id or not isinstance(text, str) or not 1 <= len(text) <= 200:
+                raise ValueError("approved message response is invalid")
+            return text
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        raise HTTPException(status_code=503, detail="기기 권한·병원 메시지 조회가 실패했습니다") from None
+
+
 @app.post("/internal/synthetic/audio", include_in_schema=False)
 async def synthetic_audio(request: Request) -> dict[str, str | None]:
     """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
@@ -268,6 +300,25 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
         "reply": reply,
         "audio_mp3_base64": b64encode(audio).decode("ascii") if audio else None,
     }
+
+
+@app.post("/internal/synthetic/paired/{patient_id}/message/{message_id}/audio", include_in_schema=False)
+async def paired_synthetic_message_audio(patient_id: str, message_id: str, request: Request) -> dict[str, str]:
+    """Read one due approved synthetic message under device RLS, then voice its exact text."""
+    if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", message_id):
+        raise HTTPException(status_code=404, detail="합성 시험 메시지만 사용할 수 있습니다")
+    credentials = _internal_demo_credentials(request)
+    approved_text = await _paired_due_message(request, patient_id, message_id)
+
+    def run() -> bytes:
+        with httpx.Client(timeout=20) as client:
+            return synthesize_mp3(client, approved_text, credentials)
+
+    try:
+        audio = await run_in_threadpool(run)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="승인 메시지 음성 생성이 실패했습니다") from None
+    return {"approved_text": approved_text, "audio_mp3_base64": b64encode(audio).decode("ascii")}
 
 
 @app.post("/patients/{patient_id}/conversation/start")

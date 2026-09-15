@@ -325,6 +325,54 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
             self.assertEqual(pipeline.call_count, 2, "revoked device cannot use stale memory")
 
+    def test_due_hospital_message_voices_only_atomic_approved_original(self) -> None:
+        message_id = "00000000-0000-4000-8000-000000000123"
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/message/{message_id}/audio"
+        env = {
+            "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+            "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {
+            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+            "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
+        }
+        approved = "CT 검사는 오늘 14시입니다."
+        authorized = True
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            self.assertTrue(request.url.path.endswith("/synthetic_due_hospital_message"))
+            self.assertEqual(request.headers["content-profile"], "api")
+            self.assertEqual(json.loads(request.read()), {
+                "_patient_id": SYNTHETIC_DB_PATIENT, "_message_id": message_id,
+            })
+            return httpx.Response(200, json=[{
+                "authorized": authorized,
+                "message_id": message_id if authorized else None,
+                "approved_text": approved if authorized else None,
+            }])
+
+        async_client_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api.synthesize_mp3", return_value=b"mp3") as voice:
+            self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
+                                              headers=headers).status_code, 404)
+            self.assertEqual(self.client.post(path, headers={k: v for k, v in headers.items()
+                                                             if k != "Authorization"}).status_code, 401)
+            voice.assert_not_called()
+            result = self.client.post(path, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json(), {"approved_text": approved, "audio_mp3_base64": "bXAz"})
+            self.assertEqual(voice.call_args.args[1], approved)
+            authorized = False
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 403)
+            self.assertEqual(voice.call_count, 1, "withdrawn message must never reach TTS")
+
 
 if __name__ == "__main__":
     unittest.main()
