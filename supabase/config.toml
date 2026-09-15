@@ -2,6 +2,7 @@ project_id = "kof5-familiar-voice-mvp"
 
 [api]
 # Only the invoker view in api is exposed; patient/voice tables stay in private kof5.
+port = 54341
 schemas = ["public", "graphql_public", "api"]
 
 [db]

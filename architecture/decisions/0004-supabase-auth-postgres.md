@@ -17,6 +17,6 @@ Vercel은 첫 웹/API 배포 대상이다. 보호자·직원 로그인, 환자·
 
 ## 결과와 검증
 
-- [세 로컬 마이그레이션](../../supabase/README.md)은 작업 전용 Supabase PostgreSQL 17에 적용했고, 합성 환자 제약 검사와 직원 15개·보호자 17개 권한 검사가 통과했다. 로컬 advisor도 문제를 보고하지 않았다. 실제 Auth/Data API HTTP 호출, 전용 원격 프로젝트와 기관 승인 흐름은 아직 검증하지 않았다.
+- [세 로컬 마이그레이션](../../supabase/README.md)은 작업 전용 Supabase PostgreSQL 17에 적용했고, 합성 환자 제약 검사와 직원 15개·보호자 17개 권한 검사가 통과했다. 로컬 GoTrue/Data API HTTP에서 합성 계정의 로그인·가족 기억 처리·철회 차단도 확인했다. 로컬 advisor는 문제를 보고하지 않았다. 전용 원격 프로젝트와 실제 기관 승인·환자 처리 흐름은 아직 검증하지 않았다.
 - 기존 계정의 `yai-hub-production` 프로젝트는 이 MVP와 별개라 연결하거나 변경하지 않는다. 전용 프로젝트의 조직·지역·계획·PostgreSQL 버전, 기관 데이터 처리 계약을 확인하고 연결한다.
 - 실제 환자 사용에는 [안전 게이트](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)의 네 조건과 기관 검토가 여전히 필요하다.

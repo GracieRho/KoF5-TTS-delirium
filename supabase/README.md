@@ -15,7 +15,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/tests/registry_constraints.sql
 ```
 
-2026-09-15 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 세 마이그레이션이 적용됐고, 직원 권한 pgTAP **15개**와 보호자 권한 pgTAP **17개**가 통과했다. CLI advisor는 `No issues found`를 보고했다. 로컬 Data API/GoTrue 실제 HTTP 호출, 전용 원격 프로젝트, Auth/Storage와 기관 승인 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
+2026-09-15 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 세 마이그레이션이 적용됐고, 직원 권한 pgTAP **15개**와 보호자 권한 pgTAP **17개**가 통과했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 계정의 로그인→가족 기억 읽기/쓰기→연결 철회 후 차단·비로그인 차단도 통과했고, 시험 환자·계정은 0건으로 정리했다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/tests/registry_constraints.sql
@@ -23,4 +23,12 @@ supabase test db --local supabase/tests/staff_read_rls.test_test.sql
 supabase test db --local supabase/tests/guardian_family_rls_test.sql
 supabase db advisors --local
 supabase migration list --local
+```
+
+로컬 HTTP 검사는 작업 전용 Supabase DB/Auth/Data API/Kong을 켠 뒤 실행한다. `local_http_smoke.py`는 임의 비밀번호와 `example.invalid` 합성 계정을 사용하고, 로컬 키·토큰을 출력하지 않으며 종료 시 환자·기억·계정을 삭제한다. 공유 `yai-hub` 인스턴스에는 적용하지 않는다.
+
+```bash
+supabase start --exclude edge-runtime,imgproxy,mailpit,postgres-meta,realtime,storage-api,studio,logflare,vector,supavisor
+python3 supabase/tests/local_http_smoke.py
+supabase stop --project-id kof5-familiar-voice-mvp
 ```
