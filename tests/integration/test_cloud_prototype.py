@@ -135,6 +135,28 @@ class CloudPrototypeTests(unittest.TestCase):
                 run_synthetic_pipeline(client, b"RIFF" + b"\0" * 64, "known fact", credentials)
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
 
+    def test_unsafe_generated_claim_never_reaches_tts(self) -> None:
+        calls = []
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append(request.url.host)
+            if request.url.host == "api.deepgram.com":
+                return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                    {"transcript": "우리 제주도 언제 갔었지?"},
+                ]}]}})
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "completed", "output": [
+                    {"type": "message", "content": [{"type": "output_text",
+                                                  "text": "내가 수민이야. 의료진에게 알렸어."}]},
+                ]})
+            raise AssertionError("unsafe text must never reach voice TTS")
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            with self.assertRaisesRegex(ValueError, "hard safety rule"):
+                run_synthetic_pipeline(
+                    client, b"RIFF" + b"\0" * 64, "2024년 5월 제주도 여행",
+                    CloudCredentials("d", "o", "e", "v", True),
+                )
+        self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
+
 
 if __name__ == "__main__":
     unittest.main()

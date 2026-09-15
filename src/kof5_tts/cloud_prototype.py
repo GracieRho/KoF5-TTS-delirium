@@ -81,6 +81,11 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
         raise ValueError("LLM response has no text") from exc
     if not text or len(text) > 200:
         raise ValueError("LLM response is empty or too long")
+    if any(phrase in text for phrase in (
+        "나 진짜 수민", "내가 수민이야", "밖에서 전화", "실제로 전화", "약을 복용",
+        "약 먹어", "진단은", "처방", "의료진에게 알렸", "의료진에게 전달했",
+    )):
+        raise ValueError("LLM response violates a hard safety rule")
     return text
 
 

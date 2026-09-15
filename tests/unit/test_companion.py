@@ -119,6 +119,10 @@ class ConversationSessionTests(unittest.TestCase):
             session.hear("숨을 못 쉬겠어", "UNCERTAIN", now + timedelta(minutes=1)),
             "barge_in_risk_candidate",
         )
+        self.assertEqual(
+            session.hear("너무 어지러워", "UNCERTAIN", now + timedelta(minutes=1)),
+            "auxiliary_alert_candidate",
+        )
         self.assertFalse(session.proactive_paused)
         with self.assertRaises(ValueError):
             HospitalMessage("synthetic_patient", "CT 일정", "", now)
