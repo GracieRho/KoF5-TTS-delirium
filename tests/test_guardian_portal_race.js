@@ -321,7 +321,8 @@ async function runSyntheticIndex() {
   elements.category.value = 'travel';
   await login();
   assert.equal(elements.patient.value, fixture);
-  assert.equal(cardFor('기존 가상 여행').children.length, 5, 'fixture ordinary fact has semantic status and retry');
+  assert.equal(cardFor('기존 가상 여행').children.length, 9,
+    'fixture ordinary fact has separate semantic and review-only follow-up actions');
   assert.equal(cardFor('기존 가상 여행').children[4].hidden, false,
     'previously saved but unconfirmed fact offers same-fact retry');
   assert.equal(elements['avoid-facts'].children[0].children.length, 3,
@@ -435,6 +436,169 @@ async function runSyntheticIndex() {
   assert.equal(elements['portal-card'].hidden, true, 'current index 403 hides linked family data');
   assert.equal(elements.content.value, '');
   console.log('Guardian fixed-synthetic fact save versus semantic indexing and race: PASS');
+}
+
+async function runSyntheticFollowUp() {
+  const ids = [
+    'signin-form', 'signin-button', 'signin-status', 'signin-card', 'email', 'password',
+    'signup-button', 'signup-status', 'portal-card', 'portal-status', 'memory-card',
+    'memory-form', 'memory-status', 'links', 'patient', 'facts', 'avoid-facts',
+    'starter-question', 'starter-hint', 'category', 'content', 'save-memory', 'cancel-edit', 'logout',
+    'voice-card', 'voice-samples', 'voice-own-confirm', 'voice-start', 'voice-stop',
+    'voice-enroll', 'voice-delete', 'voice-reconcile', 'voice-refresh', 'voice-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { body: { classList: { add() {}, remove() {} } },
+    getElementById: id => elements[id], createElement: tag => new Element(tag),
+    addEventListener() {} };
+  const window = { handlers: {}, addEventListener(name, handler) { this.handlers[name] = handler; } };
+  const fixture = '00000000-0000-4000-8000-000000000975';
+  const other = '00000000-0000-4000-8000-000000000977';
+  const factId = '00000000-0000-4000-8000-000000000901';
+  const wrongFactId = '00000000-0000-4000-8000-000000000902';
+  const facts = [{ fact_id: factId, category: 'travel', content: '기존 합성 여행' },
+    { fact_id: wrongFactId, category: 'avoid_topic', content: '합성 제외 주제' }];
+  const links = [fixture, other].map(patient_id => ({
+    patient_id, relationship: '가상 가족', access_status: 'verified',
+    effective_at: '2020-01-01T00:00:00Z', expires_at: null,
+  }));
+  const followUps = [];
+  const replies = [];
+  let memoryPosts = 0;
+  async function fetch(url, options = {}) {
+    if (url === '/guardian/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'guardian-followup-jwt',
+      user: { id: '00000000-0000-4000-8000-000000000991' } });
+    if (url.includes('/guardian_links')) return reply(200, links);
+    if (url.includes('/family_context') && options.method === 'POST') { memoryPosts++; return reply(201, null); }
+    if (url.includes('/family_context?')) return reply(200,
+      url.includes(`patient_id=eq.${fixture}`) ? facts.map(item => ({ ...item })) : []);
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/status`) return reply(200, {
+      authorized: true, ready: false, consent_id: null, upload_enabled: false,
+      clone_id: null, status: 'none',
+    });
+    if (url.startsWith(`/internal/synthetic/guardian/${fixture}/fact/`) && url.endsWith('/follow-up')) {
+      followUps.push({ url, options });
+      return replies.shift()?.promise || reply(200, { question: '그 여행에서 가장 즐거웠던 일은 무엇인가요?',
+        fact_id: factId });
+    }
+    throw new Error(`unexpected guardian follow-up endpoint ${url}`);
+  }
+  const followUpContext = { document, window, fetch, AbortController, console };
+  vm.runInNewContext(script, followUpContext);
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  elements.email.value = 'guardian-fixture@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  const card = () => elements.facts.children[0];
+  assert.equal(card().children.length, 9, 'ordinary saved fact offers review-only follow-up');
+  assert.match(card().children[8].textContent, /합성 기억 원문.*LLM 공급자.*실제 환자·가족 정보/,
+    'guardian sees provider transfer and synthetic-only boundary before click');
+  assert.equal(elements['avoid-facts'].children[0].children.length, 3,
+    'avoid_topic never offers LLM follow-up');
+  elements.content.value = '작성 중인 새 합성 기억';
+  elements.category.value = 'food';
+  const wrong = pending();
+  replies.push(wrong);
+  const wrongRequest = card().children[5].handlers.click();
+  await pause();
+  assert.equal(followUps[0].url, `/internal/synthetic/guardian/${fixture}/fact/${factId}/follow-up`);
+  assert.equal(followUps[0].options.method, 'POST');
+  assert.equal(followUps[0].options.body, undefined, 'browser sends no fact text or provider key');
+  assert.equal(followUps[0].options.headers.Authorization, 'Bearer guardian-followup-jwt');
+  assert.equal(followUps[0].options.headers['X-Synthetic-Material'], 'confirmed');
+  wrong.resolve(reply(200, { question: '그때 어디에 가셨나요?', fact_id: wrongFactId }));
+  await wrongRequest;
+  assert.equal(card().children[7].hidden, true, 'wrong fact_id is never shown');
+  assert.match(card().children[6].textContent, /확인하지 못했습니다/);
+  assert.equal(elements.content.value, '작성 중인 새 합성 기억');
+
+  const unsafe = pending();
+  replies.push(unsafe);
+  const unsafeRequest = card().children[5].handlers.click();
+  await pause();
+  unsafe.resolve(reply(200, { question: '이후 약물을 바꾸세요.\n이렇게 하세요?', fact_id: factId }));
+  await unsafeRequest;
+  assert.equal(card().children[7].hidden, true, 'multiline generated instruction is rejected');
+  const safeRequest = card().children[5].handlers.click();
+  await safeRequest;
+  assert.equal(card().children[7].hidden, false);
+  assert.equal(card().children[7].textContent, '그 여행에서 가장 즐거웠던 일은 무엇인가요?');
+  assert.match(card().children[6].textContent, /부정확할 수 있습니다.*직접 확인.*저장되지/);
+  assert.equal(elements.content.value, '작성 중인 새 합성 기억',
+    'returned question cannot overwrite unsaved guardian memory');
+  assert.equal(elements.category.value, 'food');
+  assert.equal(memoryPosts, 0, 'generated question is never auto-saved');
+
+  const olderQuestion = pending();
+  const newerQuestion = pending();
+  replies.push(olderQuestion, newerQuestion);
+  const olderRequest = card().children[5].handlers.click();
+  await pause();
+  const olderSignal = followUps.at(-1).options.signal;
+  const newerRequest = card().children[5].handlers.click();
+  await pause();
+  assert.equal(olderSignal.aborted, true, 'newer request cancels previous same-fact question');
+  olderQuestion.resolve(reply(200, { question: '오래된 합성 질문인가요?', fact_id: factId }));
+  await olderRequest;
+  assert.equal(card().children[7].hidden, true, 'older answer stays hidden while newer request runs');
+  newerQuestion.resolve(reply(200, { question: '새 합성 질문을 확인하셨나요?', fact_id: factId }));
+  await newerRequest;
+  assert.equal(card().children[7].textContent, '새 합성 질문을 확인하셨나요?');
+
+  const stale = pending();
+  replies.push(stale);
+  const oldCard = card();
+  const staleRequest = oldCard.children[5].handlers.click();
+  await pause();
+  elements.patient.value = other;
+  await elements.patient.handlers.change();
+  assert.equal(followUps.at(-1).options.signal.aborted, true, 'patient switch aborts follow-up');
+  assert.equal(oldCard.children[7].hidden, true);
+  stale.resolve(reply(200, { question: '이전 환자의 후속 질문인가요?', fact_id: factId }));
+  await staleRequest;
+  assert.equal(elements.facts.children.length, 0, 'other patient has no fixture follow-up');
+  assert.equal(oldCard.children[7].hidden, true, 'late fixture question stays hidden');
+  assert.equal(followUps.every(call => call.url.includes(`/guardian/${fixture}/`)), true);
+
+  elements.patient.value = fixture;
+  await elements.patient.handlers.change();
+  const editing = pending();
+  replies.push(editing);
+  const editedCard = card();
+  const editRequest = editedCard.children[5].handlers.click();
+  await pause();
+  editedCard.children[2].handlers.click();
+  assert.equal(followUps.at(-1).options.signal.aborted, true, 'fact edit cancels in-flight question');
+  assert.equal(editedCard.children[7].hidden, true);
+  editing.resolve(reply(200, { question: '수정 전 사실 질문인가요?', fact_id: factId }));
+  await editRequest;
+  assert.equal(editedCard.children[7].hidden, true);
+  assert.equal(elements.content.value, '기존 합성 여행', 'explicit edit retains existing form behavior');
+  elements['cancel-edit'].handlers.click();
+
+  const denied = pending();
+  replies.push(denied);
+  const deniedRequest = card().children[5].handlers.click();
+  await pause();
+  denied.resolve(reply(403, { detail: 'link revoked' }));
+  await deniedRequest;
+  assert.equal(elements['portal-card'].hidden, true, 'current link 403 hides sensitive family facts');
+  assert.equal(elements.content.value, '');
+  elements.email.value = 'guardian-fixture@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  const withdrawn = pending();
+  replies.push(withdrawn);
+  const withdrawnRequest = card().children[5].handlers.click();
+  await pause();
+  vm.runInNewContext("state.links[0].access_status = 'revoked'", followUpContext);
+  withdrawn.resolve(reply(200, { question: '철회 후 질문을 보이나요?', fact_id: factId }));
+  await withdrawnRequest;
+  assert.equal(elements['portal-card'].hidden, true, 'link withdrawal also hides a late 200 question');
+  assert.equal(elements['memory-card'].hidden, true);
+  console.log('Guardian saved synthetic fact follow-up review and race: PASS');
 }
 
 async function runSyntheticVoice() {
@@ -745,5 +909,5 @@ async function runSyntheticVoice() {
   console.log('Guardian synthetic own-voice gate, PCM16 WAV, lifecycle and uncertain remote status: PASS');
 }
 
-run().then(runSyntheticIndex).then(runSyntheticVoice)
+run().then(runSyntheticIndex).then(runSyntheticFollowUp).then(runSyntheticVoice)
   .catch(error => { console.error(error); process.exitCode = 1; });

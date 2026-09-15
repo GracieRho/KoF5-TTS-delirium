@@ -42,6 +42,7 @@
     .fact p { margin: 0; white-space: pre-wrap; color: #233530; }
     .fact button { margin-top: 12px; }
     .semantic-status { margin-top: 12px; font-size: 13px; color: #526c60; line-height: 1.5; }
+    .follow-up-question { margin-top: 12px; white-space: pre-wrap; }
     .voice-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
     .voice-actions button { flex: 1 1 170px; }
     .voice-samples { margin: 14px 0; padding-left: 23px; line-height: 1.8; font-size: 14px; }
@@ -166,7 +167,8 @@
   <script>
     const state = { config: null, token: null, userId: null, links: [], generation: 0,
       authRequest: 0, factRequest: 0, saveRequest: 0, draftRevision: 0,
-      editingFactId: null, semanticJobs: new Map(), voiceRequest: 0, voiceStatus: null,
+      editingFactId: null, semanticJobs: new Map(), followUpJobs: new Map(),
+      voiceRequest: 0, voiceStatus: null,
       voiceCapture: null, voicePendingStream: null, voiceSamples: [], voiceUpload: null };
     const $ = id => document.getElementById(id);
     const syntheticPatientId = '00000000-0000-4000-8000-000000000975';
@@ -247,6 +249,86 @@
         }
       }
       if (clear) state.semanticJobs.clear();
+    }
+
+    function cancelFollowUp(factId) {
+      const job = state.followUpJobs.get(factId);
+      if (!job) return;
+      job.cancelled = true;
+      if (job.controller) job.controller.abort();
+      if (job.question) { job.question.textContent = ''; job.question.hidden = true; }
+      if (job.indicator) job.indicator.textContent = '';
+      if (job.button) job.button.disabled = false;
+      state.followUpJobs.delete(factId);
+    }
+
+    function abortFollowUps() {
+      for (const factId of [...state.followUpJobs.keys()]) cancelFollowUp(factId);
+    }
+
+    async function requestFollowUp(patientId, factId, indicator, question, button) {
+      if (patientId !== syntheticPatientId || !uuid.test(factId || '')
+          || !state.token || $('patient').value !== patientId || $('memory-card').hidden
+          || state.editingFactId === factId
+          || !state.links.some(link => link.patient_id === patientId && current(link))) return;
+      cancelFollowUp(factId);
+      const job = { patientId, factId, generation: state.generation, token: state.token,
+        controller: new AbortController(), cancelled: false, indicator, question, button };
+      state.followUpJobs.set(factId, job);
+      const ownsJob = () => state.followUpJobs.get(factId) === job && !job.cancelled
+        && job.generation === state.generation && job.token === state.token
+        && $('patient').value === patientId && !$('memory-card').hidden
+        && state.editingFactId !== factId;
+      const linked = () => state.links.some(link => link.patient_id === patientId && current(link));
+      const currentJob = () => ownsJob() && linked();
+      question.textContent = '';
+      question.hidden = true;
+      button.disabled = true;
+      indicator.textContent = '합성 후속 질문을 요청하고 있습니다. 기존 기억 입력은 유지합니다.';
+      try {
+        const response = await fetch(`/internal/synthetic/guardian/${patientId}/fact/${factId}/follow-up`, {
+          method: 'POST', headers: { Authorization: `Bearer ${job.token}`,
+            'X-Synthetic-Material': 'confirmed' }, signal: job.controller.signal,
+        });
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (!currentJob()) return;
+        if ([401, 403].includes(response.status)) {
+          clearSession('보호자 연결 또는 후속 질문 권한이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (!response.ok) throw new Error(String(response.status));
+        const result = await response.json();
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (!currentJob()) return;
+        const candidate = typeof result?.question === 'string' ? result.question.trim() : '';
+        if (result?.fact_id !== factId || candidate.length < 5 || candidate.length > 100
+            || /[\r\n]/.test(candidate) || !candidate.endsWith('?'))
+          throw new Error('unconfirmed follow-up');
+        question.textContent = candidate;
+        question.hidden = false;
+        indicator.textContent = '생성 질문은 부정확할 수 있습니다. 새 기억을 입력하기 전 보호자가 직접 확인하세요. 질문은 저장되지 않았습니다.';
+      } catch (_) {
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (currentJob()) {
+          question.textContent = '';
+          question.hidden = true;
+          indicator.textContent = '후속 질문을 확인하지 못했습니다. 현재 작성 중인 기억은 유지됩니다. 다시 요청할 수 있습니다.';
+        }
+      } finally {
+        if (currentJob()) {
+          job.controller = null;
+          button.disabled = false;
+        }
+      }
     }
 
     const voicePath = patientId => `/internal/synthetic/guardian/${patientId}/voice`;
@@ -681,6 +763,7 @@
 
     function clearSession(message = '로그아웃했습니다.') {
       abortSemanticJobs();
+      abortFollowUps();
       suspendVoice();
       state.generation += 1;
       state.authRequest += 1;
@@ -724,6 +807,7 @@
     }
 
     async function loadFacts() {
+      abortFollowUps();
       const patientId = $('patient').value;
       const generation = state.generation;
       const request = ++state.factRequest;
@@ -759,6 +843,7 @@
         edit.textContent = '수정';
         edit.addEventListener('click', () => {
           if (!currentRequest() || !fact.fact_id) return;
+          cancelFollowUp(fact.fact_id);
           state.saveRequest += 1;
           state.draftRevision += 1;
           state.editingFactId = fact.fact_id;
@@ -792,6 +877,23 @@
           job.retryButton = retry;
           showSemanticState(job);
           card.append(indicator, retry);
+          const followUpButton = document.createElement('button');
+          followUpButton.className = 'secondary';
+          followUpButton.type = 'button';
+          followUpButton.textContent = '이 기억의 후속 질문 보기';
+          const followUpIndicator = document.createElement('div');
+          followUpIndicator.className = 'semantic-status';
+          const followUpQuestion = document.createElement('div');
+          followUpQuestion.className = 'hint follow-up-question';
+          followUpQuestion.hidden = true;
+          const followUpHint = document.createElement('div');
+          followUpHint.className = 'semantic-status';
+          followUpHint.textContent = '클릭하면 저장된 이 합성 기억 원문이 시험용 LLM 공급자에게 전송됩니다. 실제 환자·가족 정보는 입력하지 마세요.';
+          followUpButton.addEventListener('click', () => {
+            if (currentRequest()) return requestFollowUp(patientId, fact.fact_id,
+              followUpIndicator, followUpQuestion, followUpButton);
+          });
+          card.append(followUpButton, followUpIndicator, followUpQuestion, followUpHint);
         } else if (patientId === syntheticPatientId && state.semanticJobs.has(fact.fact_id)) {
           const old = state.semanticJobs.get(fact.fact_id);
           if (old.controller) old.controller.abort();
@@ -892,6 +994,7 @@
 
     $('patient').addEventListener('change', async () => {
       abortSemanticJobs();
+      abortFollowUps();
       suspendVoice();
       state.saveRequest += 1;
       state.draftRevision += 1;
@@ -903,7 +1006,7 @@
     });
     $('logout').addEventListener('click', () => clearSession());
     if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', () => { abortSemanticJobs(false); suspendVoice(); });
+      window.addEventListener('pagehide', () => { abortSemanticJobs(false); abortFollowUps(); suspendVoice(); });
       window.addEventListener('pageshow', () => {
         if (state.token && $('patient').value === syntheticPatientId && voiceForeground())
           loadVoiceStatus();
