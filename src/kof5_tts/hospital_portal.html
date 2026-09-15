@@ -98,6 +98,9 @@
     const encounter = patient => patient.encounter_id ?
       `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
     const delivery = { pending: '전달 대기', delivered: '전달됨', cancelled: '취소됨' };
+    const hospitalTime = timestamp => new Intl.DateTimeFormat('ko-KR', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul', hourCycle: 'h23',
+    }).format(new Date(timestamp)) + ' (한국 시간)';
 
     function clearSession(message = '로그아웃했습니다.') {
       ++state.generation;
@@ -110,6 +113,10 @@
       $('patients').replaceChildren();
       $('facts').replaceChildren();
       $('messages').replaceChildren();
+      $('detail-title').textContent = '';
+      $('detail-summary').textContent = '';
+      $('detail-status').textContent = '';
+      $('list-status').textContent = '';
       $('patient-card').hidden = true;
       $('detail-card').hidden = true;
       $('signin-card').hidden = false;
@@ -170,7 +177,7 @@
         for (const fact of facts.filter(item => !item.encounter_id || item.encounter_id === patient.encounter_id))
           add($('facts'), fact.category, fact.content);
         for (const message of messages.filter(item => item.encounter_id === patient.encounter_id))
-          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · ${new Date(message.due_at).toLocaleString('ko-KR')}`, message.approved_text);
+          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · ${hospitalTime(message.due_at)}`, message.approved_text);
         if (!$('facts').children.length) $('facts').textContent = '현재 유효한 승인 사실이 없습니다.';
         if (!$('messages').children.length) $('messages').textContent = '현재 입원의 승인 메시지가 없습니다.';
         $('detail-status').textContent = '병원 승인 정보만 표시했습니다.';

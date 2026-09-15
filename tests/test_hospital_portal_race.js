@@ -43,12 +43,16 @@ async function run() {
       if (++aFacts === 1) return oldA.promise;
       return reply(200, [{ encounter_id: 'A', category: 'room', content: '새 세션 A' }]);
     }
-    if (url.includes('hospital_message_list?patient_id=eq.A')) return reply(200, []);
+    if (url.includes('hospital_message_list?patient_id=eq.A')) return reply(200, [
+      { encounter_id: 'A', approved_text: '가상 오후 예약', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+    ]);
     if (url.includes('hospital_context_current?patient_id=eq.B')) {
       if (++bFacts === 2) return staleB.promise;
       return reply(200, [{ encounter_id: 'B', category: 'room', content: 'B 병실' }]);
     }
-    if (url.includes('hospital_message_list?patient_id=eq.B')) return reply(200, []);
+    if (url.includes('hospital_message_list?patient_id=eq.B')) return reply(200, [
+      { encounter_id: 'B', approved_text: '가상 B 예약', due_at: '2026-09-15T06:00:00Z', delivery_status: 'pending' },
+    ]);
     throw new Error(`unexpected URL ${url}`);
   }
 
@@ -75,6 +79,9 @@ async function run() {
   await pause();
   elements.logout.handlers.click();
   assert.equal(elements['detail-card'].hidden, true, 'logout immediately hides hospital data');
+  assert.equal(elements['detail-title'].textContent, '', 'logout removes patient name from DOM');
+  assert.equal(elements['detail-summary'].textContent, '', 'logout removes patient number and location from DOM');
+  assert.equal(elements['detail-status'].textContent, '', 'logout removes patient detail status from DOM');
   elements.email.value = 'staff@example.invalid';
   elements.password.value = 'synthetic';
   await submit();
@@ -83,6 +90,8 @@ async function run() {
   await bRead;
   assert.equal(elements['patient-card'].hidden, false, 'old session denial cannot log out new session');
   assert.deepEqual(displayed(), ['새 세션 A'], 'old session cannot change new patient detail');
+  assert.match(elements.messages.children[0].children[0].textContent, /15:00.*한국 시간/,
+    'UTC device timezone still displays the 15:00 Korean hospital schedule');
   console.log('Hospital portal patient and session isolation: PASS');
 }
 
