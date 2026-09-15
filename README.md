@@ -61,6 +61,8 @@ uv run python scripts/run_backend.py
 
 별도 `cloud_prototype.py`에는 Phase 0용 배치 WAV→STT→LLM→MP3 호출을 합성 데이터 기준으로 구현했습니다. Deepgram Nova-3, OpenAI Responses, ElevenLabs IVC는 현재 **비교 후보**이고, 공급업체 선정과 실제 서비스 검증은 남아 있습니다. [Deepgram MIP 제외](https://developers.deepgram.com/docs/the-deepgram-model-improvement-partnership-program)와 [OpenAI `store=false`](https://developers.openai.com/api/docs/guides/your-data)를 요청에 적용하지만, [ElevenLabs 복제 음성 샘플은 Zero Retention 적용 대상이 아니므로](https://elevenlabs.io/docs/eleven-api/resources/zero-retention-mode) 실제 보호자 샘플 등록은 동의·보존·삭제 계약을 확인하기 전까지 진행하지 않습니다. 테스트는 네트워크 없이 모의 응답만 사용합니다.
 
+후보 API를 실제 합성 자료로 시험할 때는 세 API key, `ELEVENLABS_VOICE_ID`, `VOICE_OWNER_CONSENT_RECORD_ID`를 로컬 환경 변수에 설정하고 `uv run python scripts/demo_cloud_pipeline.py <합성 WAV> --synthetic-only`를 실행합니다. 동의 기록 ID 입력은 **내부 시험자의 확인 표시**일 뿐 실제 환자 시험의 승인·동의 절차가 아닙니다. 이 명령은 합성 WAV를 세 외부 공급자에게 보내며, 결과 MP3는 Git에서 제외된 `runs/synthetic-preview-*.mp3`에 저장합니다. 현재 실서비스 호출은 수행하지 않았습니다.
+
 ## 기존 전처리 도구
 
 AI Hub 데이터셋 key와 선택 file key를 확인한 뒤 다운로드부터 24 kHz mono 16-bit FLAC 변환까지 실행할 수 있습니다.

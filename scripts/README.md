@@ -6,6 +6,7 @@
 
 - `demo_companion_text.py`: 합성 사실·발화로 PRD의 첫 대화 흐름을 확인(오디오·클라우드 호출 없음)
 - `run_backend.py`: `127.0.0.1`에서 합성 환자 전용 텍스트 API를 실행
+- `demo_cloud_pipeline.py`: 합성 WAV와 동의된 시험용 voice ID로 후보 hosted API 왕복을 측정(MP3는 Git 제외 `runs/`에 저장)
 - `generate_architecture.py`: 코드·설정 목록과 MVP 목표 흐름을 `architecture/generated/`에 생성
 - `test_generate_architecture.py`: 생성기의 기본 동작과 결정성 검증
 - `download_aihub.py`: AI Hub 데이터셋·파일 목록 조회 및 승인 데이터 다운로드

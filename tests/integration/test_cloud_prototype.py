@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+import os
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -13,6 +15,17 @@ from kof5_tts.cloud_prototype import CloudCredentials, run_synthetic_pipeline  #
 
 
 class CloudPrototypeTests(unittest.TestCase):
+    def test_live_cli_requires_consent_before_file_or_network(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("VOICE_OWNER_CONSENT_RECORD_ID", None)
+        run = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "demo_cloud_pipeline.py"),
+             "/nonexistent/synthetic.wav", "--synthetic-only"],
+            env=environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(run.returncode, 2)
+        self.assertIn("VOICE_OWNER_CONSENT_RECORD_ID", run.stderr)
+
     def test_synthetic_three_provider_flow_and_privacy_flags(self) -> None:
         calls = []
 
