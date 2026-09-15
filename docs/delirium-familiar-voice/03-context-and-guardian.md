@@ -2,7 +2,7 @@
 
 이 제품에서 TTS보다 중요한 부분이다.
 
-구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 원문 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. `companion.relevant_facts`는 합성 `Fact` 목록에서 환자·namespace·기한·피할 주제를 분리해 키워드 검색한다. 이 검색은 현재 합성 대화 API의 한 가족 사실에만 연결되어 있으며, 보호자 DB 행을 환자 세션에 공급하는 권한 경로, 검색 품질 측정, dynamic follow-up은 아직 없다. pgvector·임베딩 모델을 정하거나 실제 환자 기억을 검색하지 않았다.
+구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. 기존 `companion.relevant_facts`는 합성 `Fact` 목록을 검색한다. 새 [합성 iPad 기기 연결 설계](../../architecture/decisions/0006-ipad-anonymous-device-pairing.md)는 병원 담당자가 현재 입원에 연결한 익명 Auth 기기 JWT를 확인하고, `patient_family_search`로 보호자 DB의 일반 기억 최대 세 건을 매 턴 다시 검색해 FastAPI의 합성 글 응답에 공급한다. 로컬 GoTrue/Data API→FastAPI 모의 공급자 경로와 철회 차단은 통과했다. 실제 iPad·원격 공급자·실제 환자 기억은 사용하지 않았고, 한국어 검색 품질 측정·dynamic follow-up·pgvector/임베딩 모델은 남아 있다.
 
 환자의 memory context는 fine-tuning하지 않고 RAG 구조로 관리한다.
 

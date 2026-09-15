@@ -21,4 +21,4 @@ NNNN-short-title.md
 
 현재 적용하는 결정: [ADR-0001 가족 음성 대화 MVP의 클라우드 중심 전환](0001-cloud-first-familiar-voice-mvp.md), [ADR-0002 iPad 기기 내 발화 감지와 Vercel 우선 배포](0002-ipad-local-audio-vercel-first.md), [ADR-0004 Supabase Auth/Postgres](0004-supabase-auth-postgres.md), [ADR-0005 병원 승인 사실과 메시지 원문 보존](0005-hospital-approved-facts-message-fidelity.md).
 
-검증 중인 설계: [ADR-0003 병원 환자 등록과 분리된 환자 목소리 프로필](0003-hospital-registry-patient-voice-profile.md).
+검증 중인 설계: [ADR-0003 병원 환자 등록과 분리된 환자 목소리 프로필](0003-hospital-registry-patient-voice-profile.md), [ADR-0006 iPad 기기 계정과 현재 입원 연결](0006-ipad-anonymous-device-pairing.md).
