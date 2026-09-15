@@ -124,9 +124,9 @@ BEGIN
         now(), now() + interval '1 minute', now()
     );
 
-    IF (SELECT count(*) FROM pg_class
+    IF EXISTS (SELECT 1 FROM pg_class
         WHERE relnamespace = 'kof5'::regnamespace AND relkind = 'r'
-        AND relrowsecurity AND relforcerowsecurity) <> 5 THEN
+        AND NOT (relrowsecurity AND relforcerowsecurity)) THEN
         RAISE EXCEPTION 'registry tables are not all FORCE RLS';
     END IF;
 END $$;
