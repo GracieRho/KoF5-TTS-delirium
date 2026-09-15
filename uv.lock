@@ -119,22 +119,16 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "uvicorn" },
-]
-
-[package.dev-dependencies]
-dev = [
     { name = "httpx" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "uvicorn", specifier = ">=0.52.4,<1" },
 ]
-
-[package.metadata.requires-dev]
-dev = [{ name = "httpx", specifier = ">=0.28,<1" }]
 
 [[package]]
 name = "pydantic"
