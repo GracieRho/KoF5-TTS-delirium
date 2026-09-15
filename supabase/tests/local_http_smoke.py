@@ -118,6 +118,10 @@ def main() -> None:
         status, facts = request(f"{base}/family_context?select=fact_id,content", "GET", public, token, schema="api")
         assert status == 200 and len(facts) == 1 and facts[0]["content"] == "가상 가족 여행 기억", f"family read: {status}"
         fact_id = UUID(facts[0]["fact_id"])
+        search = f"{base}/rpc/guardian_memory_search"
+        search_query = {"p_patient_id": str(patient), "p_term": "여행"}
+        status, matches = request(search, "POST", public, token, payload=search_query, schema="api")
+        assert status == 200 and len(matches) == 1 and matches[0]["content"] == "가상 가족 여행 기억", f"family search: {status}"
         status, changed = request(
             f"{base}/family_context?fact_id=eq.{fact_id}&patient_id=eq.{patient}",
             "PATCH", public, token,
@@ -125,11 +129,16 @@ def main() -> None:
         )
         assert status == 200 and isinstance(changed, list) and len(changed) == 1, f"verified family edit: {status}"
         assert changed[0]["category"] == "avoid_topic" and changed[0]["content"] == "가상으로 피할 주제"
+        status, matches = request(search, "POST", public, token,
+                                  payload={"p_patient_id": str(patient), "p_term": "주제"}, schema="api")
+        assert status == 200 and matches == [], f"avoid-topic search exclusion: {status}"
 
         sql(f"UPDATE kof5.patient_guardian_link SET access_status='revoked', revoked_at=now() "
             f"WHERE patient_id='{patient}' AND guardian_user_id='{user_id}';")
         status, facts = request(f"{base}/family_context?select=content", "GET", public, token, schema="api")
         assert status == 200 and facts == [], f"revoked family read: {status}"
+        status, matches = request(search, "POST", public, token, payload=search_query, schema="api")
+        assert status == 200 and matches == [], f"revoked family search: {status}"
         status, changed = request(
             f"{base}/family_context?fact_id=eq.{fact_id}&patient_id=eq.{patient}",
             "PATCH", public, token,
@@ -144,7 +153,9 @@ def main() -> None:
         assert status in (401, 403), f"revoked family write: {status}"
         status, _ = request(f"{base}/family_context?select=content", "GET", public, schema="api")
         assert status in (401, 403), f"anonymous family read: {status}"
-        print("Local Auth login → Data API family read/write/edit → revocation/anon deny: PASS")
+        status, _ = request(search, "POST", public, payload=search_query, schema="api")
+        assert status in (401, 403, 404), f"anonymous family search: {status}"
+        print("Local Auth login → Data API family read/write/edit/search → revocation/anon deny: PASS")
     finally:
         found = sql(f"SELECT id FROM auth.users WHERE email='{email}';")
         cleanup_id = UUID(found) if found else user_id
