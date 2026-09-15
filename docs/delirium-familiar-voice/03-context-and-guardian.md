@@ -2,7 +2,9 @@
 
 이 제품에서 TTS보다 중요한 부분이다.
 
-구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. 기존 `companion.relevant_facts`와 문자열 포함 검색은 서로 다른 표현의 한국어 질문을 찾지 못할 수 있다. 고정 합성 환자에는 별도 [pgvector 가족 기억 색인](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)을 추가했다. 보호자 화면은 일반 기억이 저장된 뒤 실제 `fact_id`를 확인했을 때만 서버 색인을 요청하고, 서버는 보호자 JWT·현재 연결·사실을 확인한 다음 임시 모델 `text-embedding-3-small`로 색인한다. 결속된 iPad 기기 JWT의 [단일 의미 검색 RPC](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)는 현재 입원·동의·보호자 연결과 일반 가족 기억을 한 DB 조회에서 대조해 최대 세 건을 반환한다. 로컬 pgTAP 37개와 GoTrue/Data API의 색인·검색·수정·철회 검사가 통과했다. 실제 한국어 임베딩 정확도, 임상 내용 검토, dynamic follow-up, 실제 iPad·원격 공급자·환자 기억은 검증되지 않았다.
+구현 현황: 보호자 연결이 검증된 경우의 `family_fact` 저장·읽기와 철회 후 접근 차단은 로컬 합성 자료로 검사했다. 기존 `companion.relevant_facts`와 문자열 포함 검색은 서로 다른 표현의 한국어 질문을 찾지 못할 수 있다. 고정 합성 환자에는 별도 [pgvector 가족 기억 색인](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)을 추가했다. 보호자 화면은 일반 기억이 저장된 뒤 실제 `fact_id`를 확인했을 때만 서버 색인을 요청하고, 서버는 보호자 JWT·현재 연결·사실을 확인한 다음 임시 모델 `text-embedding-3-small`로 색인한다. 결속된 iPad 기기 JWT의 [단일 의미 검색 RPC](../../supabase/migrations/20260916123000_synthetic_family_embedding_rag.sql)는 현재 입원·동의·보호자 연결과 일반 가족 기억을 한 DB 조회에서 대조해 최대 세 건을 반환한다. 로컬 pgTAP 37개와 GoTrue/Data API의 색인·검색·수정·철회 검사가 통과했다. 실제 한국어 임베딩 정확도, 임상 내용 검토, 후속 질문 생성 품질, 실제 iPad·원격 공급자·환자 기억은 검증되지 않았다.
+
+별도 **고정 합성 환자 내부 시험**에서 보호자는 저장된 일반 기억 한 건을 골라 후속 질문을 요청할 수 있다. 서버는 보호자 JWT와 현재 연결·기억을 다시 확인한 뒤 시험용 [Responses API](https://developers.openai.com/api/reference/cli/resources/responses/methods/create)에 그 기억 원문을 보내며 `store=false`를 요청한다. 생성된 한국어 질문은 의료 주제·확인되지 않은 전제와 길이를 검사하고, 반환 직전에 연결과 원문을 다시 확인한다. 질문은 보호자 화면에 검토용으로만 보이고 새 사실로 자동 저장되지 않는다. 로컬 모의 API와 웹 경합 검사만 통과했다. 실제 공급자 호출·한국어 질문 품질, 공급자 보존 계약과 실제 가족 정보 처리는 검증되지 않았다.
 
 환자의 memory context는 fine-tuning하지 않고 RAG 구조로 관리한다.
 
