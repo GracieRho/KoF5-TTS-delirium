@@ -12,6 +12,20 @@ class FakeRecorderPlatform extends RecordPlatform {
   Completer<Stream<Uint8List>>? delayedStart;
   Completer<String?>? delayedStop;
 
+  void feedCandidate() {
+    final voice = Uint8List(3200);
+    final view = ByteData.sublistView(voice);
+    for (var index = 0; index < 1600; index++) {
+      view.setInt16(index * 2, 3000, Endian.little);
+    }
+    for (var index = 0; index < 3; index++) {
+      audio.add(voice);
+    }
+    for (var index = 0; index < 7; index++) {
+      audio.add(Uint8List(3200));
+    }
+  }
+
   @override
   Future<void> create(String recorderId) async {}
 

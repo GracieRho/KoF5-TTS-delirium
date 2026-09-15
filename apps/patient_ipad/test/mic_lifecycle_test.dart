@@ -33,6 +33,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.starts, 0);
     expect(find.text('마이크 준비 중'), findsNothing);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(
@@ -66,11 +68,15 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(fake.stops, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.textContaining('마이크 중단을 확인하지 못했습니다'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '마이크 시험 시작'))
+          .onPressed,
       isNull,
     );
     await tester.pumpWidget(const SizedBox());

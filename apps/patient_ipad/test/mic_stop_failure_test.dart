@@ -36,7 +36,9 @@ void main() {
     expect(fake.stops, 1);
     expect(find.textContaining('마이크 중단을 확인하지 못했습니다'), findsOneWidget);
     expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '마이크 시험 시작'))
+          .onPressed,
       isNull,
     );
     await tester.pumpWidget(const SizedBox());

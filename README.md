@@ -42,7 +42,7 @@
 
 폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR 목록](architecture/decisions/README.md)에서 확인할 수 있습니다. 병원 환자 등록·화자 특징의 최소 컬럼은 [병원 등록 설계](docs/delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)에 정리했습니다.
 
-iPad의 기기 내 발화 후보 감지 코드는 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 아직 오디오는 기기 밖으로 보내지 않습니다.
+iPad의 기기 내 발화 후보 감지와 수동 자가 음성 클라우드 연결은 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 기본적으로 후보 오디오는 폐기하고, 시험자 본인이 확인한 후보 한 건만 내부 API로 직접 전송할 수 있습니다. 자동 전송과 환자 화자 판정은 아직 없습니다.
 
 ## 합성 대화 흐름 확인
 
@@ -65,7 +65,7 @@ uv run python scripts/run_backend.py
 
 내부 오디오 API `POST /internal/synthetic/audio`는 `KOF5_INTERNAL_DEMO_TOKEN`(32자 이상), 공급자 키·voice ID, `VOICE_OWNER_CONSENT_RECORD_ID`가 서버에 설정된 경우에만 열립니다. 요청에는 `X-Internal-Demo-Token`, `X-Synthetic-Material: confirmed`, `Content-Type: audio/wav`가 필요하며, PCM16 WAV 원문(2 MB 이하·30초 이하)을 전송합니다. 응답은 전사·짧은 답·MP3의 base64입니다. 이 확인은 내부 시험자의 선언이며 실제 동의 검증이나 환자 인증이 아닙니다. 오디오는 메모리에서만 처리하고 앱 DB에 저장하지 않습니다. 실제 환자 오디오를 보내지 마세요.
 
-루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 이 설정은 **합성 텍스트 API의 배포 준비**만 뜻합니다. 현재 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
+루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
 
 별도 `cloud_prototype.py`에는 Phase 0용 배치 WAV→STT→LLM→MP3 호출을 합성 데이터 기준으로 구현했습니다. Deepgram Nova-3, OpenAI Responses, ElevenLabs IVC는 현재 **비교 후보**이고, 공급업체 선정과 실제 서비스 검증은 남아 있습니다. [Deepgram MIP 제외](https://developers.deepgram.com/docs/the-deepgram-model-improvement-partnership-program)와 [OpenAI `store=false`](https://developers.openai.com/api/docs/guides/your-data)를 요청에 적용하지만, [ElevenLabs 복제 음성 샘플은 Zero Retention 적용 대상이 아니므로](https://elevenlabs.io/docs/eleven-api/resources/zero-retention-mode) 실제 보호자 샘플 등록은 동의·보존·삭제 계약을 확인하기 전까지 진행하지 않습니다. 테스트는 네트워크 없이 모의 응답만 사용합니다.
 

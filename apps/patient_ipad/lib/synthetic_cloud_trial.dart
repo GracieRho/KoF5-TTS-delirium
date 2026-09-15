@@ -51,7 +51,8 @@ Future<SyntheticCloudReply> sendOwnVoiceCandidate(
   }
   final wav = pcm16MonoWav(pcm);
   final request = await client.postUrl(endpoint);
-  request.followRedirects = false; // Never forward the internal token to a redirect target.
+  request.followRedirects =
+      false; // Never forward the internal token to a redirect target.
   request.headers.set(HttpHeaders.contentTypeHeader, 'audio/wav');
   request.headers.set('X-Internal-Demo-Token', token);
   request.headers.set('X-Synthetic-Material', 'confirmed');
@@ -70,17 +71,25 @@ Future<SyntheticCloudReply> sendOwnVoiceCandidate(
   final decoded = jsonDecode(utf8.decode(body));
   if (decoded is! Map<String, dynamic> ||
       decoded['transcript'] is! String ||
+      (decoded['transcript'] as String).length > 500 ||
       (decoded['reply'] != null && decoded['reply'] is! String) ||
-      (decoded['audio_mp3_base64'] != null && decoded['audio_mp3_base64'] is! String)) {
+      (decoded['reply'] is String &&
+          (decoded['reply'] as String).length > 1000) ||
+      (decoded['audio_mp3_base64'] != null &&
+          decoded['audio_mp3_base64'] is! String)) {
     throw const FormatException('서버 음성 응답 형식이 올바르지 않습니다.');
   }
   final audio = decoded['audio_mp3_base64'] as String?;
   if (audio != null && audio.length > 2_700_000) {
     throw const FormatException('서버 음성 응답이 너무 큽니다.');
   }
+  final mp3 = audio == null ? null : base64Decode(audio);
+  if (mp3 != null && mp3.length > 2_000_000) {
+    throw const FormatException('서버 음성 응답이 너무 큽니다.');
+  }
   return SyntheticCloudReply(
     decoded['transcript'] as String,
     decoded['reply'] as String?,
-    audio == null ? null : base64Decode(audio),
+    mp3,
   );
 }
