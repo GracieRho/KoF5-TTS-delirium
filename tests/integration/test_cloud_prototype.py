@@ -23,7 +23,7 @@ class CloudPrototypeTests(unittest.TestCase):
                     {"transcript": "우리 제주도 언제 갔었지?"},
                 ]}]}})
             if request.url.host == "api.openai.com":
-                return httpx.Response(200, json={"output": [{"type": "message", "content": [
+                return httpx.Response(200, json={"status": "completed", "output": [{"type": "message", "content": [
                     {"type": "output_text", "text": "2024년 5월에 제주도 갔었어."},
                 ]}]})
             if request.url.host == "api.elevenlabs.io":
@@ -96,6 +96,26 @@ class CloudPrototypeTests(unittest.TestCase):
                     self.assertEqual(result[1:], (None, None))
                 else:
                     self.assertIn(expected_reply, result[1])
+
+    def test_credentials_repr_and_incomplete_llm_response(self) -> None:
+        credentials = CloudCredentials("secret-d", "secret-o", "secret-e", "voice-test", True)
+        self.assertNotIn("secret-", repr(credentials))
+        calls = []
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append(request.url.host)
+            if request.url.host == "api.deepgram.com":
+                return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                    {"transcript": "제주도 언제 갔었지?"},
+                ]}]}})
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "incomplete", "output": [{"type": "message", "content": [
+                    {"type": "output_text", "text": "잘못된 응답"},
+                ]}]})
+            raise AssertionError("incomplete answer must never reach TTS")
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            with self.assertRaisesRegex(ValueError, "not complete"):
+                run_synthetic_pipeline(client, b"RIFF" + b"\0" * 64, "known fact", credentials)
+        self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
 
 
 if __name__ == "__main__":

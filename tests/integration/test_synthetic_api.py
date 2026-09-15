@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -59,7 +60,24 @@ class SyntheticApiTests(unittest.TestCase):
             "transcript": "그만해.", "label": "UNCERTAIN",
         }).json()
         self.assertEqual((dissent["event"], dissent["text"]), ("patient_dissent", None))
+        self.assertEqual(self.client.post(f"{root}/start", json={
+            "transcript": "수민아?", "label": "DIRECTED",
+        }).status_code, 409)
         self.assertEqual(self.client.post(f"{root}/end").json()["state"], "IDLE")
+
+    def test_stale_session_expires_before_uncertain_turn(self) -> None:
+        root = "/patients/synthetic_patient/conversation"
+        self.client.post(f"{root}/start", json={"transcript": "수민아?", "label": "DIRECTED"})
+        app.state.sessions["synthetic_patient"].last_activity = datetime.now(timezone.utc) - timedelta(minutes=5)
+        response = self.client.post(f"{root}/turn", json={
+            "transcript": "TV 뉴스입니다", "label": "UNCERTAIN",
+        }).json()
+        self.assertEqual((response["event"], response["state"], response["text"]),
+                         ("discarded", "IDLE", None))
+        restarted = self.client.post(f"{root}/start", json={
+            "transcript": "수민아?", "label": "DIRECTED",
+        }).json()
+        self.assertEqual((restarted["event"], restarted["text"]), ("turn", "응, 왜?"))
 
 
 if __name__ == "__main__":

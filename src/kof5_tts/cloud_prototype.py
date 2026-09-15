@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -13,11 +13,11 @@ from kof5_tts.companion import ConversationSession, orientation_date
 
 @dataclass(frozen=True)
 class CloudCredentials:
-    deepgram_key: str
-    openai_key: str
-    elevenlabs_key: str
+    deepgram_key: str = field(repr=False)
+    openai_key: str = field(repr=False)
+    elevenlabs_key: str = field(repr=False)
     voice_id: str
-    voice_owner_consent_verified: bool
+    voice_owner_consent_verified: bool = field(repr=False)
 
     def __post_init__(self) -> None:
         if not all((self.deepgram_key, self.openai_key, self.elevenlabs_key, self.voice_id)):
@@ -67,8 +67,11 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
         },
     )
     response.raise_for_status()
+    body = response.json()
+    if not isinstance(body, dict) or body.get("status") != "completed":
+        raise ValueError("LLM response is not complete")
     try:
-        output = response.json()["output"]
+        output = body["output"]
         text = "".join(
             part["text"]
             for item in output if item.get("type") == "message"

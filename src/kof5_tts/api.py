@@ -48,8 +48,7 @@ def _reply(event: str, transcript: str, now: datetime) -> str | None:
     return facts[0].content if facts else "지금 확인된 정보가 없어서 모르겠어."
 
 
-def _route(session: ConversationSession, speech: SpeechTurn) -> dict[str, str | None]:
-    now = datetime.now(timezone.utc)
+def _route(session: ConversationSession, speech: SpeechTurn, now: datetime) -> dict[str, str | None]:
     event = session.hear(speech.transcript, speech.label, now)
     return {"event": event, "state": session.state, "text": _reply(event, speech.transcript, now)}
 
@@ -62,12 +61,17 @@ def health() -> dict[str, str]:
 @app.post("/patients/{patient_id}/conversation/start")
 def start(patient_id: str, speech: SpeechTurn) -> dict[str, str | None]:
     _patient(patient_id)
+    now = datetime.now(timezone.utc)
     existing = app.state.sessions.get(patient_id)
+    if existing is not None and existing.proactive_paused:
+        raise HTTPException(status_code=409, detail="patient dissent remains active")
+    if existing is not None:
+        existing.expire(now)
     if existing is not None and existing.state != "IDLE":
         raise HTTPException(status_code=409, detail="conversation already active")
     session = ConversationSession()
     app.state.sessions[patient_id] = session
-    return _route(session, speech)
+    return _route(session, speech, now)
 
 
 @app.post("/patients/{patient_id}/conversation/turn")
@@ -76,7 +80,9 @@ def turn(patient_id: str, speech: SpeechTurn) -> dict[str, str | None]:
     session = app.state.sessions.get(patient_id)
     if session is None:
         raise HTTPException(status_code=404, detail="conversation not started")
-    return _route(session, speech)
+    now = datetime.now(timezone.utc)
+    session.expire(now)
+    return _route(session, speech, now)
 
 
 @app.post("/patients/{patient_id}/conversation/end")
