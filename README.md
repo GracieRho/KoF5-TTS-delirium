@@ -43,7 +43,7 @@
 
 폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR 목록](architecture/decisions/README.md)에서 확인할 수 있습니다. 병원 환자 등록·화자 특징의 최소 컬럼은 [병원 등록 설계](docs/delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)에 정리했습니다.
 
-iPad의 기기 내 발화 후보 감지·지원되는 기기의 한국어 로컬 전사와 수동 자가 음성 클라우드 연결은 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 기본적으로 후보 오디오는 폐기하고, 시험자 본인이 확인한 후보 한 건만 내부 API로 직접 전송할 수 있습니다. 자동 서버 전송과 환자 화자 판정은 아직 없습니다.
+iPad의 기기 내 발화 후보 감지·한국어 로컬 전사, 글 전용 합성 시험과 수동 자가 음성 오디오 전송은 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 별도 본인 음성·자동 글 시험 스위치를 켠 경우에만 기기에서 판정한 후보의 **글**을 자동 전송합니다. 후보 오디오는 기본적으로 폐기하며 환자/TV/의료진 화자 판정은 아직 없습니다.
 
 ## 합성 대화 흐름 확인
 
@@ -81,7 +81,11 @@ iPad의 합성 기기 연결 모드는 익명 JWT를 메모리에만 두고 병�
 
 별도 `POST /internal/synthetic/paired/00000000-0000-4000-8000-000000000975/text`는 기존 내부 합성 토큰과 **기기 Supabase Auth JWT**를 함께 요구합니다. FastAPI는 전용 Supabase의 publishable 키와 같은 JWT로 단일 RPC로 기기 권한과 가족 기억 최대 세 건을 같은 DB 스냅샷에서 매 턴 확인한 뒤 합성 공급자 파이프라인에 전달합니다. 기억이 없으면 LLM에 빈 사실을 보내지 않고 확인된 정보가 없다고 답합니다. 실제 로컬 Auth/Data API→FastAPI와 모의 공급자 연결은 통과했지만, 실제 공급자 호출·iPad·환자 자료에는 사용하지 않았습니다.
 
+병원 이름·병실·병동·검사/면회 일정 질문에서는 별도 `api.patient_hospital_turn_context`가 **고정 합성 환자**의 기기 권한과 현재 입원의 짧은 승인 사실을 한 DB 조회에서 확인합니다. 승인·유효 시각·입원 범위·안전 범주·질문과의 연결을 제한하고, 정확히 한 사실을 찾지 못하면 확인되지 않았다고 답합니다. 직원 출처 ID는 기기 응답에 넣지 않습니다. [합성 병원 사실 migration](supabase/migrations/20260915183905_patient_hospital_turn_context.sql)의 어휘 규칙과 로컬 합성 자료는 실제 병원 출처·임상 문구 승인이나 한국어 질문 품질을 증명하지 않습니다.
+
 합성 병원 메시지는 고정 합성 환자·현재 입원·세 동의·활성 음성 프로필이 모두 준비된 경우에만 담당 직원이 초안을 쓰고 **다른 담당 직원**이 승인해 예약 큐에 넣습니다. 기기는 익명 JWT로 기한이 된 메시지 ID 최대 세 개를 찾고, 개별 RPC에서 권한과 승인 원문을 다시 확인합니다. `POST /internal/synthetic/paired/{patient_id}/message/{message_id}/audio`는 원문을 언어 모델로 다시 쓰지 않고 시험 TTS에 그대로 보냅니다. iPad는 RPC 원문과 API 원문이 완전히 일치할 때만 수동 재생하며, 재생 중단·철회 시 폐기합니다. 이 경로는 DB 메시지를 `pending`에서 `delivered`로 바꾸거나 의료진 확인을 기록하지 않습니다. 실제 환자·실기기·실제 공급자와 임상 원문 승인·전달은 아직 검증하지 않았습니다.
+
+합성 보조 알림은 iPad의 **자가 음성 합성 시험 후보**에서 위험 구절과 이름 호출을 확인한 뒤, 기기 JWT로 `patient_id`(고정 합성 UUID)·위험 `category`·중복 방지 UUID만 DB RPC에 보냅니다. 전사 원문·오디오는 알림 요청에 넣지 않습니다. `created`는 DB 행 생성, `delivered`는 담당 직원의 **합성 포털 표시 수신 기록**, `acknowledged`는 담당 직원의 명시 확인, `resolved`는 후속 조치 완료 표시, `failed`는 포털 표시/직원 확인 시간 초과입니다. 포털 목록을 읽기만 해서는 `delivered`가 되지 않으며, 실패 판정은 담당 직원의 조회·동작 또는 명시적 sweep 때만 실행되고 **상시 cron/외부 발송은 없습니다**. iPad에는 항상 “기존 호출 버튼을 이용해주세요”라고 안내하지만 실제 간호 호출 장치와 연결된 fallback은 아닙니다. [합성 보조 알림 migration](supabase/migrations/20260915183701_synthetic_aux_alert.sql)과 [ADR-0007](architecture/decisions/0007-synthetic-auxiliary-alert-state-boundary.md)은 실제 의료진 전달·ACK·임상 조치를 증명하지 않습니다. 환자 시험에는 [Gate07](docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)의 폐루프 검증, 전용 원격 배포, 실기기·공급자 시험과 기관 승인이 먼저 필요합니다.
 
 루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
 
