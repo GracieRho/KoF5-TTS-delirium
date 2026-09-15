@@ -44,7 +44,9 @@ def request(url: str, method: str, key: str, token: str | None = None,
     if token or key.startswith("eyJ"):
         headers["Authorization"] = f"Bearer {token or key}"
     if schema:
-        headers["Content-Profile" if method == "POST" else "Accept-Profile"] = schema
+        headers["Content-Profile" if method in {"POST", "PATCH"} else "Accept-Profile"] = schema
+    if method == "PATCH":
+        headers["Prefer"] = "return=representation"
     body = None if payload is None else json.dumps(payload).encode()
     if body is not None:
         headers["Content-Type"] = "application/json"
@@ -113,13 +115,27 @@ def main() -> None:
             schema="api",
         )
         assert status == 201, f"verified family write: {status}"
-        status, facts = request(f"{base}/family_context?select=content", "GET", public, token, schema="api")
-        assert status == 200 and facts == [{"content": "가상 가족 여행 기억"}], f"family read: {status}"
+        status, facts = request(f"{base}/family_context?select=fact_id,content", "GET", public, token, schema="api")
+        assert status == 200 and len(facts) == 1 and facts[0]["content"] == "가상 가족 여행 기억", f"family read: {status}"
+        fact_id = UUID(facts[0]["fact_id"])
+        status, changed = request(
+            f"{base}/family_context?fact_id=eq.{fact_id}&patient_id=eq.{patient}",
+            "PATCH", public, token,
+            payload={"category": "avoid_topic", "content": "가상으로 피할 주제"}, schema="api",
+        )
+        assert status == 200 and isinstance(changed, list) and len(changed) == 1, f"verified family edit: {status}"
+        assert changed[0]["category"] == "avoid_topic" and changed[0]["content"] == "가상으로 피할 주제"
 
         sql(f"UPDATE kof5.patient_guardian_link SET access_status='revoked', revoked_at=now() "
             f"WHERE patient_id='{patient}' AND guardian_user_id='{user_id}';")
         status, facts = request(f"{base}/family_context?select=content", "GET", public, token, schema="api")
         assert status == 200 and facts == [], f"revoked family read: {status}"
+        status, changed = request(
+            f"{base}/family_context?fact_id=eq.{fact_id}&patient_id=eq.{patient}",
+            "PATCH", public, token,
+            payload={"content": "철회 후 수정 금지"}, schema="api",
+        )
+        assert status in (401, 403) or (status == 200 and changed == []), f"revoked family edit: {status}"
         status, _ = request(
             f"{base}/family_context", "POST", public, token,
             payload={"patient_id": str(patient), "author_guardian_user_id": str(user_id),
@@ -128,7 +144,7 @@ def main() -> None:
         assert status in (401, 403), f"revoked family write: {status}"
         status, _ = request(f"{base}/family_context?select=content", "GET", public, schema="api")
         assert status in (401, 403), f"anonymous family read: {status}"
-        print("Local Auth login → Data API family read/write → revocation/anon deny: PASS")
+        print("Local Auth login → Data API family read/write/edit → revocation/anon deny: PASS")
     finally:
         found = sql(f"SELECT id FROM auth.users WHERE email='{email}';")
         cleanup_id = UUID(found) if found else user_id

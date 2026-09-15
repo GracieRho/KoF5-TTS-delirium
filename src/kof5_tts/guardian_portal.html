@@ -39,6 +39,9 @@
     .fact { padding: 16px 18px; border: 1px solid #e0e8df; border-radius: 12px; background: #fafcf9; }
     .fact h3 { margin: 0 0 8px; font-size: 15px; color: #3a6956; }
     .fact p { margin: 0; white-space: pre-wrap; color: #233530; }
+    .fact button { margin-top: 12px; }
+    .avoid-facts .fact { background: #fff9f4; border-color: #eedfd2; }
+    .avoid-facts .fact h3 { color: #805c43; }
     .links { padding: 0; list-style: none; display: grid; gap: 9px; }
     .links li { padding: 11px 13px; border-radius: 9px; background: #e8efe7; font-size: 14px; }
     .links li.pending { background: #f7f2e8; color: #796342; }
@@ -94,26 +97,47 @@
         <h2 id="memory-title">가족의 기억</h2>
         <p>짧고 정확하게, 본인이 확인한 이야기만 남겨주세요.</p>
         <div id="facts" class="facts" aria-live="polite"></div>
+        <h3 id="avoid-title">피해야 할 이야기</h3>
+        <p class="small">대화에 쓰지 않을 주제를 따로 남겨주세요.</p>
+        <div id="avoid-facts" class="facts avoid-facts" aria-labelledby="avoid-title" aria-live="polite"></div>
         <form id="memory-form">
           <label for="category">기억 종류</label>
           <select id="category">
-            <option value="relationship">가족과 관계</option>
-            <option value="food">좋아하는 음식</option>
-            <option value="travel">함께한 여행</option>
-            <option value="avoid_topic">피해야 할 이야기</option>
+            <optgroup label="가족과 일상">
+              <option value="family">가족</option>
+              <option value="relationship">가족과 관계</option>
+              <option value="hometown">고향</option>
+              <option value="occupation">예전 일</option>
+              <option value="food">좋아하는 음식</option>
+              <option value="hobby">취미</option>
+              <option value="friend">친구</option>
+              <option value="pet">반려동물</option>
+              <option value="daily_routine">평소 일과</option>
+            </optgroup>
+            <optgroup label="함께한 이야기">
+              <option value="travel">함께한 여행</option>
+              <option value="family_event">가족 행사</option>
+              <option value="favorite_story">좋아하는 이야기</option>
+              <option value="recent_event">최근 일</option>
+              <option value="comfort_topic">안심되는 이야기</option>
+            </optgroup>
+            <optgroup label="대화에서 제외">
+              <option value="avoid_topic">피해야 할 이야기</option>
+            </optgroup>
           </select>
           <label for="content">확인한 이야기</label>
           <textarea id="content" maxlength="1000" required placeholder="예: 함께 제주도에 갔을 때 성산일출봉을 좋아하셨어요."></textarea>
-          <button class="primary" type="submit">기억 저장</button>
+          <button id="save-memory" class="primary" type="submit">기억 저장</button>
+          <button id="cancel-edit" class="secondary" type="button" hidden>수정 취소</button>
         </form>
         <div id="memory-status" class="status" role="status" aria-live="polite"></div>
       </section>
     </div>
   </main>
   <script>
-    const state = { config: null, token: null, userId: null, links: [], generation: 0, factRequest: 0, saveRequest: 0, draftRevision: 0 };
+    const state = { config: null, token: null, userId: null, links: [], generation: 0, factRequest: 0, saveRequest: 0, draftRevision: 0, editingFactId: null };
     const $ = id => document.getElementById(id);
-    const labels = { relationship: '가족과 관계', food: '좋아하는 음식', travel: '함께한 여행', avoid_topic: '피해야 할 이야기' };
+    const labels = { family: '가족', relationship: '가족과 관계', hometown: '고향', occupation: '예전 일', food: '좋아하는 음식', hobby: '취미', friend: '친구', pet: '반려동물', daily_routine: '평소 일과', travel: '함께한 여행', family_event: '가족 행사', favorite_story: '좋아하는 이야기', recent_event: '최근 일', comfort_topic: '안심되는 이야기', avoid_topic: '피해야 할 이야기' };
     const current = link => link.access_status === 'verified'
       && Date.parse(link.effective_at) <= Date.now()
       && (!link.expires_at || Date.parse(link.expires_at) > Date.now());
@@ -123,8 +147,9 @@
       const token = state.token;
       const generation = state.generation;
       if (token) headers.Authorization = `Bearer ${token}`;
-      if (schema) headers[method === 'POST' ? 'Content-Profile' : 'Accept-Profile'] = schema;
+      if (schema) headers[method === 'GET' ? 'Accept-Profile' : 'Content-Profile'] = schema;
       if (data) headers['Content-Type'] = 'application/json';
+      if (method === 'PATCH') headers.Prefer = 'return=representation';
       const response = await fetch(state.config.url + path, { method, headers, body: data ? JSON.stringify(data) : undefined });
       if (!response.ok) {
         if (token && generation === state.generation && token === state.token
@@ -148,13 +173,21 @@
       $('email').value = '';
       $('password').value = '';
       $('content').value = '';
+      resetEdit();
       $('facts').replaceChildren();
+      $('avoid-facts').replaceChildren();
       $('links').replaceChildren();
       $('patient').replaceChildren();
       $('portal-card').hidden = true;
       $('memory-card').hidden = true;
       $('signin-card').hidden = false;
       $('signin-status').textContent = message;
+    }
+
+    function resetEdit() {
+      state.editingFactId = null;
+      $('save-memory').textContent = '기억 저장';
+      $('cancel-edit').hidden = true;
     }
 
     async function loadFacts() {
@@ -165,10 +198,11 @@
         && patientId === $('patient').value && !!state.token;
       $('memory-card').hidden = !patientId;
       $('facts').replaceChildren();
+      $('avoid-facts').replaceChildren();
       if (!patientId) return false;
       let facts;
       try {
-        facts = await supabase(`/rest/v1/family_context?patient_id=eq.${encodeURIComponent(patientId)}&select=category,content&order=created_at.desc`, 'GET', null, 'api');
+        facts = await supabase(`/rest/v1/family_context?patient_id=eq.${encodeURIComponent(patientId)}&select=fact_id,category,content&order=created_at.desc`, 'GET', null, 'api');
       } catch (_) {
         if (currentRequest()) {
           $('memory-card').hidden = true;
@@ -177,7 +211,8 @@
         return false;
       }
       if (!currentRequest()) return false;
-      if (!facts.length) $('facts').textContent = '아직 남긴 기억이 없습니다.';
+      if (!facts.some(fact => fact.category !== 'avoid_topic')) $('facts').textContent = '아직 남긴 기억이 없습니다.';
+      if (!facts.some(fact => fact.category === 'avoid_topic')) $('avoid-facts').textContent = '아직 피해야 할 주제를 남기지 않았습니다.';
       for (const fact of facts) {
         const card = document.createElement('article');
         card.className = 'fact';
@@ -185,8 +220,24 @@
         title.textContent = labels[fact.category] || '가족 기억';
         const text = document.createElement('p');
         text.textContent = fact.content;
-        card.append(title, text);
-        $('facts').append(card);
+        const edit = document.createElement('button');
+        edit.className = 'secondary';
+        edit.type = 'button';
+        edit.textContent = '수정';
+        edit.addEventListener('click', () => {
+          if (!currentRequest() || !fact.fact_id) return;
+          state.saveRequest += 1;
+          state.draftRevision += 1;
+          state.editingFactId = fact.fact_id;
+          $('category').value = fact.category;
+          $('content').value = fact.content;
+          $('save-memory').textContent = '기억 수정';
+          $('cancel-edit').hidden = false;
+          $('memory-status').textContent = '선택한 기억을 수정하고 있습니다.';
+          $('content').focus();
+        });
+        card.append(title, text, edit);
+        $(fact.category === 'avoid_topic' ? 'avoid-facts' : 'facts').append(card);
       }
       return true;
     }
@@ -248,10 +299,18 @@
       state.saveRequest += 1;
       state.draftRevision += 1;
       $('content').value = '';
+      resetEdit();
       $('memory-status').textContent = '';
       await loadFacts();
     });
     $('logout').addEventListener('click', () => clearSession());
+    $('cancel-edit').addEventListener('click', () => {
+      state.saveRequest += 1;
+      state.draftRevision += 1;
+      $('content').value = '';
+      resetEdit();
+      $('memory-status').textContent = '수정을 취소했습니다.';
+    });
     $('content').addEventListener('input', () => { state.draftRevision += 1; });
     $('category').addEventListener('change', () => { state.draftRevision += 1; });
     $('memory-form').addEventListener('submit', async event => {
@@ -262,26 +321,37 @@
       const revision = state.draftRevision;
       const category = $('category').value;
       const draft = $('content').value.trim();
+      const factId = state.editingFactId;
       const currentSave = () => generation === state.generation && request === state.saveRequest
-        && patientId === $('patient').value && !!state.token;
-      $('memory-status').textContent = '기억을 저장하고 있습니다.';
+        && patientId === $('patient').value && factId === state.editingFactId && !!state.token;
+      if (!patientId || !draft) {
+        $('memory-status').textContent = '확인한 이야기를 입력하세요.';
+        return;
+      }
+      $('memory-status').textContent = factId ? '기억을 수정하고 있습니다.' : '기억을 저장하고 있습니다.';
       try {
-        await supabase('/rest/v1/family_context', 'POST', {
-          patient_id: patientId, author_guardian_user_id: state.userId,
-          category, content: draft,
-        }, 'api');
+        if (factId) {
+          const updated = await supabase(`/rest/v1/family_context?fact_id=eq.${encodeURIComponent(factId)}&patient_id=eq.${encodeURIComponent(patientId)}`,
+            'PATCH', { category, content: draft }, 'api');
+          if (!Array.isArray(updated) || updated.length !== 1) throw new Error('memory update denied');
+        } else {
+          await supabase('/rest/v1/family_context', 'POST', {
+            patient_id: patientId, author_guardian_user_id: state.userId,
+            category, content: draft,
+          }, 'api');
+        }
         if (!currentSave()) return;
         await loadFacts();
         if (currentSave()) {
           const unchanged = revision === state.draftRevision
             && $('content').value.trim() === draft && $('category').value === category;
-          if (unchanged) $('content').value = '';
+          if (unchanged) { $('content').value = ''; resetEdit(); }
           $('memory-status').textContent = unchanged
-            ? '확인한 기억을 저장했습니다.'
-            : '이전 내용을 저장했습니다. 새 초안은 아직 저장되지 않았습니다.';
+            ? (factId ? '확인한 기억을 수정했습니다.' : '확인한 기억을 저장했습니다.')
+            : '이전 내용을 반영했습니다. 새 초안은 아직 저장되지 않았습니다.';
         }
       } catch (_) {
-        if (currentSave()) $('memory-status').textContent = '기억을 저장하지 못했습니다. 연결 상태를 다시 확인하세요.';
+        if (currentSave()) $('memory-status').textContent = '기억을 반영하지 못했습니다. 연결 상태를 다시 확인하세요.';
       }
     });
 
