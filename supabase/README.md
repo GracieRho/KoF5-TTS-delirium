@@ -25,10 +25,11 @@ supabase db advisors --local
 supabase migration list --local
 ```
 
-로컬 HTTP 검사는 작업 전용 Supabase DB/Auth/Data API/Kong을 켠 뒤 실행한다. `local_http_smoke.py`는 임의 비밀번호와 `example.invalid` 합성 계정을 사용하고, 로컬 키·토큰을 출력하지 않으며 종료 시 환자·기억·계정을 삭제한다. 공유 `yai-hub` 인스턴스에는 적용하지 않는다.
+로컬 HTTP 검사는 작업 전용 Supabase DB/Auth/Data API/Kong을 켠 뒤 실행한다. `local_http_smoke.py`는 실행 위치와 관계없이 이 작업 설정을 읽고 `127.0.0.1:54341`만 허용한다. 임의 비밀번호와 `example.invalid` 합성 계정을 사용하고 로컬 키·토큰을 출력하지 않으며, 생성 응답이 유실돼도 이번 합성 이메일로 계정을 찾아 환자·기억·계정을 삭제한다. 공유 `yai-hub` 인스턴스에는 적용하지 않는다.
 
 ```bash
 supabase start --exclude edge-runtime,imgproxy,mailpit,postgres-meta,realtime,storage-api,studio,logflare,vector,supavisor
 python3 supabase/tests/local_http_smoke.py
+python3 -m unittest supabase/tests/test_local_http_smoke.py
 supabase stop --project-id kof5-familiar-voice-mvp
 ```

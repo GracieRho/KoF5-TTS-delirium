@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import secrets
 import subprocess
+import tomllib
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
+
+ROOT = Path(__file__).resolve().parents[2]
+PROJECT = "kof5-familiar-voice-mvp"
 
 
 def local_keys() -> dict[str, str]:
     result = subprocess.run(
-        ["supabase", "status", "-o", "env"], check=True, capture_output=True, text=True
+        ["supabase", "status", "-o", "env"], check=True, capture_output=True, text=True,
+        cwd=ROOT,
     )
     return {
         name: value.strip('"')
@@ -20,6 +27,15 @@ def local_keys() -> dict[str, str]:
         if "=" in line
         for name, value in [line.split("=", 1)]
     }
+
+
+def verify_local_target(keys: dict[str, str]) -> None:
+    config = tomllib.loads((ROOT / "supabase/config.toml").read_text())
+    api = urlparse(keys["API_URL"])
+    if (config["project_id"] != PROJECT or api.scheme != "http"
+            or api.hostname != "127.0.0.1" or api.port != config["api"]["port"]
+            or api.port != 54341):
+        raise ValueError("작업 전용 로컬 Supabase API 주소가 아닙니다")
 
 
 def request(url: str, method: str, key: str, token: str | None = None,
@@ -40,16 +56,18 @@ def request(url: str, method: str, key: str, token: str | None = None,
         return response.status, json.loads(data) if data else None
 
 
-def sql(command: str) -> None:
-    subprocess.run(
+def sql(command: str) -> str:
+    result = subprocess.run(
         ["docker", "exec", "supabase_db_kof5-familiar-voice-mvp", "psql",
-         "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q", "-c", command],
+         "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-qAt", "-c", command],
         check=True, capture_output=True, text=True,
     )
+    return result.stdout.strip()
 
 
 def main() -> None:
     keys = local_keys()
+    verify_local_target(keys)
     url = keys["API_URL"]
     public = keys["ANON_KEY"]
     admin = keys["SERVICE_ROLE_KEY"]
@@ -110,13 +128,15 @@ def main() -> None:
         assert status in (401, 403), f"anonymous family read: {status}"
         print("Local Auth login → Data API family read/write → revocation/anon deny: PASS")
     finally:
-        if user_id is not None:
+        found = sql(f"SELECT id FROM auth.users WHERE email='{email}';")
+        cleanup_id = UUID(found) if found else user_id
+        if cleanup_id is not None:
             try:
                 sql(f"DELETE FROM kof5.family_fact WHERE patient_id='{patient}'; "
                     f"DELETE FROM kof5.patient_guardian_link WHERE patient_id='{patient}'; "
                     f"DELETE FROM kof5.hospital_patient WHERE patient_id='{patient}';")
             finally:
-                status, _ = request(f"{url}/auth/v1/admin/users/{user_id}", "DELETE", admin)
+                status, _ = request(f"{url}/auth/v1/admin/users/{cleanup_id}", "DELETE", admin)
                 assert status in (200, 204), f"local synthetic user cleanup: {status}"
 
 
