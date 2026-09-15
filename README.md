@@ -85,6 +85,8 @@ iPad의 합성 기기 연결 모드는 익명 JWT를 메모리에만 두고 병�
 
 연결된 합성 글 요청은 iPad에서 생성한 UUIDv4 `client_turn_id`를 받습니다. 서버는 현재 입원·동의·보호자 연결을 다시 확인해 **정확히 하나의 사용 가능한 보호자 시험 clone**을 선택한 뒤에만 TTS를 호출하며, 이 경로에는 Deepgram STT 키나 서버의 고정 voice ID가 필요하지 않습니다. 후보 음성의 전송·등록과 실제 보호자 음성 재생은 검증하지 않았습니다. [보호자 clone 선택 migration](supabase/migrations/20260916163000_synthetic_patient_tts_voice_selection.sql)은 고정 합성 환자에만 적용됩니다.
 
+받아들인 연결된 합성 직접 발화는 외부 임베딩·LLM·TTS 전에 기기 JWT로 [전사 기록 RPC](supabase/migrations/20260916170000_synthetic_directed_transcript.sql)에 글만 저장합니다. 저장이 거부되면 답과 음성을 만들지 않고, 주변·불확실·거부 후보는 저장하거나 응답에서 되돌리지 않습니다. [병원 포털](src/kof5_tts/hospital_portal.html)은 현재 입원 담당 직원에게 한국 날짜 오늘의 합성 글만 보여주며, 자정 뒤 조회 불가와 물리적 삭제는 별개입니다([ADR-0011 제안](architecture/decisions/0011-synthetic-directed-transcript-today-view.md)). 환자 화자 판정이나 실제 병원 전사 보존 정책은 검증하지 않았습니다.
+
 병원 이름·병실·병동·검사/면회 일정 질문에서는 별도 `api.patient_hospital_turn_context`가 **고정 합성 환자**의 기기 권한과 현재 입원의 짧은 승인 사실을 한 DB 조회에서 확인합니다. 승인·유효 시각·입원 범위·안전 범주·질문과의 연결을 제한하고, 정확히 한 사실을 찾지 못하면 확인되지 않았다고 답합니다. 직원 출처 ID는 기기 응답에 넣지 않습니다. [합성 병원 사실 migration](supabase/migrations/20260915183905_patient_hospital_turn_context.sql)의 어휘 규칙과 로컬 합성 자료는 실제 병원 출처·임상 문구 승인이나 한국어 질문 품질을 증명하지 않습니다.
 
 합성 병원 메시지는 고정 합성 환자·현재 입원·세 동의·활성 음성 프로필이 모두 준비된 경우에만 담당 직원이 초안을 쓰고 **다른 담당 직원**이 승인해 예약 큐에 넣습니다. 기기는 익명 JWT로 기한이 된 메시지 ID 최대 세 개를 찾고, 개별 RPC에서 권한과 승인 원문을 다시 확인합니다. `POST /internal/synthetic/paired/{patient_id}/message/{message_id}/audio`는 원문을 언어 모델로 다시 쓰지 않고 시험 TTS에 그대로 보냅니다. iPad는 RPC 원문과 API 원문이 완전히 일치할 때만 수동 재생하며, 재생 중단·철회 시 폐기합니다. 이 경로는 DB 메시지를 `pending`에서 `delivered`로 바꾸거나 의료진 확인을 기록하지 않습니다. 실제 환자·실기기·실제 공급자와 임상 원문 승인·전달은 아직 검증하지 않았습니다.

@@ -13,4 +13,4 @@
 
 ## 검증과 변경 조건
 
-로컬 RLS/Auth/Data API·중복 요청·철회·직원 배정·자정 경계 검사 후 결과를 기록한다. 실제 환자 전사 저장·조회는 화자 판정, 기관 승인 보존/삭제 정책, 접근 감사와 [Gate07 네 조건](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md#23-pre-patient-trial-gate)을 충족할 때 별도 결정한다.
+[migration](../../supabase/migrations/20260916170000_synthetic_directed_transcript.sql)의 로컬 pgTAP 34개는 기기/직원 권한·중복 요청·철회·입원과 자정 경계·명시적 만료 행 삭제를 통과했다. 작업 전용 GoTrue/Data API에서도 기록→담당 직원 조회→철회를 확인했다. 자동 삭제 작업은 등록하지 않았다. 실제 환자 전사 저장·조회는 화자 판정, 기관 승인 보존/삭제 정책, 접근 감사와 [Gate07 네 조건](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md#23-pre-patient-trial-gate)을 충족할 때 별도 결정한다.
