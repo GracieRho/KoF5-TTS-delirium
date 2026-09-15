@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from base64 import b64encode
+import os
+from pathlib import Path
 import secrets
+import sys
+from unittest.mock import patch
 from uuid import UUID, uuid4
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from fastapi.testclient import TestClient
+from kof5_tts.api import app
 
 from local_http_smoke import local_keys, request, sql, verify_local_target
 
@@ -78,6 +87,10 @@ def main() -> None:
             VALUES ('{PATIENT}','patient_participation','patient','TEST-SIGNER','assented','active',now()-interval '1 day','TEST-STAFF'),
                    ('{PATIENT}','ambient_processing','patient','TEST-SIGNER','assented','active',now()-interval '1 day','TEST-STAFF'),
                    ('{PATIENT}','patient_voice_feature','patient','TEST-SIGNER','assented','active',now()-interval '1 day','TEST-STAFF');
+            INSERT INTO kof5.consent_record
+                (patient_id,guardian_ref,scope,signer_role,signer_ref,assent_status,status,effective_at,recorded_by_staff_ref)
+            VALUES ('{PATIENT}','{guardian}','guardian_voice_clone','guardian','{guardian}',
+                    'not_required','active',now()-interval '1 day','TEST-STAFF');
             INSERT INTO kof5.patient_voice_profile
                 (patient_id,encounter_id,consent_id,status,enrollment_duration_ms,embedding_model,
                  embedding_version,encrypted_embedding_ref,quality_status,enrolled_by_staff_ref,enrolled_at)
@@ -159,6 +172,26 @@ def main() -> None:
         status, rows = request(f"{base}/hospital_context_current?select=content", "GET",
                                public, device_token, schema="api")
         assert status == 200 and rows == [], "paired device enumerated staff hospital view"
+        guardian_consent = UUID(sql("SELECT consent_id FROM kof5.consent_record "
+                                    f"WHERE patient_id='{PATIENT}' AND guardian_ref='{guardian}' "
+                                    "AND scope='guardian_voice_clone';"))
+        status, begun = request(f"{base}/rpc/synthetic_guardian_voice_begin", "POST",
+                                admin, payload={"p_patient_id": str(PATIENT),
+                                                "p_guardian_user_id": str(guardian),
+                                                "p_consent_id": str(guardian_consent),
+                                                "p_provider": "elevenlabs",
+                                                "p_request_key": str(uuid4()),
+                                                "p_sample_durations_ms": [20000, 25000, 30000]},
+                                schema="api")
+        assert status == 200 and begun[0]["authorized"] is True \
+            and begun[0]["newly_created"] is True, "synthetic guardian voice metadata was not begun"
+        status, result = request(f"{base}/rpc/synthetic_guardian_voice_provider_result",
+                                 "POST", admin,
+                                 payload={"p_clone_id": begun[0]["clone_id"],
+                                          "p_voice_id": "TEST-VOICE-975",
+                                          "p_verification_confirmed": True}, schema="api")
+        assert status == 200 and result[0]["status"] == "created", \
+            "synthetic guardian voice metadata was not selected"
         status, rows = hospital_turn(device_token, "어느 병원인가요?")
         assert status == 200 and len(rows) == 1 and rows[0]["authorized"] is True
         assert len(rows[0]["facts"]) == 1 and rows[0]["facts"][0]["content"] == HOSPITAL_TEXT
@@ -174,6 +207,74 @@ def main() -> None:
             and rows[0]["facts"][0]["content"] == ROOM_TEXT \
             and rows[0]["facts"][0]["encounter_id"] == str(ENCOUNTER), \
             "paired device did not receive exact two-staff approved room fact"
+        session_read = f"{base}/rpc/synthetic_conversation_session_read"
+        session_commit = f"{base}/rpc/synthetic_conversation_session_commit"
+        status, state = request(session_read, "POST", public, device_token,
+                                {"p_patient_id": str(PATIENT)}, schema="api")
+        assert status == 200 and len(state) == 1 and state[0]["authorized"] is True \
+            and state[0]["state"] == "IDLE" and state[0]["version"] == 0 \
+            and state[0]["session_id"] is None, "paired device did not start idle"
+        first_turn = uuid4()
+        first = {"p_patient_id": str(PATIENT), "p_expected_session_id": None,
+                 "p_expected_version": 0, "p_new_state": "ACTIVE_LISTENING",
+                 "p_proactive_paused": False, "p_client_turn_id": str(first_turn)}
+        status, committed = request(session_commit, "POST", public, device_token,
+                                    first, schema="api")
+        assert status == 200 and committed[0]["authorized"] is True \
+            and committed[0]["committed"] is True and committed[0]["version"] == 1 \
+            and UUID(committed[0]["session_id"]), "paired first turn did not persist"
+        status, state = request(session_read, "POST", public, device_token,
+                                {"p_patient_id": str(PATIENT)}, schema="api")
+        assert status == 200 and state[0]["state"] == "ACTIVE_LISTENING" \
+            and state[0]["session_id"] == committed[0]["session_id"] \
+            and state[0]["version"] == 1, "next request lost active session"
+        status, duplicate = request(session_commit, "POST", public, device_token,
+                                    first, schema="api")
+        assert status == 200 and duplicate[0]["committed"] is False, \
+            "duplicate client turn committed twice"
+        follow = {**first, "p_expected_session_id": state[0]["session_id"],
+                  "p_expected_version": 1, "p_client_turn_id": str(uuid4())}
+        status, committed = request(session_commit, "POST", public, device_token,
+                                    follow, schema="api")
+        assert status == 200 and committed[0]["committed"] is True \
+            and committed[0]["version"] == 2, "second turn did not advance CAS"
+        close = {**follow, "p_expected_version": 2, "p_new_state": "IDLE",
+                 "p_client_turn_id": str(uuid4())}
+        status, closed = request(session_commit, "POST", public, device_token,
+                                 close, schema="api")
+        assert status == 200 and closed[0]["committed"] is True \
+            and closed[0]["version"] == 3, "synthetic setup did not close before API turn"
+
+        trial_headers = {"X-Internal-Demo-Token": "t" * 32,
+                         "X-Synthetic-Material": "confirmed",
+                         "Authorization": f"Bearer {device_token}"}
+        trial_path = f"/internal/synthetic/paired/{PATIENT}/text"
+        trial_env = {"KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+                     "KOF5_SUPABASE_URL": url,
+                     "KOF5_SUPABASE_PUBLISHABLE_KEY": public,
+                     "KOF5_SUPABASE_SECRET_KEY": keys["SECRET_KEY"],
+                     "OPENAI_API_KEY": "synthetic-no-network",
+                     "ELEVENLABS_API_KEY": "synthetic-no-network"}
+        with patch.dict(os.environ, trial_env), patch(
+            "kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"synthetic-mp3"
+        ) as synthesize:
+            with TestClient(app) as first_client:
+                first_response = first_client.post(trial_path, headers=trial_headers,
+                    json={"transcript": "수민아", "label": "DIRECTED",
+                          "client_turn_id": str(uuid4())})
+            with TestClient(app) as second_client:
+                follow_response = second_client.post(trial_path, headers=trial_headers,
+                    json={"transcript": "수민아", "label": "UNCERTAIN",
+                          "client_turn_id": str(uuid4())})
+        assert first_response.status_code == follow_response.status_code == 200, \
+            f"FastAPI paired two-turn round-trip failed: {first_response.status_code}/{follow_response.status_code}"
+        for response in (first_response, follow_response):
+            assert response.json()["reply"] == "응, 왜?" \
+                and response.json()["audio_mp3_base64"] == b64encode(b"synthetic-mp3").decode(), \
+                "DB-backed second turn failed to reach synthetic family-voice playback"
+        assert synthesize.call_count == 2, "second turn did not synthesize independently"
+        assert sql(f"SELECT count(*) FROM kof5.synthetic_directed_turn WHERE patient_id='{PATIENT}'") == "1", \
+            "UNCERTAIN follow-up was logged as verified DIRECTED speech"
         for question in ("검사는 언제인가요?", "CT 검사 결과 어때요?", "음악 좋아하세요?"):
             status, rows = hospital_turn(device_token, question)
             assert status == 200 and rows == [{"authorized": True, "facts": []}], \
@@ -192,14 +293,21 @@ def main() -> None:
         status, rows = request(f"{base}/hospital_context_current?select=content", "GET",
                                public, device_token, schema="api")
         assert status == 200 and rows == [], "withdrawn device reached staff hospital view"
-        print("Task-local Auth → distinct-approved hospital original → paired turn/withdrawal: PASS")
+        status, state = request(session_read, "POST", public, device_token,
+                                {"p_patient_id": str(PATIENT)}, schema="api")
+        assert status == 200 and state[0]["authorized"] is False, \
+            "withdrawn device retained its conversation session"
+        print("Task-local Auth → approved hospital original → CAS/FastAPI second turn/withdrawal: PASS")
     finally:
         try:
             sql(f"""
                 DELETE FROM kof5.hospital_context_fact WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.synthetic_hospital_context_draft WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.synthetic_directed_turn WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.synthetic_guardian_voice_clone WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.family_fact WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.patient_guardian_link WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.synthetic_conversation_session WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.patient_device_assignment WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.patient_voice_profile WHERE patient_id='{PATIENT}';
                 DELETE FROM kof5.consent_record WHERE patient_id='{PATIENT}';
