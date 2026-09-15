@@ -637,16 +637,19 @@ async def delete_synthetic_guardian_voice(patient_id: str, clone_id: str, reques
     return {"status": "deleted", "clone_id": clone_id}
 
 
-async def _guardian_current_fact(patient_id: str, fact_id: str, request: Request) -> tuple[dict[str, str], str]:
+async def _guardian_current_fact(
+    patient_id: str, fact_id: str, request: Request, *, check_body: bool = True,
+) -> tuple[dict[str, str], str]:
     if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(
         r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", fact_id
     ):
         raise HTTPException(status_code=404, detail="합성 시험 사실만 사용할 수 있습니다")
     if request.headers.get("x-synthetic-material") != "confirmed":
         raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
-    async for chunk in request.stream():
-        if chunk:
-            raise HTTPException(status_code=413, detail="사실 요청 본문은 비워주세요")
+    if check_body:
+        async for chunk in request.stream():
+            if chunk:
+                raise HTTPException(status_code=413, detail="사실 요청 본문은 비워주세요")
     bearer = _device_bearer(request)
     config = guardian_config()
     try:
@@ -737,6 +740,14 @@ async def synthetic_guardian_fact_follow_up(patient_id: str, fact_id: str, reque
         question = await run_in_threadpool(run)
     except (httpx.HTTPError, ValueError):
         raise HTTPException(status_code=502, detail="합성 후속 질문을 확인하지 못했습니다") from None
+    try:
+        _, current_content = await _guardian_current_fact(patient_id, fact_id, request, check_body=False)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(status_code=409, detail="후속 질문의 가족 기억이 변경됐습니다") from None
+        raise
+    if current_content != content:
+        raise HTTPException(status_code=409, detail="후속 질문의 가족 기억이 변경됐습니다")
     return {"question": question, "fact_id": fact_id}
 
 

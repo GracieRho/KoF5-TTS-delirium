@@ -567,6 +567,7 @@ class SyntheticApiTests(unittest.TestCase):
         active = True
         provider_status = 200
         provider_calls: list[str] = []
+        mutate_on_provider: str | None = None
 
         def guardian_db(request: httpx.Request) -> httpx.Response:
             self.assertEqual(request.headers["apikey"], "sb_publishable_local")
@@ -584,6 +585,7 @@ class SyntheticApiTests(unittest.TestCase):
             raise AssertionError("unexpected guardian DB route")
 
         def candidate(request: httpx.Request) -> httpx.Response:
+            nonlocal content, linked
             provider_calls.append(request.url.path)
             self.assertTrue(request.url.path.endswith("/v1/responses"))
             body = json.loads(request.read())
@@ -591,6 +593,10 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertIs(body["store"], False)
             self.assertLessEqual(body["max_output_tokens"], 100)
             self.assertIn(content, body["input"])
+            if mutate_on_provider == "content":
+                content = "2024년 5월 수민과 다른 제주도 여행을 갔다."
+            elif mutate_on_provider == "link":
+                linked = False
             return httpx.Response(provider_status, json={"status": "completed", "output": [{
                 "type": "message", "content": [{"type": "output_text", "text": question}],
             }]})
@@ -618,6 +624,15 @@ class SyntheticApiTests(unittest.TestCase):
             result = self.client.post(path, headers=headers)
             self.assertEqual(result.status_code, 200)
             self.assertEqual(result.json(), {"question": question, "fact_id": fact_id})
+            mutate_on_provider = "content"
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 409,
+                             "late fact edit must suppress old question")
+            content = "2024년 5월 수민과 제주도 여행을 갔다."
+            mutate_on_provider = "link"
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 403,
+                             "late guardian withdrawal must suppress old question")
+            linked = True
+            mutate_on_provider = None
             for unsafe in ("부산에서 가장 기억에 남은 순간은 무엇인가요?",
                            "제주도에서 무슨 약을 먹었나요?", "제주도 여행을 기억합니다.",
                            "2025년 제주도에서 무엇이 좋았나요?"):
