@@ -350,6 +350,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       !_stopUnconfirmed &&
       !_speechStopUnconfirmed &&
       _speechStop == null &&
+      _replyStop == null &&
       !_sending;
 
   Future<void> _refreshHospitalMessage() async {
@@ -361,6 +362,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _hospitalBusy ||
         _sending ||
         _playedReply ||
+        _replyStop != null ||
         _stopping ||
         _stopUnconfirmed ||
         _speechStopUnconfirmed) {
@@ -427,6 +429,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _hospitalBusy ||
         _sending ||
         _playedReply ||
+        _replyStop != null ||
         _stopping ||
         _stopUnconfirmed ||
         _speechStopUnconfirmed ||
@@ -469,28 +472,22 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           .hospitalMessageAudio(client, endpoint, _token.text, session, current)
           .timeout(const Duration(seconds: 70));
       if (!_hospitalReady(session, generation)) return;
+      final playbackOwner = -generation;
+      _playbackOwnerGeneration = playbackOwner;
       setState(() {
         _playedReply = true;
         _hospitalStatus = '승인 원문 음성을 이 iPad에서 재생하고 있습니다.';
       });
       await _player.play(mp3).timeout(const Duration(seconds: 10));
+      if (_playbackOwnerGeneration != playbackOwner) {
+        return; // A newer hospital or conversation reply owns the native player.
+      }
       if (!_hospitalReady(session, generation) ||
           !_playedReply ||
           _dueHospitalMessage?.id != message.id) {
-        // A late native play result may arrive after withdrawal already sent
-        // stop. Reissue stop before any completion wait or new microphone use.
-        try {
-          await _player.stop().timeout(const Duration(seconds: 5));
-          _playedReply = false;
-        } catch (_) {
-          _playedReply = true;
-          if (mounted) {
-            setState(
-              () => _hospitalStatus =
-                  '늦은 병원 음성 재생 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.',
-            );
-          }
-        }
+        // The prior stop may have completed before this play result returned.
+        // Reissue it only while this attempt still owns the shared player.
+        await _stopReply(successStatus: '늦은 병원 음성 시험을 중단했습니다.');
         return;
       }
       final finished = await _player.waitFinished().timeout(
@@ -500,7 +497,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           !_foreground ||
           generation != _hospitalGeneration ||
           !identical(_deviceSession, session) ||
-          !_ownVoiceTrial) {
+          !_ownVoiceTrial ||
+          _playbackOwnerGeneration != playbackOwner) {
         throw const FormatException('iPad 재생 완료를 확인하지 못했습니다.');
       }
       setState(() {
@@ -709,9 +707,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   Future<bool> _performStopReply(String successStatus) async {
+    final owner = _playbackOwnerGeneration;
     try {
       await _player.stop().timeout(const Duration(seconds: 5));
-      _playedReply = false;
+      if (_playbackOwnerGeneration == owner) _playedReply = false;
       _autoResumeOwnerGeneration = null;
       if (mounted) {
         setState(() {
@@ -720,6 +719,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       }
       return true;
     } catch (_) {
+      if (_playbackOwnerGeneration == owner) _playedReply = true;
       if (mounted) {
         setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.');
       }
@@ -1132,6 +1132,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         if (result.reply == null) _proactivePaused = true;
       }
       if (result.mp3 != null) {
+        if (_replyStop != null || _playedReply) {
+          throw StateError('previous native playback stop is not confirmed');
+        }
         if (textOnly && _bargeInTrial) {
           concurrentMicStarted = await _start(
             duringReplyGeneration: generation,
@@ -1197,6 +1200,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
           !_ownVoiceTrial ||
           !_autoTextTrial ||
           _autoResumeOwnerGeneration != generation ||
+          _playbackOwnerGeneration != generation ||
           generation != _trialGeneration) {
         return;
       }

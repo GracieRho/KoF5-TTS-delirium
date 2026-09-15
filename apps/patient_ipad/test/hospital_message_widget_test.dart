@@ -12,9 +12,13 @@ import 'package:record_platform_interface/record_platform_interface.dart';
 import 'fake_recorder.dart';
 
 void main() {
-  for (final delayedPlay in [true, false]) {
+  for (final scenario in ['late-play', 'late-finished', 'late-play-new-b']) {
+    final delayedPlay = scenario != 'late-finished';
+    final newB = scenario == 'late-play-new-b';
     testWidgets(
-      delayedPlay
+      newB
+          ? 'old hospital play return cannot stop a new paired playback'
+          : delayedPlay
           ? 'withdrawal before late native play return reissues stop and never waits for completion'
           : 'withdrawal while waiting for completion ignores late native finished result',
       (tester) async {
@@ -37,6 +41,7 @@ void main() {
         var audioCalls = 0;
         var stopCalls = 0;
         var completionWaits = 0;
+        var playCalls = 0;
         messenger.setMockMethodCallHandler(OnDeviceSpeech.channel, (
           call,
         ) async {
@@ -52,7 +57,8 @@ void main() {
         messenger.setMockMethodCallHandler(audioChannel, (call) async {
           switch (call.method) {
             case 'play':
-              if (delayedPlay) {
+              playCalls++;
+              if (delayedPlay && playCalls == 1) {
                 return await playResult.future.then<Object?>((_) => null);
               }
               return null;
@@ -147,7 +153,67 @@ void main() {
           await tester.ensureVisible(find.byType(CheckboxListTile));
           await tester.tap(find.byType(CheckboxListTile));
           await _until(tester, () => stopCalls > 0);
-          if (delayedPlay) {
+          if (newB) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 30)),
+            );
+            await tester.pump();
+            await tester.tap(find.byType(CheckboxListTile));
+            await _until(
+              tester,
+              () => find.textContaining('기기 내 전사 준비됨').evaluate().isNotEmpty,
+            );
+            await tester.enterText(
+              find.widgetWithText(TextField, 'Supabase publishable 키'),
+              'sb_publishable_synthetic_local_test_key_12345',
+            );
+            await tester.enterText(find.byType(TextField).last, 'x' * 32);
+            await tester.ensureVisible(find.text('익명 기기 ID 만들기'));
+            await tester.tap(find.text('익명 기기 ID 만들기'));
+            await _until(
+              tester,
+              () => find.textContaining(session.userId).evaluate().isNotEmpty,
+            );
+            await tester.ensureVisible(find.text('병원 연결 확인'));
+            await tester.tap(find.text('병원 연결 확인'));
+            await _until(
+              tester,
+              () =>
+                  find.textContaining('합성 기기 연결을 확인했습니다').evaluate().isNotEmpty,
+            );
+            await tester.ensureVisible(find.text('전달 대기 승인 메시지 확인'));
+            await tester.tap(find.text('전달 대기 승인 메시지 확인'));
+            await _until(tester, () => confirms == 3);
+            await _until(tester, () => find
+                .textContaining('직원 승인 원문을 확인했습니다.')
+                .evaluate()
+                .isNotEmpty);
+            await tester.ensureVisible(find.text('승인 원문 음성 재생 시험'));
+            await tester.tap(find.text('승인 원문 음성 재생 시험'));
+            await _until(tester, () => playCalls == 2 && completionWaits == 1);
+            expect(stopCalls, 1);
+            playResult.complete(); // A returns after B owns and plays.
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 30)),
+            );
+            await tester.pump();
+            expect(stopCalls, 1, reason: 'stale A must not stop active B');
+            expect(find.textContaining('재생하고 있습니다.'), findsOneWidget);
+            finishedResult.complete(true);
+            await _until(
+              tester,
+              () => find
+                  .textContaining('DB 전달 상태는 변경하지 않았습니다.')
+                  .evaluate()
+                  .isNotEmpty,
+            );
+            await tester.ensureVisible(find.byType(CheckboxListTile));
+            await tester.tap(find.byType(CheckboxListTile));
+            await _until(tester, () => find
+                .textContaining('직원 승인 원문: $approved')
+                .evaluate()
+                .isEmpty);
+          } else if (delayedPlay) {
             playResult
                 .complete(); // Late native play return after withdrawal stop.
             await _until(tester, () => stopCalls >= 2);
