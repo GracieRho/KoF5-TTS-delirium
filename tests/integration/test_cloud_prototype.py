@@ -88,6 +88,8 @@ class CloudPrototypeTests(unittest.TestCase):
             ("그만해.", ["api.deepgram.com"], None),
             ("숨이 너무 차.", ["api.deepgram.com", "api.elevenlabs.io"], "기존 호출 버튼"),
             ("지금 몇 시야?", ["api.deepgram.com", "api.elevenlabs.io"], "지금은"),
+            ("CT 검사는 몇 시야?", ["api.deepgram.com", "api.elevenlabs.io"], "확인된 정보가 없어서"),
+            ("수민이는 몇 시에 와?", ["api.deepgram.com", "api.elevenlabs.io"], "확인된 정보가 없어서"),
             ("무슨 약을 먹어야 해?", ["api.deepgram.com", "api.elevenlabs.io"], "의료진에게 확인"),
         ):
             with self.subTest(transcript=transcript):

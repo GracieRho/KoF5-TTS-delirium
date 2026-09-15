@@ -90,6 +90,11 @@ class ConversationSessionTests(unittest.TestCase):
         self.assertEqual(policy_reply("수민아 지금 몇 시야?", "turn",
                                       datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)),
                          "지금은 오후 3시 20분이야.")
+        for unknown_time in ("CT 검사는 몇 시야?", "수민이는 몇 시에 와?", "내일 몇 시에 퇴원해?"):
+            self.assertNotIn(
+                "지금은 오후", policy_reply(unknown_time, "turn",
+                                           datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)) or "",
+            )
 
     def test_approved_hospital_text_and_risk_event_never_claim_staff_ack(self) -> None:
         now = datetime(2026, 9, 15, 15, 20, tzinfo=ZoneInfo("Asia/Seoul"))

@@ -59,6 +59,10 @@ class SyntheticApiTests(unittest.TestCase):
             "transcript": "수민아 지금 몇 시야?", "label": "UNCERTAIN",
         }).json()
         self.assertTrue(time_answer["text"].startswith("지금은 "))
+        schedule_time = self.client.post(f"{root}/turn", json={
+            "transcript": "CT 검사는 몇 시야?", "label": "UNCERTAIN",
+        }).json()
+        self.assertIn("확인된 정보가 없어서", schedule_time["text"])
         medical = self.client.post(f"{root}/turn", json={
             "transcript": "무슨 약을 먹어야 해?", "label": "UNCERTAIN",
         }).json()
