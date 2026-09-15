@@ -125,6 +125,47 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
     return text
 
 
+def generate_synthetic_follow_up(client: httpx.Client, fact: str, key: str) -> str:
+    """One reviewable question from one current synthetic family fact; never an answer."""
+    if not key or not 1 <= len(fact) <= 1000:
+        raise ValueError("bounded synthetic fact and provider key are required")
+    unsafe = rf"{MEDICATION_WORD_PATTERN}|약|복용|처방|진단|치료|수술|검사|병원|병실|퇴원|증상|통증|의료"
+    if search(unsafe, fact):
+        raise ValueError("medical family fact cannot prompt follow-up")
+    response = client.post(
+        "https://api.openai.com/v1/responses",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"model": "gpt-5.4-mini", "store": False, "max_output_tokens": 100,
+              "instructions": (
+                  "고정 합성 환자의 검증된 일반 가족 기억 한 건에서 보호자가 검토할 한국어 후속 질문 한 개만 작성하세요. "
+                  "답변, 새 사실, 의료·병원 주제, 가족 본인 사칭은 쓰지 마세요. "
+                  "질문은 한 줄, 100자 이하, 물음표 하나로 끝내세요."
+              ), "input": f"검증된 합성 가족 기억: {fact}"},
+    )
+    response.raise_for_status()
+    if len(response.content) > 8192:
+        raise ValueError("follow-up response is too large")
+    body = response.json()
+    if not isinstance(body, dict) or body.get("status") != "completed":
+        raise ValueError("follow-up response is incomplete")
+    try:
+        question = "".join(
+            part["text"] for item in body["output"] if item.get("type") == "message"
+            for part in item.get("content", []) if part.get("type") == "output_text"
+        ).strip()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ValueError("follow-up response has no question") from exc
+    if (not 5 <= len(question) <= 100 or "\n" in question or question.count("?") != 1
+            or not question.endswith("?") or not search(r"[가-힣]", question)
+            or search(unsafe, question)):
+        raise ValueError("follow-up question is unsafe or malformed")
+    if any(claim not in fact for claim in findall(r"\d{1,4}(?:년|월|일|시|호)?", question)):
+        raise ValueError("follow-up adds an unverified date or number")
+    if any(anchor not in fact for anchor in findall(r"([가-힣A-Za-z0-9]{2,})(?:에서|와|과|에게)", question)):
+        raise ValueError("follow-up adds an unverified person or place")
+    return question
+
+
 def hospital_fact_question(transcript: str) -> bool:
     """Route institution questions away from guardian family memories."""
     return search(r"CT|검사|수술|퇴원|병실|병동|간호사|진료|치료|면회|병원\s*이름|어느\s*병원", transcript) is not None

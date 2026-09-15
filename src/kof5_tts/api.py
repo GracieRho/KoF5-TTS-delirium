@@ -21,7 +21,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from kof5_tts.cloud_prototype import (
-    CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice, hospital_fact_question,
+    CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice, generate_synthetic_follow_up,
+    hospital_fact_question,
     run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
     validate_short_wav,
     validate_test_voice_samples,
@@ -636,9 +637,7 @@ async def delete_synthetic_guardian_voice(patient_id: str, clone_id: str, reques
     return {"status": "deleted", "clone_id": clone_id}
 
 
-@app.post("/internal/synthetic/guardian/{patient_id}/fact/{fact_id}/embedding", include_in_schema=False)
-async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Request) -> dict[str, str]:
-    """Read one current guardian fact under JWT/RLS, then index the fixed synthetic fixture."""
+async def _guardian_current_fact(patient_id: str, fact_id: str, request: Request) -> tuple[dict[str, str], str]:
     if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(
         r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", fact_id
     ):
@@ -647,10 +646,9 @@ async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Re
         raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
     async for chunk in request.stream():
         if chunk:
-            raise HTTPException(status_code=413, detail="색인 요청 본문은 비워주세요")
+            raise HTTPException(status_code=413, detail="사실 요청 본문은 비워주세요")
     bearer = _device_bearer(request)
     config = guardian_config()
-    service_headers = _service_headers()
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             link = await client.get(
@@ -695,6 +693,15 @@ async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Re
     except (httpx.HTTPError, ValueError, TypeError):
         raise HTTPException(status_code=503, detail="보호자 사실 조회가 실패했습니다") from None
 
+    return config, content
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/fact/{fact_id}/embedding", include_in_schema=False)
+async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Request) -> dict[str, str]:
+    """Read one current guardian fact under JWT/RLS, then index the fixed synthetic fixture."""
+    config, content = await _guardian_current_fact(patient_id, fact_id, request)
+    service_headers = _service_headers()
+
     vector = await _embedding(content)
     try:
         async with httpx.AsyncClient(timeout=8) as client:
@@ -712,6 +719,25 @@ async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Re
     except (httpx.HTTPError, ValueError, TypeError):
         raise HTTPException(status_code=503, detail="서버 색인이 실패했습니다") from None
     return {"status": "ready", "fact_id": fact_id}
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/fact/{fact_id}/follow-up", include_in_schema=False)
+async def synthetic_guardian_fact_follow_up(patient_id: str, fact_id: str, request: Request) -> dict[str, str]:
+    """One transient review question from one current guardian fact in the fixed fixture."""
+    _, content = await _guardian_current_fact(patient_id, fact_id, request)
+    key = os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        raise HTTPException(status_code=503, detail="합성 질문 공급자 설정이 필요합니다")
+
+    def run() -> str:
+        with httpx.Client(timeout=20) as client:
+            return generate_synthetic_follow_up(client, content, key)
+
+    try:
+        question = await run_in_threadpool(run)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="합성 후속 질문을 확인하지 못했습니다") from None
+    return {"question": question, "fact_id": fact_id}
 
 
 async def _paired_hospital_fact(request: Request, patient_id: str, term: str) -> str:

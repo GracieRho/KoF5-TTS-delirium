@@ -553,6 +553,79 @@ class SyntheticApiTests(unittest.TestCase):
                 result = self.client.post(path, headers=headers)
             self.assertEqual(result.status_code, 200)
 
+    def test_guardian_follow_up_checks_current_fact_and_rejects_unsafe_question(self) -> None:
+        fact_id = "00000000-0000-4000-8000-000000000321"
+        path = f"/internal/synthetic/guardian/{SYNTHETIC_DB_PATIENT}/fact/{fact_id}/follow-up"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "OPENAI_API_KEY": "test-openai"}
+        headers = {"Authorization": "Bearer " + "g" * 40, "X-Synthetic-Material": "confirmed"}
+        content = "2024년 5월 수민과 제주도 여행을 갔다."
+        question = "제주도에서 가장 기억에 남은 순간은 무엇인가요?"
+        linked = True
+        category = "travel"
+        active = True
+        provider_status = 200
+        provider_calls: list[str] = []
+
+        def guardian_db(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+            if request.url.path.endswith("/guardian_links"):
+                return httpx.Response(200, json=[{
+                    "patient_id": SYNTHETIC_DB_PATIENT, "access_status": "verified",
+                    "effective_at": "2026-09-14T00:00:00Z", "expires_at": None,
+                }] if linked else [])
+            if request.url.path.endswith("/family_context"):
+                return httpx.Response(200, json=[{
+                    "fact_id": fact_id, "patient_id": SYNTHETIC_DB_PATIENT,
+                    "content": content, "sensitivity": "ordinary", "category": category,
+                    "active": active, "valid_from": "2026-09-14T00:00:00Z", "valid_until": None,
+                }])
+            raise AssertionError("unexpected guardian DB route")
+
+        def candidate(request: httpx.Request) -> httpx.Response:
+            provider_calls.append(request.url.path)
+            self.assertTrue(request.url.path.endswith("/v1/responses"))
+            body = json.loads(request.read())
+            self.assertEqual(body["model"], "gpt-5.4-mini")
+            self.assertIs(body["store"], False)
+            self.assertLessEqual(body["max_output_tokens"], 100)
+            self.assertIn(content, body["input"])
+            return httpx.Response(provider_status, json={"status": "completed", "output": [{
+                "type": "message", "content": [{"type": "output_text", "text": question}],
+            }]})
+
+        async_class = httpx.AsyncClient
+        sync_class = httpx.Client
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(guardian_db)),
+        ), patch(
+            "kof5_tts.api.httpx.Client",
+            side_effect=lambda **_: sync_class(transport=httpx.MockTransport(candidate)),
+        ):
+            self.assertEqual(self.client.post(path, headers={"X-Synthetic-Material": "confirmed"}).status_code, 401)
+            linked = False
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 403)
+            linked = True
+            category = "avoid_topic"
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 409)
+            category = "travel"
+            active = False
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 409)
+            self.assertEqual(provider_calls, [], "ineligible facts must not leave for provider")
+            active = True
+            result = self.client.post(path, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json(), {"question": question, "fact_id": fact_id})
+            for unsafe in ("부산에서 가장 기억에 남은 순간은 무엇인가요?",
+                           "제주도에서 무슨 약을 먹었나요?", "제주도 여행을 기억합니다.",
+                           "2025년 제주도에서 무엇이 좋았나요?"):
+                question = unsafe
+                self.assertEqual(self.client.post(path, headers=headers).status_code, 502)
+            provider_status = 500
+            self.assertEqual(self.client.post(path, headers=headers).status_code, 502)
+
     def test_semantic_provider_or_late_withdrawal_fails_closed(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
