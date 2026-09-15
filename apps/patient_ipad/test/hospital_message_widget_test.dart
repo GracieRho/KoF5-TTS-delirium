@@ -184,10 +184,13 @@ void main() {
             await tester.ensureVisible(find.text('전달 대기 승인 메시지 확인'));
             await tester.tap(find.text('전달 대기 승인 메시지 확인'));
             await _until(tester, () => confirms == 3);
-            await _until(tester, () => find
-                .textContaining('직원 승인 원문을 확인했습니다.')
-                .evaluate()
-                .isNotEmpty);
+            await _until(
+              tester,
+              () => find
+                  .textContaining('직원 승인 원문을 확인했습니다.')
+                  .evaluate()
+                  .isNotEmpty,
+            );
             await tester.ensureVisible(find.text('승인 원문 음성 재생 시험'));
             await tester.tap(find.text('승인 원문 음성 재생 시험'));
             await _until(tester, () => playCalls == 2 && completionWaits == 1);
@@ -209,10 +212,11 @@ void main() {
             );
             await tester.ensureVisible(find.byType(CheckboxListTile));
             await tester.tap(find.byType(CheckboxListTile));
-            await _until(tester, () => find
-                .textContaining('직원 승인 원문: $approved')
-                .evaluate()
-                .isEmpty);
+            await _until(
+              tester,
+              () =>
+                  find.textContaining('직원 승인 원문: $approved').evaluate().isEmpty,
+            );
           } else if (delayedPlay) {
             playResult
                 .complete(); // Late native play return after withdrawal stop.

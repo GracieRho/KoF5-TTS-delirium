@@ -710,18 +710,18 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     final owner = _playbackOwnerGeneration;
     try {
       await _player.stop().timeout(const Duration(seconds: 5));
-      if (_playbackOwnerGeneration == owner) _playedReply = false;
-      _autoResumeOwnerGeneration = null;
-      if (mounted) {
-        setState(() {
-          _cloudStatus = successStatus;
-        });
+      if (_playbackOwnerGeneration == owner) {
+        _playedReply = false;
+        _autoResumeOwnerGeneration = null;
+        if (mounted) setState(() => _cloudStatus = successStatus);
       }
       return true;
     } catch (_) {
-      if (_playbackOwnerGeneration == owner) _playedReply = true;
-      if (mounted) {
-        setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.');
+      if (_playbackOwnerGeneration == owner) {
+        _playedReply = true;
+        if (mounted) {
+          setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.');
+        }
       }
       return false;
     }
