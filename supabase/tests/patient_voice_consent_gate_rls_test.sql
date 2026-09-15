@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(26);
+SELECT plan(28);
 
 SELECT ok((SELECT reloptions @> ARRAY['security_invoker=true']
     FROM pg_class WHERE oid = 'kof5.usable_patient_voice_profile'::regclass),
@@ -157,12 +157,22 @@ SELECT is((SELECT count(*)::integer FROM kof5.usable_patient_voice_profile), 0,
 UPDATE kof5.hospital_patient SET active = true
 WHERE patient_id = '00000000-0000-4000-8000-000000000961';
 
+SAVEPOINT profile_revocation_test;
 UPDATE kof5.patient_voice_profile SET status = 'revoked', revoked_at = now()
 WHERE profile_id = '00000000-0000-4000-8000-000000000964';
 SELECT is((SELECT count(*)::integer FROM kof5.usable_patient_voice_profile), 0,
     'revoked profile blocks use');
-UPDATE kof5.patient_voice_profile SET status = 'active', revoked_at = NULL
+SELECT throws_ok($sql$
+    UPDATE kof5.patient_voice_profile SET status = 'active', revoked_at = NULL
+    WHERE profile_id = '00000000-0000-4000-8000-000000000964'
+$sql$, '23514', NULL, 'revoked enrollment cannot be reopened');
+UPDATE kof5.patient_voice_profile SET status = 'deleted', deleted_at = now()
 WHERE profile_id = '00000000-0000-4000-8000-000000000964';
+SELECT throws_ok($sql$
+    UPDATE kof5.patient_voice_profile SET status = 'active', deleted_at = NULL
+    WHERE profile_id = '00000000-0000-4000-8000-000000000964'
+$sql$, '23514', NULL, 'deleted enrollment cannot be reopened');
+ROLLBACK TO SAVEPOINT profile_revocation_test;
 
 UPDATE kof5.consent_record SET status = 'withdrawn', withdrawn_at = now()
 WHERE consent_id = '00000000-0000-4000-8000-000000000963';
