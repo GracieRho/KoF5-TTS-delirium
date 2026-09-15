@@ -16,6 +16,7 @@ RISK_PHRASES = (
     "숨을 못 쉬", "숨이 너무 차", "숨이 안 쉬", "가슴이 아파", "통증이 있어",
     "통증이 심", "넘어졌", "낙상했", "너무 어지러워", "살려줘",
 )
+UNVERIFIED_SCHEDULE_REPLY = "그 시간은 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
 WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
 
@@ -109,7 +110,7 @@ def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
     ):
         return orientation_time(now)
     if re.search(r"몇\s*시에?", transcript):
-        return "그 시간은 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
+        return UNVERIFIED_SCHEDULE_REPLY
     if any(word in transcript for word in ("며칠", "날짜")):
         return orientation_date(now)
     if transcript.strip().rstrip(".,!? ") == "수민아":

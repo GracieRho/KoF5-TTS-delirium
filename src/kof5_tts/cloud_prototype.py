@@ -12,7 +12,7 @@ import wave
 
 import httpx
 
-from kof5_tts.companion import ConversationSession, policy_reply
+from kof5_tts.companion import ConversationSession, UNVERIFIED_SCHEDULE_REPLY, policy_reply
 
 
 @dataclass(frozen=True)
@@ -123,9 +123,14 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
     return text
 
 
+def hospital_fact_question(transcript: str) -> bool:
+    """Route institution questions away from guardian family memories."""
+    return search(r"CT|검사|수술|퇴원|병실|병동|간호사|진료|치료|면회|병원\s*이름|어느\s*병원", transcript) is not None
+
+
 def _unsupported_fact_question(transcript: str, known_fact: str) -> bool:
     """A family fact cannot support hospital claims or an unrelated family question."""
-    if search(r"CT|검사|수술|퇴원|병실|병동|간호사|진료|치료|면회|검사 결과", transcript):
+    if hospital_fact_question(transcript):
         return True
     if not search(r"언제|어디|누구|무엇|뭐|몇|왜|좋아하|기억|알려줘", transcript):
         return False
@@ -267,18 +272,27 @@ def run_synthetic_pipeline(
 def run_synthetic_text_pipeline(
     client: httpx.Client, transcript: str, label: str,
     known_fact: str, credentials: CloudCredentials,
-    *, on_first_audio: Callable[[], None] | None = None,
+    *, namespace: str = "family_context", on_first_audio: Callable[[], None] | None = None,
 ) -> tuple[str | None, bytes | None]:
     """Process a bounded iPad transcript without sending candidate audio to hosted STT."""
-    if not transcript.strip() or len(transcript) > 500 or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}:
+    if (not transcript.strip() or len(transcript) > 500
+            or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}
+            or namespace not in {"family_context", "hospital_context"}):
         raise ValueError("bounded local transcript and activation label are required")
     now = datetime.now(timezone.utc)
     event = ConversationSession().hear(transcript, label, now)
     if event in {"patient_dissent", "closed", "discarded"}:
         return None, None
     reply = policy_reply(transcript, event, now)
+    if namespace == "hospital_context" and reply == UNVERIFIED_SCHEDULE_REPLY:
+        reply = None  # A current, approved hospital schedule may answer this default unknown-time reply.
     if reply is None:
-        if not known_fact.strip() or _unsupported_fact_question(transcript, known_fact):
+        if namespace == "hospital_context":
+            # Approved non-medical hospital wording is read unchanged; never let an LLM rewrite a schedule.
+            safe_fact = not search(r"약|복용|처방|진단|먹으세요|먹어도|치료하세요|괜찮아|안전합니다", known_fact)
+            reply = known_fact if hospital_fact_question(transcript) and 1 <= len(known_fact) <= 200 and safe_fact else \
+                "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
+        elif not known_fact.strip() or _unsupported_fact_question(transcript, known_fact):
             reply = "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
         else:
             # ponytail: lexical grounding is an internal-test ceiling; measured safety eval precedes patients.

@@ -129,6 +129,34 @@ class CloudPrototypeTests(unittest.TestCase):
             self.assertEqual(audio, b"synthetic-mp3")
         self.assertEqual(hosts, ["api.elevenlabs.io"] * 4)
 
+    def test_approved_hospital_fact_uses_exact_text_without_family_or_llm(self) -> None:
+        hosts = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("approved hospital wording must not reach an LLM")
+
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        approved = "CT 검사는 오늘 14시입니다."
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            self.assertEqual(run_synthetic_text_pipeline(
+                client, "수민아 CT 검사는 몇 시야?", "DIRECTED", approved, credentials,
+                namespace="hospital_context",
+            ), (approved, b"synthetic-mp3"))
+            family_question, _ = run_synthetic_text_pipeline(
+                client, "우리 제주도 언제 갔었어?", "DIRECTED", approved, credentials,
+                namespace="hospital_context",
+            )
+            self.assertIn("확인된 정보가 없어서", family_question)
+            unsafe, _ = run_synthetic_text_pipeline(
+                client, "수민아 CT 검사는 몇 시야?", "DIRECTED", "약을 복용하세요.", credentials,
+                namespace="hospital_context",
+            )
+            self.assertIn("확인된 정보가 없어서", unsafe)
+        self.assertEqual(hosts, ["api.elevenlabs.io"] * 3)
+
     def test_llm_extra_hospital_or_date_claim_does_not_reach_tts(self) -> None:
         for invented in ("내일 CT 검사를 받으러 가.", "2027년 5월에 제주도 갔었어.",
                          "수민이는 내일 와."):
