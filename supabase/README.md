@@ -20,6 +20,8 @@
 
 합성 대화의 일반 가족 기억 조회는 `api.patient_family_semantic_turn_context(p_patient_id,p_query_embedding)` 한 번으로 수행한다. 장치 JWT와 publishable 키로 `api` 스키마 RPC를 호출하면 정확히 한 행의 `authorized:boolean,facts:jsonb`가 반환된다. `authorized=true,facts=[]`는 유효한 장치·동의에 해당 기억이 없다는 뜻이고, 동의 철회·결속 만료·입원 종료·다른 환자 UUID는 `authorized=false,facts=[]`로 반환되어 서버가 모델 호출을 중단할 수 있다. `facts`는 최대 3건의 일반 기억뿐이며 vector와 점수는 클라이언트에 내지 않는다. 임베딩 전 기기 배정 사전 확인과 DB 스냅샷의 재확인은 적용했지만, 사전 확인 직후 철회된 이미 시작한 외부 임베딩을 취소하는 보장은 없다.
 
+연결된 합성 대화의 다회차 활성화 상태는 [입원별 CAS 세션](migrations/20260915220107_synthetic_conversation_session_cas.sql)의 `api.synthetic_conversation_session_read`/`commit` RPC에 저장한다. 현재 배정된 익명 기기만 읽고 같은 세션 ID·버전으로 갱신하며, 동의·입원·기기 철회나 다른 기기 경합은 실패한다. 거부 성공은 기존 `patient_dissent` 감사 이벤트에도 원자적으로 기록해 보호자 음성·예약 메시지 경로를 닫는다. 글/오디오를 세션에 저장하지 않고, `UNCERTAIN` 후속 발화는 직접 전사로 기록하지 않는다. 45초 만료는 현재 DB 갱신 시각 기준이며 실제 iPad 재생 종료 기준 대화 시간, 오래된 턴 ID의 전 기간 멱등, 화자 확인은 별도로 검증해야 한다([ADR-0014](../architecture/decisions/0014-synthetic-admission-conversation-session.md)).
+
 [합성 직접 발화 전사 migration](migrations/20260916170000_synthetic_directed_transcript.sql)은 현재 연결된 익명 기기의 `DIRECTED` 글만 UUID로 멱등 기록하고, 담당 직원에게 현재 입원의 한국 날짜 오늘 글만 보여준다([ADR-0011 제안](../architecture/decisions/0011-synthetic-directed-transcript-today-view.md)). 거부·주변 후보와 오디오는 넣지 않는다. 자정 이후 조회 차단과 실제 행 삭제는 별개이며, 삭제는 명시적 service-role sweep만 구현했다. 자동 실행·백업 삭제·실제 환자 전사 정책은 없다.
 
 - `kof5` 스키마는 Data API에 노출하지 않는다. 모든 테이블에 `FORCE ROW LEVEL SECURITY`를 적용한다. 인증된 직원은 **검증된 현재 기관 자격**이 있는 경우에만 해당 기관 환자를 읽고, 담당 직원은 **검증된 현재 배정 환자**만 읽는다. `api.hospital_patient_list`는 호출자 RLS를 따르는 읽기 전용 뷰다. 동의·음성 테이블에는 클라이언트 읽기 권한을 주지 않았다. 전용 원격 프로젝트에서는 `api` 스키마를 Data API 설정에도 별도로 노출해야 한다.
@@ -36,7 +38,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/smoke/registry_constraints.sql
 ```
 
-2026-09-16 현재 **이 작업 전용 로컬 Supabase PostgreSQL 17**에서 전체 migration을 빈 DB로 재적용하고 pgTAP **515개/18파일**이 통과했다. 로컬 GoTrue/Data API에서 고정 합성 환자의 서버 전용 색인·기기 의미 검색·사실 수정/동의 철회, 보호자 음성 `pending` 선기록·멱등 재시도·검증/삭제 대기·별도 동의 철회 후 TTS 차단·원격 부재 표시 전이, 보호자 clone 선택(0/1/2개 및 철회), 합성 직접 발화 기록의 중복 요청/철회와 담당 직원의 오늘 전사 조회, 두 직원 승인 예약 메시지의 기기 완료 기록·같은 시도 재요청·철회 거부, 두 직원 승인 병원 사실의 원문·`TEST-*` 출처/기기 조회·철회 거부를 검사했다. 시험 환자·색인·전사·clone·Auth 계정은 모두 0건으로 정리했다. 실제 공급자 음성 생성/삭제, 원격 프로젝트, 기관 직원 승인·실제 환자 처리는 검증하지 않았다.
+2026-09-16 현재 **이 작업 전용 로컬 Supabase PostgreSQL 17**에서 migration 24개를 빈 DB로 재적용하고 pgTAP **547개/19파일**이 통과했다. 로컬 GoTrue/Data API에서 고정 합성 환자의 서버 전용 색인·기기 의미 검색·사실 수정/동의 철회, 보호자 음성 `pending` 선기록·멱등 재시도·검증/삭제 대기·별도 동의 철회 후 TTS 차단·원격 부재 표시 전이, 보호자 clone 선택(0/1/2개 및 철회), 합성 직접 발화 기록의 중복 요청/철회와 담당 직원의 오늘 전사 조회, 두 직원 승인 예약 메시지의 기기 완료 기록·같은 시도 재요청·철회 거부, 두 직원 승인 병원 사실의 원문·`TEST-*` 출처/기기 조회·철회 거부, **입원별 세션의 두 번째 턴·중복·철회 차단**을 검사했다. 실제 로컬 FastAPI 두 요청과 모의 TTS도 이어졌고, 시험 환자·세션·전사·clone·Auth 계정은 모두 0건으로 정리했다. advisor의 기존 병원 메시지 다중 SELECT 정책 성능 경고 한 건은 남는다. 실제 공급자 음성 생성/삭제, 원격 프로젝트, 기관 직원 승인·실제 환자 처리는 검증하지 않았다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke/registry_constraints.sql
