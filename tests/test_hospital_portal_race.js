@@ -33,6 +33,7 @@ async function run() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -298,6 +299,7 @@ async function runPairing() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -424,6 +426,7 @@ async function runSyntheticMessage() {
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -451,6 +454,7 @@ async function runSyntheticMessage() {
     if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, approvedMessages);
     if (url.includes('/hospital_context_current?patient_id=eq.')) return reply(200, []);
     if (url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, approvedMessages);
+    if (url.includes('/rpc/synthetic_alert_staff_ready')) return reply(200, [{ ready: false, patient_id: null }]);
     if (url.includes('/synthetic_device_pairing_ready')) return reply(pairingReadyStatus,
       pairingReadyStatus === 200 && pairingReady
         ? [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }] : []);
@@ -724,4 +728,165 @@ async function runSyntheticMessage() {
   console.log('Hospital synthetic message draft and distinct approval UI: PASS');
 }
 
-run().then(runPairing).then(runSyntheticMessage).catch(error => { console.error(error); process.exitCode = 1; });
+async function runSyntheticAlert() {
+  const ids = [
+    'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
+    'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
+    'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975', encounter_id: '00000000-0000-4000-8000-000000000976',
+    staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975' };
+  const other = { patient_id: '00000000-0000-4000-8000-000000000977', encounter_id: '00000000-0000-4000-8000-000000000978',
+    staff_display_name: '가상 다른 환자', ehr_patient_ref: 'TEST-977' };
+  const staff = '00000000-0000-4000-8000-000000000991';
+  const make = (n, state, risk_category) => ({
+    alert_id: `00000000-0000-4000-8000-0000000008${String(n).padStart(2, '0')}`,
+    patient_id: fixture.patient_id, encounter_id: fixture.encounter_id,
+    risk_category, state, created_at: '2026-09-16T01:00:00Z',
+    delivered_at: ['delivered', 'acknowledged', 'resolved'].includes(state) ? '2026-09-16T01:01:00Z' : null,
+    acknowledged_at: ['acknowledged', 'resolved'].includes(state) ? '2026-09-16T01:02:00Z' : null,
+    resolved_at: state === 'resolved' ? '2026-09-16T01:03:00Z' : null,
+    failed_at: state === 'failed' ? '2026-09-16T01:04:00Z' : null,
+    failure_reason: state === 'failed' ? 'ack_timeout' : null,
+  });
+  const alerts = [make(1, 'created', 'breathing'), make(2, 'delivered', 'chest_pain'),
+    make(3, 'acknowledged', 'fall'), make(4, 'resolved', 'pain'), make(5, 'failed', 'dizziness')];
+  let ready = false;
+  let rpcStatus = 200;
+  let rpcAuthorized = true;
+  let lateList = null;
+  let lateMutation = null;
+  const calls = [];
+  async function fetch(url, options = {}) {
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'staff-alert-token', user: { id: staff } });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture, other]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, []);
+    if (url.includes('/hospital_context_current?patient_id=eq.') || url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, []);
+    if (url.includes('/rpc/synthetic_alert_')) {
+      assert.equal(options.method, 'POST', 'alert Data API stays within explicit RPC contract');
+      assert.equal(options.headers['Content-Profile'], 'api');
+      const name = url.split('/rpc/')[1];
+      calls.push({ name, payload: JSON.parse(options.body) });
+      if (name === 'synthetic_alert_staff_ready') return reply(200, [{ ready, patient_id: ready ? fixture.patient_id : null }]);
+      if (name === 'synthetic_alert_staff_list') return lateList ? lateList.promise : reply(200, alerts.map(item => ({ ...item })));
+      if (lateMutation) return lateMutation.promise;
+      if (rpcStatus !== 200) return reply(rpcStatus, null);
+      if (name === 'synthetic_alert_timeout_sweep') {
+        if (rpcAuthorized) {
+          const timed = alerts.find(item => item.alert_id.endsWith('806'));
+          if (timed) { timed.state = 'failed'; timed.failed_at = '2026-09-16T01:05:00Z'; timed.failure_reason = 'ack_timeout'; }
+        }
+        return reply(200, [{ authorized: rpcAuthorized, failed_count: rpcAuthorized ? 1 : 0 }]);
+      }
+      const id = JSON.parse(options.body).p_alert_id;
+      const alert = alerts.find(item => item.alert_id === id);
+      const target = { synthetic_alert_dashboard_receipt: 'delivered',
+        synthetic_alert_ack: 'acknowledged', synthetic_alert_resolve: 'resolved' }[name];
+      if (rpcAuthorized && alert) {
+        alert.state = target;
+        if (target === 'delivered') alert.delivered_at = '2026-09-16T01:06:00Z';
+        if (target === 'acknowledged') alert.acknowledged_at = '2026-09-16T01:07:00Z';
+        if (target === 'resolved') alert.resolved_at = '2026-09-16T01:08:00Z';
+      }
+      return reply(200, [{ authorized: rpcAuthorized, alert_id: rpcAuthorized ? id : null,
+                           state: rpcAuthorized ? target : null }]);
+    }
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
+    throw new Error(`unexpected alert URL ${url}`);
+  }
+  vm.runInNewContext(script, { document, fetch, console });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const selectFixture = () => elements.patients.children[0].handlers.click();
+  elements.email.value = 'synthetic-alert-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  assert.equal(elements['synthetic-alert-section'].hidden, true, 'no alert dashboard before patient selection');
+  await elements.patients.children[1].handlers.click();
+  assert.equal(elements['synthetic-alert-section'].hidden, true, 'other patient never opens fixture alert dashboard');
+  await selectFixture();
+  assert.equal(elements['synthetic-alert-section'].hidden, true, 'unready staff sees no synthetic alert data');
+  ready = true;
+  await selectFixture();
+  assert.equal(elements['synthetic-alert-section'].hidden, false);
+  assert.equal(elements['synthetic-alert-items'].children.length, 5);
+  assert.match(elements['synthetic-alert-items'].children[0].children[0].textContent, /생성 · 포털 표시 미확인/);
+  assert.match(elements['synthetic-alert-items'].children[1].children[0].textContent, /합성 포털 표시 · 의료진 확인 전/);
+  assert.match(elements['synthetic-alert-items'].children[2].children[0].textContent, /담당 직원 명시 확인/);
+  assert.match(elements['synthetic-alert-items'].children[3].children[0].textContent, /후속 조치 완료/);
+  assert.match(elements['synthetic-alert-items'].children[4].children[0].textContent, /보조 경고 실패/);
+  assert.equal(elements['synthetic-alert-items'].children[3].children.length, 3, 'resolved alert has no action');
+  assert.equal(elements['synthetic-alert-items'].children[4].children.length, 3, 'failed alert has no ACK action');
+  assert.equal(calls.filter(call => call.name === 'synthetic_alert_dashboard_receipt').length, 0,
+    'dashboard read alone never marks created as delivered');
+
+  await elements['synthetic-alert-items'].children[0].children[3].handlers.click();
+  assert.deepEqual(calls.at(-3).payload, { p_alert_id: alerts[0].alert_id });
+  assert.match(elements['synthetic-alert-items'].children[0].children[0].textContent, /합성 포털 표시 · 의료진 확인 전/);
+  await elements['synthetic-alert-items'].children[1].children[3].handlers.click();
+  assert.equal(alerts[1].state, 'acknowledged', 'only explicit staff ACK changes delivered state');
+  await elements['synthetic-alert-items'].children[2].children[3].handlers.click();
+  assert.equal(alerts[2].state, 'resolved', 'only explicit staff resolve changes acknowledged state');
+  alerts.push(make(6, 'delivered', 'distress'));
+  await elements['synthetic-alert-sweep'].handlers.click();
+  assert.equal(alerts[5].state, 'failed', 'explicit timeout sweep exposes failed state');
+  assert.match(elements['synthetic-alert-status'].textContent, /자동 scheduler·임상 전달은 검증되지/);
+
+  alerts.push(make(7, 'created', 'breathing'));
+  await elements['synthetic-alert-refresh'].handlers.click();
+  rpcAuthorized = false;
+  await elements['synthetic-alert-items'].children[6].children[3].handlers.click();
+  assert.equal(elements['synthetic-alert-section'].hidden, true,
+    'false authorized result hides synthetic alerts instead of claiming receipt');
+  rpcAuthorized = true;
+  await selectFixture();
+  lateList = pending();
+  const pendingRefresh = elements['synthetic-alert-refresh'].handlers.click();
+  await pause();
+  elements.logout.handlers.click();
+  lateList.resolve(reply(200, alerts));
+  await pendingRefresh;
+  assert.equal(elements['synthetic-alert-section'].hidden, true, 'late staff alert list cannot restore dashboard after logout');
+  assert.equal(elements['synthetic-alert-items'].children.length, 0);
+
+  lateList = null;
+  elements.email.value = 'synthetic-alert-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  lateMutation = pending();
+  const pendingReceipt = elements['synthetic-alert-items'].children[6].children[3].handlers.click();
+  await pause();
+  elements.logout.handlers.click();
+  lateMutation.resolve(reply(200, [{ authorized: true, alert_id: alerts[6].alert_id, state: 'delivered' }]));
+  await pendingReceipt;
+  assert.equal(elements['synthetic-alert-section'].hidden, true,
+    'late positive receipt cannot claim delivery after staff logout');
+  assert.equal(elements['synthetic-alert-items'].children.length, 0);
+  lateMutation = null;
+
+  elements.email.value = 'synthetic-alert-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectFixture();
+  rpcStatus = 403;
+  await elements['synthetic-alert-items'].children[6].children[3].handlers.click();
+  assert.equal(elements['patient-card'].hidden, true, 'current alert permission loss hides staff patient data');
+  assert.equal(elements['synthetic-alert-section'].hidden, true);
+  console.log('Hospital synthetic auxiliary alert state and staff action boundary: PASS');
+}
+
+run().then(runPairing).then(runSyntheticMessage).then(runSyntheticAlert)
+  .catch(error => { console.error(error); process.exitCode = 1; });
