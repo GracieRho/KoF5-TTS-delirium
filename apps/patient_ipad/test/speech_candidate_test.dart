@@ -25,10 +25,10 @@ void main() {
     for (var i = 0; i < 3; i++) {
       expect(detector.add(frame(3000)), isNull);
     }
-    Uint8List? candidate;
-    for (var i = 0; i < 7; i++) {
-      candidate = detector.add(frame(0)) ?? candidate;
+    for (var i = 0; i < 8; i++) {
+      expect(detector.add(frame(0)), isNull); // An 800 ms pause stays in the turn.
     }
+    final candidate = detector.add(frame(0)); // End at 900 ms by default.
     expect(candidate, isNotNull);
     expect(candidate!.length, lessThanOrEqualTo(3200 * 20));
     expect(candidate.length, greaterThan(3200 * 8));

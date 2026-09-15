@@ -21,7 +21,7 @@ class FakeRecorderPlatform extends RecordPlatform {
     for (var index = 0; index < 3; index++) {
       audio.add(voice);
     }
-    for (var index = 0; index < 7; index++) {
+    for (var index = 0; index < 10; index++) {
       audio.add(Uint8List(3200));
     }
   }

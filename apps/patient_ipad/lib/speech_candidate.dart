@@ -5,11 +5,14 @@ class SpeechCandidateDetector {
   SpeechCandidateDetector({
     this.sampleRate = 16000,
     this.energyThreshold = 0.035,
-  });
+    this.silenceMilliseconds = 900,
+  }) : assert(silenceMilliseconds > 0);
 
   final int sampleRate;
   // ponytail: fixed energy threshold is a demo ceiling; calibrate against hospital noise before patient use.
   final double energyThreshold;
+  // ponytail: one fixed silence window; tune it with actual iPad/ward pauses before patient use.
+  final int silenceMilliseconds;
   final List<Uint8List> _preroll = [];
   final List<Uint8List> _candidate = [];
   int _prerollBytes = 0;
@@ -54,7 +57,7 @@ class SpeechCandidateDetector {
     _candidate.add(kept);
     _candidateBytes += kept.length;
     _quietSamples = speech ? 0 : _quietSamples + samples;
-    if (_quietSamples < sampleRate * 3 ~/ 5 &&
+    if (_quietSamples < sampleRate * silenceMilliseconds ~/ 1000 &&
         _candidateBytes < sampleRate * 2 * 8) {
       return null;
     }
