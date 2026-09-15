@@ -8,7 +8,7 @@
     :root { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; color: #233530; background: #f7f8f4; }
     * { box-sizing: border-box; }
     body { margin: 0; word-break: keep-all; }
-    button, input { font: inherit; }
+    button, input, select { font: inherit; }
     button { cursor: pointer; }
     :focus-visible { outline: 3px solid #78ae9b; outline-offset: 3px; }
     [hidden] { display: none !important; }
@@ -28,7 +28,7 @@
     .soft { background: #f1f5ef; border-color: #e2e9dd; box-shadow: none; }
     .card > p { color: #67766f; }
     label { display: block; margin: 20px 0 8px; font-weight: 700; font-size: 14px; }
-    input { width: 100%; min-height: 50px; padding: 13px 14px; border: 1px solid #c8d6cc; border-radius: 11px; color: #233530; background: #fff; }
+    input, select { width: 100%; min-height: 50px; padding: 13px 14px; border: 1px solid #c8d6cc; border-radius: 11px; color: #233530; background: #fff; }
     button { min-height: 44px; padding: 9px 13px; border: 1px solid #c8d6cc; border-radius: 10px; background: #fff; color: #285748; font-weight: 700; }
     button:disabled { opacity: .55; cursor: not-allowed; }
     .primary { width: 100%; min-height: 51px; margin-top: 24px; border: 0; background: #194a40; color: #fff; }
@@ -80,6 +80,19 @@
         <input id="patient-search" type="search" autocomplete="off" placeholder="담당 환자 찾기" aria-controls="patients">
         <div id="patients" class="patients"></div>
         <div id="list-status" class="status" role="status" aria-live="polite"></div>
+        <div id="readiness-status" class="small" role="status" aria-live="polite"></div>
+      </section>
+      <section class="card" id="registration-card" aria-labelledby="registration-title" hidden>
+        <h2 id="registration-title">환자 기본정보 등록</h2>
+        <p>기관 자격과 임상 안전 승인이 확인된 병원에서만 등록합니다. 실제 환자 사용에는 별도의 동의·거부 확인 절차가 필요합니다.</p>
+        <form id="registration-form">
+          <label for="registration-hospital">병원</label><select id="registration-hospital" required></select>
+          <label for="registration-number">병원 환자 번호</label><input id="registration-number" required maxlength="100" autocomplete="off">
+          <label for="registration-name">환자 성명</label><input id="registration-name" required maxlength="100" autocomplete="off">
+          <label for="registration-birth">생년월일 (선택)</label><input id="registration-birth" type="date" autocomplete="off">
+          <button id="registration-button" class="primary" type="submit">환자 등록</button>
+        </form>
+        <div id="registration-status" class="status" role="status" aria-live="polite"></div>
       </section>
       <section class="card" id="detail-card" aria-labelledby="detail-title" hidden>
         <h2 id="detail-title">현재 입원 정보</h2>
@@ -95,7 +108,8 @@
     </div>
   </main>
   <script>
-    const state = { config: null, token: null, generation: 0, request: 0, patients: [], selected: null };
+    const state = { config: null, token: null, generation: 0, request: 0,
+      registrationRequest: 0, patients: [], selected: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
     const encounter = patient => patient.encounter_id ?
       `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
@@ -107,10 +121,17 @@
     function clearSession(message = '로그아웃했습니다.') {
       ++state.generation;
       ++state.request;
+      ++state.registrationRequest;
       state.token = null;
       state.patients = [];
       state.selected = null;
+      state.readyHospitals = [];
       $('patient-search').value = '';
+      $('registration-hospital').replaceChildren();
+      $('registration-number').value = '';
+      $('registration-name').value = '';
+      $('registration-birth').value = '';
+      $('registration-button').disabled = false;
       $('email').value = '';
       $('password').value = '';
       $('patients').replaceChildren();
@@ -120,8 +141,11 @@
       $('detail-summary').textContent = '';
       $('detail-status').textContent = '';
       $('list-status').textContent = '';
+      $('readiness-status').textContent = '';
+      $('registration-status').textContent = '';
       $('patient-card').hidden = true;
       $('detail-card').hidden = true;
+      $('registration-card').hidden = true;
       $('signin-card').hidden = false;
       $('signin-status').textContent = message;
     }
@@ -202,6 +226,57 @@
         : `${state.patients.length}명의 담당 환자 중 ${state.patients.filter(patient => !!patient.encounter_id).length}명이 현재 입원 중입니다.`;
     }
 
+    function renderPatients(patients) {
+      ++state.request;
+      state.selected = null;
+      $('detail-card').hidden = true;
+      $('detail-title').textContent = '';
+      $('detail-summary').textContent = '';
+      $('facts').replaceChildren();
+      $('messages').replaceChildren();
+      $('detail-status').textContent = '';
+      state.patients = patients;
+      $('patients').replaceChildren();
+      for (const patient of patients) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.patientId = patient.patient_id;
+        button.dataset.search = `${patient.staff_display_name} ${patient.ehr_patient_ref} ${patient.ward_ref || ''}`.toLocaleLowerCase('ko-KR');
+        const title = document.createElement('strong');
+        title.textContent = patient.staff_display_name;
+        const caption = document.createElement('span');
+        caption.textContent = `${patient.ehr_patient_ref} · ${encounter(patient)}`;
+        button.append(title, caption);
+        button.addEventListener('click', () => showPatient(patient));
+        $('patients').append(button);
+      }
+      filterPatients();
+    }
+
+    function showReadiness(rows) {
+      const previous = $('registration-hospital').value;
+      state.readyHospitals = rows.filter(row => row.ready === true).map(row => row.hospital_ref);
+      $('registration-hospital').replaceChildren();
+      for (const hospital of state.readyHospitals) {
+        const option = document.createElement('option');
+        option.value = hospital;
+        option.textContent = hospital;
+        $('registration-hospital').append(option);
+      }
+      const selected = state.readyHospitals.includes(previous) ? previous : state.readyHospitals[0] || '';
+      $('registration-hospital').value = selected;
+      if (selected !== previous) {
+        $('registration-number').value = '';
+        $('registration-name').value = '';
+        $('registration-birth').value = '';
+      }
+      $('registration-card').hidden = !state.readyHospitals.length;
+      $('readiness-status').textContent = state.readyHospitals.length
+        ? `${state.readyHospitals.length}개 기관의 환자 등록 승인이 확인됐습니다.`
+        : rows.length ? '기관·임상 안전 승인 대기 중이라 환자를 등록할 수 없습니다.'
+          : '현재 환자 등록 권한이 없습니다.';
+    }
+
     $('signin-form').addEventListener('submit', async event => {
       event.preventDefault();
       const generation = ++state.generation;
@@ -217,24 +292,13 @@
         if (generation !== state.generation) return;
         state.token = session.access_token;
         $('password').value = '';
-        const patients = await supabase('/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref', state.token, generation);
+        const [patients, readiness] = await Promise.all([
+          supabase('/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref', state.token, generation),
+          supabase('/rest/v1/hospital_registration_ready?select=hospital_ref,ready', state.token, generation),
+        ]);
         if (generation !== state.generation) return;
-        state.patients = patients;
-        $('patients').replaceChildren();
-        for (const patient of patients) {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.dataset.patientId = patient.patient_id;
-          button.dataset.search = `${patient.staff_display_name} ${patient.ehr_patient_ref} ${patient.ward_ref || ''}`.toLocaleLowerCase('ko-KR');
-          const title = document.createElement('strong');
-          title.textContent = patient.staff_display_name;
-          const caption = document.createElement('span');
-          caption.textContent = `${patient.ehr_patient_ref} · ${encounter(patient)}`;
-          button.append(title, caption);
-          button.addEventListener('click', () => showPatient(patient));
-          $('patients').append(button);
-        }
-        filterPatients();
+        renderPatients(patients);
+        showReadiness(readiness);
         $('signin-card').hidden = true;
         $('patient-card').hidden = false;
       } catch (_) {
@@ -242,6 +306,69 @@
       } finally {
         if (generation === state.generation || !state.token) $('signin-button').disabled = !state.config;
       }
+    });
+    $('registration-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const hospital = $('registration-hospital').value;
+      const patientRef = $('registration-number').value.trim();
+      const name = $('registration-name').value.trim();
+      if (!state.token || $('registration-card').hidden || $('registration-button').disabled
+          || !state.readyHospitals.includes(hospital) || !patientRef || !name) return;
+      const generation = state.generation;
+      const request = ++state.registrationRequest;
+      const token = state.token;
+      const current = () => generation === state.generation && request === state.registrationRequest
+        && token === state.token;
+      $('registration-button').disabled = true;
+      $('registration-status').textContent = '등록 권한과 기관 승인을 다시 확인하고 있습니다.';
+      try {
+        const readiness = await supabase('/rest/v1/hospital_registration_ready?select=hospital_ref,ready', token, generation);
+        if (!current()) return;
+        if (!readiness.some(row => row.hospital_ref === hospital && row.ready === true)) {
+          showReadiness(readiness);
+          $('registration-status').textContent = '등록 권한 또는 기관 승인이 더 이상 유효하지 않습니다.';
+          return;
+        }
+        const payload = { hospital_ref: hospital, ehr_patient_ref: patientRef, staff_display_name: name };
+        if ($('registration-birth').value) payload.birth_date = $('registration-birth').value;
+        const response = await fetch(state.config.url + '/rest/v1/hospital_patient_registration', {
+          method: 'POST',
+          headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`,
+            'Content-Profile': 'api', 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!current()) return;
+        if ([401, 403].includes(response.status)) {
+          clearSession('세션 또는 등록 권한이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (response.status === 409) {
+          $('registration-status').textContent = '이 병원 환자 번호는 이미 등록됐습니다. 번호를 확인하세요.';
+          return;
+        }
+        if (!response.ok) throw new Error(String(response.status));
+        const [patients, refreshed] = await Promise.all([
+          supabase('/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref', token, generation),
+          supabase('/rest/v1/hospital_registration_ready?select=hospital_ref,ready', token, generation),
+        ]);
+        if (!current()) return;
+        renderPatients(patients);
+        showReadiness(refreshed);
+        $('registration-number').value = '';
+        $('registration-name').value = '';
+        $('registration-birth').value = '';
+        $('registration-status').textContent = '환자 기본정보를 등록하고 담당 환자 목록을 갱신했습니다.';
+      } catch (_) {
+        if (current()) $('registration-status').textContent = '등록을 완료하지 못했습니다. 연결과 권한을 다시 확인하세요.';
+      } finally {
+        if (current()) $('registration-button').disabled = false;
+      }
+    });
+    $('registration-hospital').addEventListener('change', () => {
+      $('registration-number').value = '';
+      $('registration-name').value = '';
+      $('registration-birth').value = '';
+      $('registration-status').textContent = '병원을 변경했습니다. 환자 정보를 다시 입력하세요.';
     });
     $('patient-search').addEventListener('input', filterPatients);
     $('logout').addEventListener('click', () => clearSession());
