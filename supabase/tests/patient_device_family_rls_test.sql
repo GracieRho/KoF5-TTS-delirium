@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(36);
+SELECT plan(50);
 
 -- All rows are synthetic and rolled back. The pinned fixture is never a patient.
 INSERT INTO auth.users (id, is_anonymous) VALUES
@@ -110,6 +110,12 @@ SELECT ok(NOT has_table_privilege('anon', 'api.synthetic_device_pairing_ready', 
     'signed-out role cannot read staff pairing readiness');
 SELECT ok(NOT has_function_privilege('anon', 'api.patient_family_search(uuid,text)', 'EXECUTE'),
     'signed-out role cannot search patient family facts');
+SELECT ok(NOT has_function_privilege('anon', 'api.patient_family_turn_context(uuid,text)', 'EXECUTE'),
+    'signed-out role cannot call atomic turn context');
+SELECT ok(NOT has_function_privilege('service_role', 'api.patient_family_turn_context(uuid,text)', 'EXECUTE'),
+    'service role has no exposed atomic turn grant');
+SELECT ok(has_function_privilege('authenticated', 'api.patient_family_turn_context(uuid,text)', 'EXECUTE'),
+    'authenticated device role has only invoker atomic turn grant');
 SELECT ok(NOT has_table_privilege('authenticated', 'kof5.patient_device_assignment', 'UPDATE'),
     'clients cannot change or revoke pairing themselves');
 SELECT ok((SELECT reloptions @> ARRAY['security_invoker=true']
@@ -118,6 +124,9 @@ SELECT ok((SELECT reloptions @> ARRAY['security_invoker=true']
 SELECT ok(NOT (SELECT prosecdef FROM pg_proc
                WHERE oid = 'api.patient_family_search(uuid,text)'::regprocedure),
     'patient search is invoker and does not bypass fact RLS');
+SELECT ok(NOT (SELECT prosecdef FROM pg_proc
+               WHERE oid = 'api.patient_family_turn_context(uuid,text)'::regprocedure),
+    'atomic turn context is invoker and does not bypass device RLS');
 SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents
            WHERE patient_id = '00000000-0000-4000-8000-000000000977'), 1,
     'alternate synthetic patient satisfies all voice/participation/ambient prerequisites');
@@ -203,14 +212,34 @@ SELECT is((SELECT content FROM api.patient_family_search(
 SELECT is((SELECT count(*)::integer FROM api.patient_family_search(
     '00000000-0000-4000-8000-000000000975', '음악 좋아하셨어?')), 0,
     'unrelated question has no family fact');
+SELECT is((SELECT count(*)::integer FROM api.patient_family_turn_context(
+    '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')), 1,
+    'atomic turn always returns exactly one eligibility row');
+SELECT ok((SELECT authorized IS TRUE AND facts = jsonb_build_array(
+    jsonb_build_object('category', 'travel', 'content', '2024년 5월 제주도에 함께 갔었다.'))
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'authorized synthetic turn includes one ordinary permanent-guardian fact');
+SELECT ok((SELECT authorized IS TRUE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '음악 좋아하셨어?')),
+    'authorized no-match turn is distinguishable from withdrawn eligibility');
 SELECT is((SELECT count(*)::integer FROM api.patient_family_search(
     '00000000-0000-4000-8000-000000000977', '제주도 언제 갔었어?')), 0,
     'other patient UUID never retrieves a fact');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000977', '제주도 언제 갔었어?')),
+    'other patient UUID never receives authorized turn context');
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000973', true);
 SELECT set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000973","is_anonymous":true}', true);
 SELECT is((SELECT count(*)::integer FROM api.patient_device_context), 0,
     'unpaired anonymous user cannot read context');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'unpaired anonymous user receives explicit unauthorized empty context');
 SELECT throws_ok($sql$INSERT INTO api.patient_device_pairing
     (device_user_id, patient_id, encounter_id, expires_at)
     VALUES ('00000000-0000-4000-8000-000000000973',
@@ -239,6 +268,10 @@ SELECT set_config('request.jwt.claims',
 SELECT is((SELECT count(*)::integer FROM api.patient_family_search(
     '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')), 0,
     'guardian link revocation removes the family fact immediately');
+SELECT ok((SELECT authorized IS TRUE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'guardian revocation removes facts while device turn remains authorized');
 RESET ROLE;
 UPDATE kof5.patient_guardian_link
 SET access_status = 'verified', revoked_at = NULL
@@ -253,6 +286,10 @@ SELECT set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000972","is_anonymous":true}', true);
 SELECT is((SELECT count(*)::integer FROM api.patient_device_context), 0,
     'expired pairing denies device context');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'expired pairing makes entire turn explicitly unauthorized');
 RESET ROLE;
 UPDATE kof5.patient_device_assignment
 SET paired_at = now(), expires_at = now() + interval '2 hours'
@@ -267,6 +304,10 @@ SELECT set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000972","is_anonymous":true}', true);
 SELECT is((SELECT count(*)::integer FROM api.patient_device_context), 0,
     'revoked pairing denies context');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'revoked pairing makes atomic turn explicitly unauthorized');
 RESET ROLE;
 SELECT throws_ok($sql$UPDATE kof5.patient_device_assignment
     SET status = 'active', revoked_at = NULL
@@ -284,6 +325,10 @@ SELECT set_config('request.jwt.claims',
 SELECT is((SELECT count(*)::integer FROM api.patient_family_search(
     '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')), 0,
     'finished encounter denies retrieval');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'finished encounter makes atomic turn explicitly unauthorized');
 RESET ROLE;
 UPDATE kof5.hospital_encounter
 SET status = 'in_progress', discharged_at = NULL
@@ -296,6 +341,10 @@ SELECT set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000972","is_anonymous":true}', true);
 SELECT is((SELECT count(*)::integer FROM api.patient_device_context), 0,
     'ambient consent withdrawal denies device context immediately');
+SELECT ok((SELECT authorized IS FALSE AND facts = '[]'::jsonb
+    FROM api.patient_family_turn_context(
+        '00000000-0000-4000-8000-000000000975', '제주도 언제 갔었어?')),
+    'ambient consent withdrawal cannot masquerade as authorized no-match');
 RESET ROLE;
 
 SELECT * FROM finish();
