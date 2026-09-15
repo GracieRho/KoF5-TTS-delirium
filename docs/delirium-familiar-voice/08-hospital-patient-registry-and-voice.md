@@ -11,6 +11,7 @@
 | 환자 기본정보 | 병원 환자 식별자(MRN 등), 성명, 생년월일/계산된 나이, 행정 성별, 연락처, 언어, 기록 활성 여부 | [Patient](https://hl7.org/fhir/R4/patient.html) | 환자 연결과 직원의 오등록 방지에 필요한 식별·표시 정보만. 주민등록번호·주소·전화번호는 기본 수집하지 않음 |
 | 입원·병실 | 입원 식별자, 입원/퇴원 시각, 상태, 병동·호실·병상, 담당자 | [Encounter](https://hl7.org/fhir/R4/encounter.html), [Location](https://hl7.org/fhir/R4/location.html) | 현재 유효한 입원·위치만 병원 승인 지남력 정보로 사용. 이동/퇴원 시 즉시 갱신 |
 | 의료진·보호자 관계 | 담당 팀/직원 역할, 환자와 보호자의 관계·연결 상태 | [CareTeam](https://hl7.org/fhir/R4/careteam.html), [RelatedPerson](https://hl7.org/fhir/R4/relatedperson.html) | 직원 등록·승인 권한과 보호자 연결에 사용. 보호자 연락처는 별도 계정에 관리 |
+| 병원 조직·직원 권한 | 기관 식별자, 직원의 기관별 역할과 유효 기간, 담당 환자 범위 | [Organization](https://hl7.org/fhir/R4/organization.html), [PractitionerRole](https://hl7.org/fhir/R4/practitionerrole.html), [CareTeam](https://hl7.org/fhir/R4/careteam.html) | 직원 인증/EHR의 기관·역할·담당 범위를 검증. 권한 근거를 확인할 수 없으면 실제 환자 등록을 허용하지 않음 |
 | 진단·알레르기·약물·검사 | 문제/진단 상태, 알레르기, 처방, 검사 지시와 예정 시각, 활력징후 | [Condition](https://hl7.org/fhir/R4/condition.html), [AllergyIntolerance](https://hl7.org/fhir/R4/allergyintolerance.html), [MedicationRequest](https://hl7.org/fhir/R4/medicationrequest.html), [ServiceRequest](https://hl7.org/fhir/R4/servicerequest.html), [Observation](https://hl7.org/fhir/R4/observation.html) | 전체 임상 테이블을 복제하지 않음. 검사·일정은 직원이 확인·승인한 문구만 `hospital_context`에 투입. 진단/약물 판단에 사용하지 않음 |
 | 동의·메시지·감사 | 동의 범위/동의자/기간, 예약 메시지·발신자, 누가 기록을 처리했는지 | [Consent](https://hl7.org/fhir/R4/consent.html), [CommunicationRequest](https://hl7.org/fhir/R4/communicationrequest.html), [AuditEvent](https://hl7.org/fhir/R4/auditevent.html) | 환자 참여·환자 화자 특징·보호자 복제 음성·주변 음성 고지를 분리. 승인 문구와 접근/삭제 이력을 유지 |
 
@@ -30,6 +31,8 @@
 | `hospital_message` | `message_id` PK, `patient_id` FK, `encounter_id` FK, `approved_text`, `approved_by_staff_id`, `due_at`, `delivery_status`, `delivered_at` nullable | 직원 승인 원문을 그대로 TTS에 전달. 생성·전달·직원 확인은 별도 상태; 위험 발화 보조 알림과 혼동하지 않음 |
 
 FHIR는 교환 형식의 기준이며 위 테이블은 **이 제품이 필요한 데이터 최소화에 대한 설계 추론**이다. 병원 EHR에서 이름·생년월일·병실을 안전하게 조회할 수 있다면 앱 DB의 중복 보관을 줄인다. 보호자/환자 앱과 LLM 프롬프트에는 MRN, 연락처, 원본 음성, 임베딩을 보내지 않는다.
+
+`hospital_id`와 `*_staff_id`는 각각 병원 조직과 직원 인증/EHR의 외부 참조다. 실제 병원 연동에서 기관 소속·역할·담당 입원 범위를 확인할 수 없다면 해당 직원의 등록·목소리 처리 API를 막는다. 별도 직원 권한 테이블은 기존 병원 시스템이 이 범위 검증을 제공하지 못할 때 설계한다.
 
 ## 환자 목소리 등록 흐름
 
