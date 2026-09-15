@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
 from datetime import datetime, timezone
+from hmac import compare_digest
+import os
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from kof5_tts.cloud_prototype import CloudCredentials, run_synthetic_pipeline, validate_short_wav
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
 SYNTHETIC_PATIENT = "synthetic_patient"
@@ -66,7 +72,56 @@ def _route(session: ConversationSession, speech: SpeechTurn, now: datetime) -> d
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "synthetic_text_only"}
+    return {"status": "synthetic_demo_only"}
+
+
+@app.post("/internal/synthetic/audio", include_in_schema=False)
+async def synthetic_audio(request: Request) -> dict[str, str | None]:
+    """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
+    token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
+    if len(token) < 32:
+        raise HTTPException(status_code=503, detail="내부 오디오 시험이 설정되지 않았습니다")
+    if not compare_digest(request.headers.get("x-internal-demo-token", ""), token):
+        raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
+    if request.headers.get("x-synthetic-material") != "confirmed":
+        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/wav":
+        raise HTTPException(status_code=415, detail="WAV 오디오만 허용합니다")
+    if not os.environ.get("VOICE_OWNER_CONSENT_RECORD_ID", "").strip():
+        raise HTTPException(status_code=503, detail="시험용 음성 소유자 동의 기록이 필요합니다")
+    try:
+        credentials = CloudCredentials(
+            os.environ.get("DEEPGRAM_API_KEY", ""),
+            os.environ.get("OPENAI_API_KEY", ""),
+            os.environ.get("ELEVENLABS_API_KEY", ""),
+            os.environ.get("ELEVENLABS_VOICE_ID", ""),
+            True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="Hosted 공급자 설정이 필요합니다") from exc
+    wav = bytearray()
+    async for chunk in request.stream():
+        wav.extend(chunk)
+        if len(wav) > 2_000_000:
+            raise HTTPException(status_code=413, detail="2 MB 이하의 짧은 WAV만 허용합니다")
+    try:
+        validate_short_wav(wav)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="짧은 PCM16 WAV가 필요합니다") from exc
+
+    def run() -> tuple[str, str | None, bytes | None]:
+        with httpx.Client(timeout=20) as client:
+            return run_synthetic_pipeline(client, bytes(wav), FAMILY_FACT.content, credentials)
+
+    try:
+        transcript, reply, audio = await run_in_threadpool(run)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="음성 공급자 처리가 실패했습니다") from None
+    return {
+        "transcript": transcript,
+        "reply": reply,
+        "audio_mp3_base64": b64encode(audio).decode("ascii") if audio else None,
+    }
 
 
 @app.post("/patients/{patient_id}/conversation/start")

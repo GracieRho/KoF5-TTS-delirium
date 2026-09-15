@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from io import BytesIO
 from urllib.parse import quote
+import wave
 
 import httpx
 
@@ -26,10 +28,28 @@ class CloudCredentials:
             raise ValueError("voice owner's cloning consent must be verified")
 
 
+def validate_short_wav(wav: bytes) -> None:
+    """Reject invalid or long audio before it can reach a hosted provider."""
+    if len(wav) > 2_000_000 or wav[:4] != b"RIFF" or wav[8:12] != b"WAVE":
+        raise ValueError("expected a short WAV under 2 MB")
+    try:
+        with wave.open(BytesIO(wav), "rb") as audio:
+            frames = audio.getnframes()
+            channels = audio.getnchannels()
+            width = audio.getsampwidth()
+            rate = audio.getframerate()
+            if not (frames and channels in (1, 2) and width == 2 and
+                    8_000 <= rate <= 48_000 and frames <= rate * 30):
+                raise ValueError("expected PCM16 WAV of at most 30 seconds")
+            if len(audio.readframes(frames)) != frames * channels * width:
+                raise ValueError("WAV audio data is incomplete")
+    except (EOFError, wave.Error) as exc:
+        raise ValueError("invalid WAV container") from exc
+
+
 def transcribe_wav(client: httpx.Client, wav: bytes, key: str) -> str:
     """Deepgram Nova-3 batch STT; streaming is a later, measured step."""
-    if not wav.startswith(b"RIFF") or len(wav) > 2_000_000:
-        raise ValueError("expected a short WAV under 2 MB")
+    validate_short_wav(wav)
     response = client.post(
         "https://api.deepgram.com/v1/listen",
         params={"model": "nova-3", "language": "ko", "mip_opt_out": "true"},
@@ -99,8 +119,8 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
         json={"text": text, "model_id": "eleven_multilingual_v2"},
     )
     response.raise_for_status()
-    if not response.content:
-        raise ValueError("TTS returned no audio")
+    if not response.content or len(response.content) > 2_000_000:
+        raise ValueError("TTS returned empty or oversized audio")
     return response.content
 
 

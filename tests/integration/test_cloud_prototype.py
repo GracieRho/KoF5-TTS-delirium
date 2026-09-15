@@ -4,7 +4,9 @@ import sys
 import unittest
 import os
 import subprocess
+from io import BytesIO
 from pathlib import Path
+import wave
 
 import httpx
 
@@ -12,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.cloud_prototype import CloudCredentials, run_synthetic_pipeline  # noqa: E402
+from tests.synthetic_wav import SYNTHETIC_WAV  # noqa: E402
 
 
 class CloudPrototypeTests(unittest.TestCase):
@@ -45,7 +48,7 @@ class CloudPrototypeTests(unittest.TestCase):
 
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
             result = run_synthetic_pipeline(
-                client, b"RIFF" + b"\0" * 64, "2024년 5월 제주도 여행",
+                client, SYNTHETIC_WAV, "2024년 5월 제주도 여행",
                 CloudCredentials("deepgram-test", "openai-test", "eleven-test", "voice-test", True),
             )
         self.assertEqual(result, (
@@ -68,6 +71,22 @@ class CloudPrototypeTests(unittest.TestCase):
                     client, b"not wav", "known fact", CloudCredentials("d", "o", "e", "v", True),
                 )
 
+    def test_truncated_and_long_wav_never_reach_stt(self) -> None:
+        def unexpected(request: httpx.Request) -> httpx.Response:
+            raise AssertionError("invalid WAV must not call a provider")
+        long_audio = BytesIO()
+        with wave.open(long_audio, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(16_000)
+            audio.writeframes(b"\0" * (16_000 * 2 * 31))
+        with httpx.Client(transport=httpx.MockTransport(unexpected)) as client:
+            for wav in (SYNTHETIC_WAV[:-100], long_audio.getvalue()):
+                with self.subTest(size=len(wav)), self.assertRaises(ValueError):
+                    run_synthetic_pipeline(
+                        client, wav, "known fact", CloudCredentials("d", "o", "e", "v", True),
+                    )
+
     def test_empty_transcript_stops_before_llm_or_tts(self) -> None:
         calls = []
         def respond(request: httpx.Request) -> httpx.Response:
@@ -78,7 +97,7 @@ class CloudPrototypeTests(unittest.TestCase):
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
             with self.assertRaisesRegex(ValueError, "empty speech"):
                 run_synthetic_pipeline(
-                    client, b"RIFF" + b"\0" * 64, "known fact",
+                    client, SYNTHETIC_WAV, "known fact",
                     CloudCredentials("d", "o", "e", "v", True),
                 )
         self.assertEqual(calls, ["api.deepgram.com"])
@@ -106,7 +125,7 @@ class CloudPrototypeTests(unittest.TestCase):
                     raise AssertionError("safety route must not call LLM")
                 with httpx.Client(transport=httpx.MockTransport(respond)) as client:
                     result = run_synthetic_pipeline(
-                        client, b"RIFF" + b"\0" * 64, "known fact",
+                        client, SYNTHETIC_WAV, "known fact",
                         CloudCredentials("d", "o", "e", "v", True),
                     )
                 self.assertEqual(hosts, expected_hosts)
@@ -132,7 +151,7 @@ class CloudPrototypeTests(unittest.TestCase):
             raise AssertionError("incomplete answer must never reach TTS")
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
             with self.assertRaisesRegex(ValueError, "not complete"):
-                run_synthetic_pipeline(client, b"RIFF" + b"\0" * 64, "known fact", credentials)
+                run_synthetic_pipeline(client, SYNTHETIC_WAV, "known fact", credentials)
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
 
     def test_unsafe_generated_claim_never_reaches_tts(self) -> None:
@@ -152,7 +171,7 @@ class CloudPrototypeTests(unittest.TestCase):
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
             with self.assertRaisesRegex(ValueError, "hard safety rule"):
                 run_synthetic_pipeline(
-                    client, b"RIFF" + b"\0" * 64, "2024년 5월 제주도 여행",
+                    client, SYNTHETIC_WAV, "2024년 5월 제주도 여행",
                     CloudCredentials("d", "o", "e", "v", True),
                 )
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])

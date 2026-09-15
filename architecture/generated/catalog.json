@@ -52,6 +52,7 @@
         "path": "src/kof5_tts/api.py",
         "layer": "api",
         "imports": [
+          "kof5_tts.cloud_prototype",
           "kof5_tts.companion"
         ]
       },

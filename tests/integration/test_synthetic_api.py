@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
+import httpx
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.api import app  # noqa: E402
+from tests.synthetic_wav import SYNTHETIC_WAV  # noqa: E402
 
 
 class SyntheticApiTests(unittest.TestCase):
@@ -23,7 +27,7 @@ class SyntheticApiTests(unittest.TestCase):
 
     def test_synthetic_first_flow_and_untrusted_requests(self) -> None:
         root = "/patients/synthetic_patient/conversation"
-        self.assertEqual(self.client.get("/health").json(), {"status": "synthetic_text_only"})
+        self.assertEqual(self.client.get("/health").json(), {"status": "synthetic_demo_only"})
         demo = self.client.get("/demo")
         self.assertEqual(demo.status_code, 200)
         self.assertIn("합성 데이터 전용", demo.text)
@@ -104,6 +108,82 @@ class SyntheticApiTests(unittest.TestCase):
             "transcript": "수민아?", "label": "DIRECTED",
         }).json()
         self.assertEqual((restarted["event"], restarted["text"]), ("turn", "응, 왜?"))
+
+    def test_internal_audio_requires_auth_and_valid_synthetic_wav_before_provider(self) -> None:
+        path = "/internal/synthetic/audio"
+        with patch.dict(os.environ, {"KOF5_INTERNAL_DEMO_TOKEN": ""}):
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV).status_code, 503)
+        env = {
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram",
+            "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven",
+            "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {"X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+                   "X-Synthetic-Material": "confirmed", "Content-Type": "audio/wav"}
+        with patch.dict(os.environ, {**env, "VOICE_OWNER_CONSENT_RECORD_ID": ""}):
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV, headers=headers).status_code, 503)
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.run_synthetic_pipeline", return_value=("수민아?", "응, 왜?", b"mp3")
+        ) as pipeline:
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV).status_code, 401)
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV,
+                                              headers={"X-Internal-Demo-Token": headers["X-Internal-Demo-Token"]}).status_code, 400)
+            self.assertEqual(self.client.post(path, content=SYNTHETIC_WAV,
+                                              headers={**headers, "Content-Type": "text/plain"}).status_code, 415)
+            self.assertEqual(self.client.post(path, content=b"x" * 2_000_001,
+                                              headers=headers).status_code, 413)
+            self.assertEqual(self.client.post(path, content=b"RIFF" + b"x" * 60,
+                                              headers=headers).status_code, 422)
+            pipeline.assert_not_called()
+            result = self.client.post(path, content=SYNTHETIC_WAV, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json(), {
+                "transcript": "수민아?", "reply": "응, 왜?", "audio_mp3_base64": "bXAz",
+            })
+            self.assertEqual(pipeline.call_count, 1)
+            pipeline.side_effect = httpx.ConnectError("private provider detail")
+            failed = self.client.post(path, content=SYNTHETIC_WAV, headers=headers)
+            self.assertEqual(failed.status_code, 502)
+            self.assertNotIn("private provider detail", failed.text)
+
+    def test_internal_audio_round_trips_three_mocked_hosted_providers(self) -> None:
+        calls = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append(request.url.host)
+            if request.url.host == "api.deepgram.com":
+                return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                    {"transcript": "우리 제주도 언제 갔었지?"},
+                ]}]}})
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "completed", "output": [{
+                    "type": "message", "content": [{"type": "output_text", "text": "2024년에 제주도 갔었어."}],
+                }]})
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("unexpected provider")
+
+        env = {
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {"X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+                   "X-Synthetic-Material": "confirmed", "Content-Type": "audio/wav"}
+        hosted = httpx.Client(transport=httpx.MockTransport(respond))
+        with patch.dict(os.environ, env), patch("kof5_tts.api.httpx.Client", return_value=hosted):
+            response = self.client.post("/internal/synthetic/audio", content=SYNTHETIC_WAV,
+                                        headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls, ["api.deepgram.com", "api.openai.com", "api.elevenlabs.io"])
+        self.assertEqual(response.json(), {
+            "transcript": "우리 제주도 언제 갔었지?", "reply": "2024년에 제주도 갔었어.",
+            "audio_mp3_base64": "c3ludGhldGljLW1wMw==",
+        })
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ flowchart LR
     layer_companion["companion (1)"]
     layer_preprocessing["preprocessing (3)"]
     layer_root["root (1)"]
+    layer_api --> layer_cloud_prototype
     layer_api --> layer_companion
     layer_cloud_prototype --> layer_companion
   end
