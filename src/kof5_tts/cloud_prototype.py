@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 import httpx
+
+from kof5_tts.companion import ConversationSession, orientation_date
 
 
 @dataclass(frozen=True)
@@ -95,9 +98,23 @@ def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredential
 
 def run_synthetic_pipeline(
     client: httpx.Client, wav: bytes, known_fact: str, credentials: CloudCredentials
-) -> tuple[str, str, bytes]:
+) -> tuple[str, str | None, bytes | None]:
     """Keep the WAV and generated MP3 in memory; callers decide if they may save them."""
     transcript = transcribe_wav(client, wav, credentials.deepgram_key)
-    reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
+    now = datetime.now(timezone.utc)
+    event = ConversationSession().hear(transcript, "DIRECTED", now)
+    if event in {"patient_dissent", "closed", "discarded"}:
+        return transcript, None, None
+    if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
+        reply = "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
+    elif any(word in transcript for word in ("며칠", "날짜")):
+        reply = orientation_date(now)
+    elif any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹")):
+        reply = "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."
+    elif any(word in transcript for word in ("너 진짜", "실제 수민", "전화한 거")):
+        reply = "나는 실제 가족과 통화하는 사람이 아니라 AI 음성 대화 도우미야."
+    else:
+        # ponytail: keyword and length guards are an internal-test ceiling; clinical review and measured safety eval precede patients.
+        reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
     audio = synthesize_mp3(client, reply, credentials)
     return transcript, reply, audio

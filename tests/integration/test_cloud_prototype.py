@@ -70,6 +70,33 @@ class CloudPrototypeTests(unittest.TestCase):
                 )
         self.assertEqual(calls, ["api.deepgram.com"])
 
+    def test_dissent_and_risk_never_call_llm(self) -> None:
+        for transcript, expected_hosts, expected_reply in (
+            ("그만해.", ["api.deepgram.com"], None),
+            ("숨이 너무 차.", ["api.deepgram.com", "api.elevenlabs.io"], "기존 호출 버튼"),
+        ):
+            with self.subTest(transcript=transcript):
+                hosts = []
+                def respond(request: httpx.Request) -> httpx.Response:
+                    hosts.append(request.url.host)
+                    if request.url.host == "api.deepgram.com":
+                        return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                            {"transcript": transcript},
+                        ]}]}})
+                    if request.url.host == "api.elevenlabs.io":
+                        return httpx.Response(200, content=b"synthetic-mp3")
+                    raise AssertionError("safety route must not call LLM")
+                with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+                    result = run_synthetic_pipeline(
+                        client, b"RIFF" + b"\0" * 64, "known fact",
+                        CloudCredentials("d", "o", "e", "v", True),
+                    )
+                self.assertEqual(hosts, expected_hosts)
+                if expected_reply is None:
+                    self.assertEqual(result[1:], (None, None))
+                else:
+                    self.assertIn(expected_reply, result[1])
+
 
 if __name__ == "__main__":
     unittest.main()

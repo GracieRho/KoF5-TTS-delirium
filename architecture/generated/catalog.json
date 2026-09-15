@@ -59,7 +59,9 @@
         "module": "kof5_tts.cloud_prototype",
         "path": "src/kof5_tts/cloud_prototype.py",
         "layer": "cloud_prototype",
-        "imports": []
+        "imports": [
+          "kof5_tts.companion"
+        ]
       },
       {
         "module": "kof5_tts.companion",
