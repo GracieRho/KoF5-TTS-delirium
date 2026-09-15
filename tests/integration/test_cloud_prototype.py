@@ -104,6 +104,43 @@ class CloudPrototypeTests(unittest.TestCase):
             ), ("2024년 5월에 같이 갔어.", b"synthetic-mp3"))
         self.assertEqual(hosts, ["api.openai.com", "api.elevenlabs.io"])
 
+    def test_unrelated_family_and_hospital_questions_do_not_reach_llm(self) -> None:
+        hosts = []
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("unsupported fact must not reach LLM")
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            for question in ("CT 검사 결과 어때?", "수민이는 어디 있어?", "2024년 수민이는 어디 있어?"):
+                reply, audio = run_synthetic_text_pipeline(
+                    client, question, "DIRECTED", "2024년 5월 제주도 여행", credentials,
+                )
+                self.assertIn("확인된 정보가 없어서", reply)
+                self.assertEqual(audio, b"synthetic-mp3")
+        self.assertEqual(hosts, ["api.elevenlabs.io"] * 3)
+
+    def test_llm_extra_hospital_or_date_claim_does_not_reach_tts(self) -> None:
+        for invented in ("내일 CT 검사를 받으러 가.", "2027년 5월에 제주도 갔었어.",
+                         "수민이는 내일 와."):
+            with self.subTest(invented=invented):
+                hosts = []
+                def respond(request: httpx.Request) -> httpx.Response:
+                    hosts.append(request.url.host)
+                    if request.url.host == "api.openai.com":
+                        return httpx.Response(200, json={"status": "completed", "output": [{
+                            "type": "message", "content": [{"type": "output_text", "text": invented}],
+                        }]})
+                    raise AssertionError("unverified fact must not reach TTS")
+                with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+                    with self.assertRaisesRegex(ValueError, "unverified fact claim"):
+                        run_synthetic_text_pipeline(
+                            client, "우리 제주도 언제 갔었지?", "DIRECTED",
+                            "2024년 5월 제주도 여행", CloudCredentials("d", "o", "e", "v", True),
+                        )
+                self.assertEqual(hosts, ["api.openai.com"])
+
     def test_missing_consent_and_invalid_audio_never_reach_providers(self) -> None:
         with self.assertRaises(ValueError):
             CloudCredentials("d", "o", "e", "v", False)
@@ -241,7 +278,7 @@ class CloudPrototypeTests(unittest.TestCase):
             raise AssertionError("incomplete answer must never reach TTS")
         with httpx.Client(transport=httpx.MockTransport(respond)) as client:
             with self.assertRaisesRegex(ValueError, "not complete"):
-                run_synthetic_pipeline(client, SYNTHETIC_WAV, "known fact", credentials)
+                run_synthetic_pipeline(client, SYNTHETIC_WAV, "2024년 5월 제주도 여행", credentials)
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
 
     def test_unsafe_generated_claim_never_reaches_tts(self) -> None:

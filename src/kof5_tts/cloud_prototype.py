@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
-from re import fullmatch
+from re import findall, fullmatch, search
 from typing import Sequence
 from urllib.parse import quote
 import wave
@@ -109,7 +109,26 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
         "약 먹어", "진단은", "처방", "의료진에게 알렸", "의료진에게 전달했",
     )):
         raise ValueError("LLM response violates a hard safety rule")
+    # ponytail: lexical claim guard covers the internal single-fact demo; structured claims need a clinical evaluator.
+    claims = findall(r"\d{1,4}(?:년|월|일|시|호)?|오늘|내일|어제|곧|다음 주|CT|검사|퇴원|수술|병실|진료|결과", text)
+    if any(claim not in known_fact for claim in claims):
+        raise ValueError("LLM response adds an unverified fact claim")
     return text
+
+
+def _unsupported_fact_question(transcript: str, known_fact: str) -> bool:
+    """A family fact cannot support hospital claims or an unrelated family question."""
+    if search(r"CT|검사|수술|퇴원|병실|병동|간호사|진료|치료|면회|검사 결과", transcript):
+        return True
+    if not search(r"언제|어디|누구|무엇|뭐|몇|왜|좋아하|기억|알려줘", transcript):
+        return False
+    question_terms = set(findall(r"[가-힣A-Za-z0-9]{2,}", transcript))
+    fact_terms = set(findall(r"[가-힣A-Za-z0-9]{2,}", known_fact))
+    generic = {"우리", "오늘", "내일", "언제", "어디", "누구", "무엇", "좋아하는", "기억나", "알려줘"}
+    return not any(
+        not fullmatch(r"\d+(?:년|월|일|시)?", term)
+        for term in question_terms & fact_terms - generic
+    )
 
 
 def synthesize_mp3(client: httpx.Client, text: str, credentials: CloudCredentials) -> bytes:
@@ -244,7 +263,10 @@ def run_synthetic_text_pipeline(
         return None, None
     reply = policy_reply(transcript, event, now)
     if reply is None:
-        # ponytail: keyword and length guards are an internal-test ceiling; clinical review and measured safety eval precede patients.
-        reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
+        if _unsupported_fact_question(transcript, known_fact):
+            reply = "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
+        else:
+            # ponytail: lexical grounding is an internal-test ceiling; measured safety eval precedes patients.
+            reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
     audio = synthesize_mp3(client, reply, credentials)
     return reply, audio
