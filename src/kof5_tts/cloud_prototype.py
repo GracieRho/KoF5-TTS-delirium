@@ -230,8 +230,10 @@ def find_test_voice(client: httpx.Client, test_name: str, key: str) -> str | Non
                 if not isinstance(voice_id, str) or not fullmatch(r"[A-Za-z0-9_-]{1,100}", voice_id):
                     raise ValueError("pending voice has an invalid ID")
                 matches.append(voice_id)
-        if not body.get("has_more"):
+        if body.get("has_more") is False:
             break
+        if body.get("has_more") is not True:
+            raise ValueError("voice list pagination is inconclusive")
         page_token = body.get("next_page_token")
         if not isinstance(page_token, str) or not page_token:
             raise ValueError("voice list pagination is invalid")

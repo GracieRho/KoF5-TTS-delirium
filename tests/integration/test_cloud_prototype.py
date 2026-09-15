@@ -512,6 +512,13 @@ class CloudPrototypeTests(unittest.TestCase):
         self.assertEqual((created.voice_id, created.requires_verification), ("created-id", None))
         self.assertEqual(recovered, "created-id")
 
+    def test_pending_voice_absence_needs_complete_provider_list(self) -> None:
+        with httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"voices": []})
+        )) as client:
+            with self.assertRaisesRegex(ValueError, "inconclusive"):
+                find_test_voice(client, TEST_VOICE_NAME, "test-key")
+
 
 if __name__ == "__main__":
     unittest.main()
