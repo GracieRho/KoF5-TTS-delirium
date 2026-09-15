@@ -92,6 +92,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   void _onAudio(Uint8List pcm) {
+    if (!mounted || !_foreground || !_listening) return;
     final candidate = _detector.add(pcm);
     if (candidate == null || !mounted) return;
     // The prototype counts a candidate, then discards its PCM. No audio leaves the iPad.
@@ -107,6 +108,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _listening = false;
     _detector.reset();
     var confirmed = true;
+    final subscription = _subscription;
+    _subscription = null;
+    try {
+      await subscription?.cancel();
+    } catch (_) {
+      confirmed = false;
+      _stopUnconfirmed = true;
+    }
     try {
       await _recorder.stop();
     } catch (_) {
@@ -116,13 +125,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         setState(() => _status = '마이크 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.');
       }
     }
-    try {
-      await _subscription?.cancel();
-    } catch (_) {
-      confirmed = false;
-      _stopUnconfirmed = true;
-    }
-    _subscription = null;
+    _detector.reset();
     _stopUnconfirmed = !confirmed;
     _stopping = false;
     if (mounted) {
