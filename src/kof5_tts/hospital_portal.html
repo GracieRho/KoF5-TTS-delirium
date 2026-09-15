@@ -46,6 +46,7 @@
     .fact p { margin: 0; white-space: pre-wrap; }
     .fact .meta { margin-top: 12px; font-size: 13px; color: #63736a; line-height: 1.5; }
     .divider { border: 0; border-top: 1px solid #e4e9e3; margin: 24px 0; }
+    .pairing { margin-top: 24px; padding-top: 24px; border-top: 1px solid #e4e9e3; }
     @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
     @media (max-width: 520px) { header { padding: 18px 20px; } main { padding: 32px 15px 50px; } .card { padding: 24px 20px; } }
   </style>
@@ -112,14 +113,27 @@
         <hr class="divider">
         <h3>승인 메시지</h3>
         <div id="messages" class="facts"></div>
+        <section id="pairing-section" class="pairing" aria-labelledby="pairing-title" hidden>
+          <h3 id="pairing-title">합성 iPad 연결 시험</h3>
+          <p class="small">담당 직원과 고정 합성 환자에 한해 iPad의 Supabase Auth 사용자 ID를 연결합니다. 실제 환자 사용은 허용되지 않습니다.</p>
+          <form id="pairing-form">
+            <label for="pairing-user-id">iPad Auth 사용자 ID (UUID)</label>
+            <input id="pairing-user-id" required maxlength="36" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            <button id="pairing-button" class="primary" type="submit">합성 iPad 연결</button>
+          </form>
+          <div id="pairing-status" class="status" role="status" aria-live="polite"></div>
+        </section>
         <div id="detail-status" class="status" role="status" aria-live="polite"></div>
       </section>
     </div>
   </main>
   <script>
     const state = { config: null, token: null, generation: 0, request: 0,
-      registrationRequest: 0, queueRequest: 0, patients: [], selected: null, readyHospitals: [] };
+      registrationRequest: 0, queueRequest: 0, pairingRequest: 0,
+      patients: [], selected: null, pairingPatient: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
+    const syntheticPatientId = '00000000-0000-4000-8000-000000000975';
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const registrationFields = ['registration-hospital', 'registration-number', 'registration-name', 'registration-birth'];
     const lockRegistration = locked => registrationFields.forEach(id => { $(id).disabled = locked; });
     const encounter = patient => patient.encounter_id ?
@@ -135,15 +149,21 @@
       ++state.request;
       ++state.registrationRequest;
       ++state.queueRequest;
+      ++state.pairingRequest;
       state.token = null;
       state.patients = [];
       state.selected = null;
+      state.pairingPatient = null;
       state.readyHospitals = [];
       $('patient-search').value = '';
       $('registration-hospital').replaceChildren();
       $('registration-number').value = '';
       $('registration-name').value = '';
       $('registration-birth').value = '';
+      $('pairing-user-id').value = '';
+      $('pairing-form').hidden = false;
+      $('pairing-button').disabled = false;
+      $('pairing-status').textContent = '';
       lockRegistration(false);
       $('registration-button').disabled = false;
       $('email').value = '';
@@ -163,6 +183,7 @@
       $('patient-card').hidden = true;
       $('queue-card').hidden = true;
       $('detail-card').hidden = true;
+      $('pairing-section').hidden = true;
       $('registration-card').hidden = true;
       $('signin-card').hidden = false;
       $('signin-status').textContent = message;
@@ -185,6 +206,13 @@
       const request = ++state.request;
       const token = state.token;
       state.selected = patient.patient_id;
+      ++state.pairingRequest;
+      state.pairingPatient = null;
+      $('pairing-section').hidden = true;
+      $('pairing-user-id').value = '';
+      $('pairing-form').hidden = false;
+      $('pairing-status').textContent = '';
+      $('pairing-button').disabled = false;
       const current = () => generation === state.generation && request === state.request
         && token === state.token && state.selected === patient.patient_id;
       for (const button of $('patients').querySelectorAll('button'))
@@ -240,6 +268,20 @@
         if (!$('messages').children.length) $('messages').textContent = '현재 입원의 승인 메시지가 없습니다.';
         $('detail-status').textContent = `유효한 승인 사실 ${currentFacts.length}건 · 이번 입원 메시지 ${currentMessages.length}건 (전달 대기 ${currentMessages.filter(message => message.delivery_status === 'pending').length}건).`;
         $('detail-card').hidden = false;
+        if (patient.patient_id === syntheticPatientId && current()) {
+          try {
+            const id = encodeURIComponent(patient.patient_id);
+            const admission = encodeURIComponent(patient.encounter_id);
+            const ready = await supabase(`/rest/v1/synthetic_device_pairing_ready?patient_id=eq.${id}&encounter_id=eq.${admission}&select=patient_id,encounter_id`, token, generation);
+            if (!current()) return;
+            if (ready.some(row => row.patient_id === patient.patient_id && row.encounter_id === patient.encounter_id)) {
+              state.pairingPatient = patient;
+              $('pairing-section').hidden = false;
+            }
+          } catch (_) {
+            if (current()) $('detail-status').textContent += ' 합성 iPad 연결 자격은 확인되지 않았습니다.';
+          }
+        }
       } catch (_) {
         if (current()) $('detail-status').textContent = '병원 정보를 읽지 못했습니다. 권한과 연결을 다시 확인하세요.';
       }
@@ -260,8 +302,15 @@
     function renderPatients(patients) {
       ++state.request;
       ++state.queueRequest;
+      ++state.pairingRequest;
       state.selected = null;
+      state.pairingPatient = null;
       $('detail-card').hidden = true;
+      $('pairing-section').hidden = true;
+      $('pairing-user-id').value = '';
+      $('pairing-form').hidden = false;
+      $('pairing-status').textContent = '';
+      $('pairing-button').disabled = false;
       $('detail-title').textContent = '';
       $('detail-summary').textContent = '';
       $('facts').replaceChildren();
@@ -395,6 +444,60 @@
       }
     });
     $('queue-refresh').addEventListener('click', refreshQueue);
+    $('pairing-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const patient = state.pairingPatient;
+      const deviceId = $('pairing-user-id').value.trim().toLowerCase();
+      if (!state.token || !patient || $('pairing-section').hidden || $('pairing-form').hidden
+          || $('pairing-button').disabled || state.selected !== patient.patient_id
+          || patient.patient_id !== syntheticPatientId || !patient.encounter_id) return;
+      if (!uuid.test(deviceId)) {
+        $('pairing-status').textContent = 'iPad Auth 사용자 ID의 UUID 형식을 확인하세요. 토큰은 입력하지 않습니다.';
+        return;
+      }
+      const generation = state.generation;
+      const patientRequest = state.request;
+      const request = ++state.pairingRequest;
+      const token = state.token;
+      const current = () => generation === state.generation && patientRequest === state.request
+        && request === state.pairingRequest && token === state.token
+        && state.selected === patient.patient_id && state.pairingPatient === patient;
+      $('pairing-button').disabled = true;
+      $('pairing-status').textContent = '합성 iPad 연결 권한을 확인하고 있습니다.';
+      try {
+        // ponytail: client clock can drift; the DB rejects any expiry outside its eight-hour bound.
+        const expiresAt = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString();
+        const response = await fetch(state.config.url + '/rest/v1/patient_device_pairing', {
+          method: 'POST',
+          headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`,
+            'Content-Profile': 'api', 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ device_user_id: deviceId, patient_id: patient.patient_id,
+            encounter_id: patient.encounter_id, expires_at: expiresAt }),
+        });
+        if (!current()) return;
+        if ([401, 403].includes(response.status)) {
+          clearSession('iPad 연결 권한이 유효하지 않아 환자 정보를 숨겼습니다.');
+          return;
+        }
+        if (response.status === 409) {
+          $('pairing-status').textContent = '이 iPad Auth 사용자 ID는 이미 연결됐습니다. 환자를 다시 확인하세요.';
+        } else if (response.status === 201) {
+          $('pairing-status').textContent = '합성 iPad 연결을 기록했습니다. 실제 환자 시험에는 사용할 수 없습니다.';
+        } else {
+          $('pairing-status').textContent = '연결 상태를 확인하지 못했습니다. 담당 환자를 다시 선택하세요.';
+        }
+        $('pairing-user-id').value = '';
+        $('pairing-form').hidden = true;
+      } catch (_) {
+        if (current()) {
+          $('pairing-user-id').value = '';
+          $('pairing-form').hidden = true;
+          $('pairing-status').textContent = '연결 상태를 확인하지 못했습니다. 담당 환자를 다시 선택하세요.';
+        }
+      } finally {
+        if (current()) $('pairing-button').disabled = false;
+      }
+    });
     $('registration-form').addEventListener('submit', async event => {
       event.preventDefault();
       const hospital = $('registration-hospital').value;

@@ -29,6 +29,7 @@ async function run() {
     'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
     'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
     'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -282,4 +283,127 @@ async function run() {
   console.log('Hospital portal patient and session isolation: PASS');
 }
 
-run().catch(error => { console.error(error); process.exitCode = 1; });
+async function runPairing() {
+  const ids = [
+    'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
+    'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
+    'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975', encounter_id: '00000000-0000-4000-8000-000000000976',
+    staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975', ward_ref: '시험병동' };
+  const other = { patient_id: '00000000-0000-4000-8000-000000000977', encounter_id: '00000000-0000-4000-8000-000000000978',
+    staff_display_name: '가상 다른 환자', ehr_patient_ref: 'TEST-977', ward_ref: '시험병동' };
+  let eligible = false;
+  let readinessPending = null;
+  let postPending = null;
+  let postStatus = 201;
+  const posts = [];
+  async function fetch(url, options = {}) {
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'synthetic-staff-session' });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture, other]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, []);
+    if (url.includes('/hospital_context_current?patient_id=eq.') || url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, []);
+    if (url.includes('/synthetic_device_pairing_ready')) return readinessPending ? readinessPending.promise : reply(200,
+      eligible ? [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }] : []);
+    if (url.includes('/patient_device_pairing')) {
+      posts.push({ options, payload: JSON.parse(options.body) });
+      return postPending ? postPending.promise : reply(postStatus, null);
+    }
+    throw new Error(`unexpected pairing URL ${url}`);
+  }
+
+  vm.runInNewContext(script, { document, fetch, console });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const pair = () => elements['pairing-form'].handlers.submit({ preventDefault() {} });
+  elements.email.value = 'care-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  assert.equal(elements['pairing-section'].hidden, true, 'pairing form stays hidden before a fixture is selected');
+  await elements.patients.children[1].handlers.click();
+  assert.equal(elements['pairing-section'].hidden, true, 'other patient never opens the synthetic pairing form');
+  await elements.patients.children[0].handlers.click();
+  assert.equal(elements['pairing-section'].hidden, true, 'unassigned or unready staff receives no pairing form');
+  eligible = true;
+  await elements.patients.children[0].handlers.click();
+  assert.equal(elements['pairing-section'].hidden, false, 'eligible assigned fixture opens pairing form');
+  elements['pairing-user-id'].value = 'JWT-not-an-Auth-user-id';
+  await pair();
+  assert.equal(posts.length, 0, 'a token or malformed UUID is never posted');
+  assert.match(elements['pairing-status'].textContent, /토큰은 입력하지/);
+
+  elements['pairing-user-id'].value = '11111111-1111-4111-8111-111111111111';
+  await pair();
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].options.headers['Content-Profile'], 'api');
+  assert.equal(posts[0].options.headers.Prefer, 'return=minimal');
+  assert.deepEqual(Object.keys(posts[0].payload).sort(), ['device_user_id', 'encounter_id', 'expires_at', 'patient_id']);
+  assert.equal(posts[0].payload.patient_id, fixture.patient_id);
+  assert.equal(posts[0].payload.encounter_id, fixture.encounter_id);
+  assert.equal(posts[0].payload.device_user_id, '11111111-1111-4111-8111-111111111111');
+  const hours = (Date.parse(posts[0].payload.expires_at) - Date.now()) / 3600000;
+  assert.ok(hours > 6.9 && hours <= 8, 'client expiry is bounded below the DB eight-hour ceiling');
+  assert.equal(elements['pairing-form'].hidden, true, 'successful request cannot be replayed without reselecting');
+  assert.equal(elements['pairing-user-id'].value, '');
+  assert.match(elements['pairing-status'].textContent, /합성 iPad 연결/);
+
+  await elements.patients.children[0].handlers.click();
+  postStatus = 409;
+  elements['pairing-user-id'].value = '22222222-2222-4222-8222-222222222222';
+  await pair();
+  assert.equal(elements['pairing-form'].hidden, true, 'duplicate pairing hides the submission form');
+  assert.match(elements['pairing-status'].textContent, /이미 연결/);
+
+  await elements.patients.children[0].handlers.click();
+  postStatus = 500;
+  elements['pairing-user-id'].value = '33333333-3333-4333-8333-333333333333';
+  await pair();
+  assert.equal(elements['pairing-form'].hidden, true, 'unknown server result fails closed');
+  assert.equal(elements['pairing-user-id'].value, '');
+
+  await elements.patients.children[0].handlers.click();
+  postStatus = 403;
+  elements['pairing-user-id'].value = '44444444-4444-4444-8444-444444444444';
+  await pair();
+  assert.equal(elements['patient-card'].hidden, true, 'pairing RLS denial hides staff patient data');
+  assert.equal(elements['pairing-section'].hidden, true);
+  assert.equal(elements['pairing-user-id'].value, '');
+
+  elements.email.value = 'care-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  postStatus = 201;
+  postPending = pending();
+  await elements.patients.children[0].handlers.click();
+  elements['pairing-user-id'].value = '55555555-5555-4555-8555-555555555555';
+  const latePost = pair();
+  await pause();
+  elements.logout.handlers.click();
+  postPending.resolve(reply(201, null));
+  await latePost;
+  assert.equal(elements['pairing-section'].hidden, true, 'late pairing POST cannot reopen after logout');
+  assert.equal(elements['pairing-user-id'].value, '');
+
+  postPending = null;
+  readinessPending = pending();
+  elements.email.value = 'care-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  const lateReady = elements.patients.children[0].handlers.click();
+  await pause();
+  elements.logout.handlers.click();
+  readinessPending.resolve(reply(200, [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }]));
+  await lateReady;
+  assert.equal(elements['pairing-section'].hidden, true, 'late eligibility response cannot reopen after logout');
+  console.log('Hospital synthetic device pairing boundary: PASS');
+}
+
+run().then(runPairing).catch(error => { console.error(error); process.exitCode = 1; });
