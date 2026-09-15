@@ -285,6 +285,103 @@ async def _record_synthetic_directed_turn(request: Request, patient_id: str, spe
         raise HTTPException(status_code=503, detail="합성 대화 기록이 실패했습니다") from None
 
 
+async def _paired_session_row(request: Request, patient_id: str) -> tuple[ConversationSession, str | None, int]:
+    """Load one current device/admission state; no transcript or Bearer is retained."""
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/synthetic_conversation_session_read',
+                json={"p_patient_id": patient_id},
+                headers=_api_headers(config, _device_bearer(request)),
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="합성 대화 기기 연결이 중단됐습니다")
+            response.raise_for_status()
+            rows = _bounded_json(response, 4096)
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("session read must return one row")
+            row = rows[0]
+            if row.get("authorized") is not True:
+                raise HTTPException(status_code=403, detail="합성 대화 기기 연결·동의가 중단됐습니다")
+            if (not isinstance(row.get("encounter_id"), str)
+                    or row.get("state") not in {"IDLE", "ACTIVE_LISTENING"}
+                    or type(row.get("version")) is not int or row["version"] < 0
+                    or type(row.get("proactive_paused")) is not bool):
+                raise ValueError("invalid session state")
+            UUID(row["encounter_id"])
+            session_id = row.get("session_id")
+            if session_id is None:
+                if row["version"] != 0 or row["state"] != "IDLE":
+                    raise ValueError("invalid initial session")
+            elif not isinstance(session_id, str) or row["version"] < 1:
+                raise ValueError("invalid session identity")
+            else:
+                UUID(session_id)
+            last_activity = row.get("last_activity")
+            if last_activity is not None:
+                if not isinstance(last_activity, str):
+                    raise ValueError("invalid session clock")
+                last_activity = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+                if last_activity.utcoffset() is None:
+                    raise ValueError("session clock must be aware")
+            if (row["state"] == "IDLE") != (last_activity is None):
+                raise ValueError("session state and clock disagree")
+            return ConversationSession(row["state"], last_activity, row["proactive_paused"]), session_id, row["version"]
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        raise HTTPException(status_code=503, detail="합성 대화 세션 조회가 실패했습니다") from None
+
+
+async def _paired_session_commit(
+    request: Request, patient_id: str, speech: PairedSpeechTurn,
+    session: ConversationSession, session_id: str | None, version: int,
+) -> tuple[str, int]:
+    """CAS the Python routing result before any hosted reply or audio."""
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(
+                f'{config["url"]}/rest/v1/rpc/synthetic_conversation_session_commit',
+                json={"p_patient_id": patient_id, "p_expected_session_id": session_id,
+                      "p_expected_version": version, "p_new_state": session.state,
+                      "p_proactive_paused": session.proactive_paused,
+                      "p_client_turn_id": str(speech.client_turn_id)},
+                headers=_api_headers(config, _device_bearer(request)),
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="합성 대화 기기 연결이 중단됐습니다")
+            response.raise_for_status()
+            rows = _bounded_json(response, 2048)
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("session commit must return one row")
+            row = rows[0]
+            if row.get("authorized") is not True:
+                raise HTTPException(status_code=403, detail="합성 대화 기기 연결·동의가 중단됐습니다")
+            if row.get("committed") is not True:
+                raise HTTPException(status_code=409, detail="합성 대화 순서가 바뀌거나 중복됐습니다")
+            if (not isinstance(row.get("session_id"), str)
+                    or type(row.get("version")) is not int
+                    or row["version"] != version + 1):
+                raise ValueError("invalid committed session")
+            UUID(row["session_id"])
+            return row["session_id"], row["version"]
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        raise HTTPException(status_code=503, detail="합성 대화 세션 기록이 실패했습니다") from None
+
+
+async def _paired_session_still_current(
+    request: Request, patient_id: str, committed_id: str, committed_version: int,
+) -> None:
+    current, session_id, version = await _paired_session_row(request, patient_id)
+    if (session_id != committed_id or version != committed_version
+            or current.state != "ACTIVE_LISTENING" or current.proactive_paused):
+        raise HTTPException(status_code=409, detail="합성 대화 상태가 답변 전에 바뀌었습니다")
+
+
 async def _paired_turn_rows(
     request: Request, patient_id: str, term: str,
     rpc_name: Literal["patient_family_turn_context", "patient_hospital_turn_context"],
@@ -876,12 +973,20 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     if speech.client_turn_id.version != 4:
         raise HTTPException(status_code=422, detail="합성 대화 UUIDv4가 필요합니다")
     speech.transcript = speech.transcript.strip()
+    if speech.label == "AMBIENT":
+        return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     now = datetime.now(timezone.utc)
-    event = ConversationSession().hear(speech.transcript, speech.label, now)
-    if event in {"discarded", "closed", "patient_dissent"}:
+    session, session_id, version = await _paired_session_row(request, patient_id)
+    event = session.hear(speech.transcript, speech.label, now)
+    if event == "discarded":
+        return {"transcript": "", "reply": None, "audio_mp3_base64": None}
+    if event in {"closed", "patient_dissent"}:
+        await _paired_session_commit(request, patient_id, speech, session, session_id, version)
         return {"transcript": "", "reply": None, "audio_mp3_base64": None}
     credentials = await _paired_clone_credentials(request, patient_id)
-    if event == "turn":
+    committed_id, committed_version = await _paired_session_commit(
+        request, patient_id, speech, session, session_id, version)
+    if event == "turn" and speech.label == "DIRECTED":
         await _record_synthetic_directed_turn(request, patient_id, speech)
     hospital = hospital_fact_question(speech.transcript)
     # Deterministic policy replies do not require family transcript embeddings.
@@ -890,7 +995,13 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
     elif policy_reply(speech.transcript, event, now) is not None:
         known_fact = ""
     else:
+        await _paired_session_still_current(request, patient_id, committed_id, committed_version)
         known_fact = await _paired_semantic_memory(request, patient_id, speech.transcript)
+
+    # A withdrawal or another committed turn after retrieval stops this turn
+    # before a hosted TTS/LLM call. Already started provider calls cannot be
+    # recalled; the real-patient Gate07 remains closed.
+    await _paired_session_still_current(request, patient_id, committed_id, committed_version)
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
@@ -898,6 +1009,7 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
                 client, speech.transcript, speech.label, known_fact, credentials,
                 namespace="hospital_context" if hospital else "family_context",
                 semantic_match=bool(known_fact) and not hospital,
+                routed_event=event,
             )
 
     try:

@@ -28,10 +28,46 @@ PAIRED_TURN_ID = "00000000-0000-4000-8000-000000000999"
 class SyntheticApiTests(unittest.TestCase):
     def setUp(self) -> None:
         app.state.sessions.clear()
+        self._paired_session_rows: dict[str, dict] = {}
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
         self.client.close()
+
+    def _with_synthetic_session(self, responder):
+        """Add a task-local CAS fixture to older mocks focused on other boundaries."""
+        def handle(request: httpx.Request) -> httpx.Response:
+            route = request.url.path.rsplit("/", 1)[-1]
+            if route not in {"synthetic_conversation_session_read",
+                             "synthetic_conversation_session_commit"}:
+                return responder(request)
+            bearer = request.headers.get("authorization", "")
+            row = self._paired_session_rows.setdefault(bearer, {
+                "authorized": True,
+                "encounter_id": "00000000-0000-4000-8000-000000000976",
+                "session_id": None, "version": 0, "state": "IDLE",
+                "last_activity": None, "proactive_paused": False,
+            })
+            if route == "synthetic_conversation_session_read":
+                return httpx.Response(200, json=[dict(row)])
+            body = json.loads(request.read())
+            if (body.get("p_expected_session_id") != row["session_id"]
+                    or body.get("p_expected_version") != row["version"]):
+                return httpx.Response(200, json=[{
+                    "authorized": True, "committed": False,
+                    "session_id": None, "version": None,
+                }])
+            row["session_id"] = row["session_id"] or "00000000-0000-4000-8000-000000000971"
+            row["version"] += 1
+            row["state"] = body["p_new_state"]
+            row["proactive_paused"] = body["p_proactive_paused"]
+            row["last_activity"] = (datetime.now(timezone.utc).isoformat()
+                                    if row["state"] == "ACTIVE_LISTENING" else None)
+            return httpx.Response(200, json=[{
+                "authorized": True, "committed": True,
+                "session_id": row["session_id"], "version": row["version"],
+            }])
+        return handle
 
     def test_synthetic_first_flow_and_untrusted_requests(self) -> None:
         root = "/patients/synthetic_patient/conversation"
@@ -161,6 +197,125 @@ class SyntheticApiTests(unittest.TestCase):
             "transcript": "수민아?", "label": "DIRECTED",
         }).json()
         self.assertEqual((restarted["event"], restarted["text"]), ("turn", "응, 왜?"))
+
+    def test_paired_db_session_continues_across_server_clients_and_fails_closed(self) -> None:
+        """A DB row, rather than FastAPI process memory, carries the next turn."""
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "KOF5_SUPABASE_SECRET_KEY": SERVICE_KEY,
+               "OPENAI_API_KEY": "test-openai", "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "a" * 40}
+        row = {"authorized": True, "encounter_id": "00000000-0000-4000-8000-000000000976",
+               "session_id": None, "version": 0, "state": "IDLE",
+               "last_activity": None, "proactive_paused": False}
+        seen: list[str] = []
+        last_client_turn_id: str | None = None
+        race_next_commit = False
+        withdraw_after_commit = False
+        withdrawn = False
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            nonlocal last_client_turn_id, race_next_commit, withdrawn
+            route = request.url.path.rsplit("/", 1)[-1]
+            seen.append(route)
+            if route == "synthetic_conversation_session_read":
+                if request.headers.get("authorization") != headers["Authorization"] or withdrawn:
+                    return httpx.Response(200, json=[{
+                        "authorized": False, "encounter_id": None, "session_id": None,
+                        "version": None, "state": None, "last_activity": None,
+                        "proactive_paused": False,
+                    }])
+                return httpx.Response(200, json=[dict(row)])
+            if route == "synthetic_conversation_session_commit":
+                body = json.loads(request.read())
+                if race_next_commit:
+                    race_next_commit = False
+                    row["version"] += 1  # Another Vercel worker won CAS.
+                if (body["p_expected_session_id"] != row["session_id"]
+                        or body["p_expected_version"] != row["version"]
+                        or body["p_client_turn_id"] == last_client_turn_id):
+                    return httpx.Response(200, json=[{
+                        "authorized": True, "committed": False,
+                        "session_id": None, "version": None,
+                    }])
+                last_client_turn_id = body["p_client_turn_id"]
+                row["session_id"] = row["session_id"] or "00000000-0000-4000-8000-000000000971"
+                row["version"] += 1
+                row["state"] = body["p_new_state"]
+                row["last_activity"] = (datetime.now(timezone.utc).isoformat()
+                                        if row["state"] == "ACTIVE_LISTENING" else None)
+                if withdraw_after_commit:
+                    withdrawn = True
+                return httpx.Response(200, json=[{
+                    "authorized": True, "committed": True,
+                    "session_id": row["session_id"], "version": row["version"],
+                }])
+            if route == "patient_device_context":
+                return httpx.Response(200, json=[{
+                    "patient_id": SYNTHETIC_DB_PATIENT, "encounter_id": row["encounter_id"],
+                }])
+            if route == "synthetic_patient_tts_voice_ready":
+                return httpx.Response(200, json=[READY_CLONE])
+            if route == "record_synthetic_directed_turn":
+                return httpx.Response(200, json=True)
+            raise AssertionError(f"unexpected hosted route: {route}")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api._paired_semantic_memory", return_value="") as semantic, patch(
+            "kof5_tts.api.run_synthetic_text_pipeline", return_value=("가상 응답", b"mp3"),
+        ) as pipeline:
+            first = {"transcript": "수민아", "label": "DIRECTED",
+                     "client_turn_id": PAIRED_TURN_ID}
+            self.assertEqual(self.client.post(path, json=first, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_count, 1)
+            self.assertEqual(pipeline.call_args.kwargs["routed_event"], "turn")
+            # A separate TestClient has no local conversation state, but the
+            # task-local DB fixture still supplies ACTIVE_LISTENING.
+            with TestClient(app) as another_instance:
+                follow = {"transcript": "응", "label": "UNCERTAIN",
+                          "client_turn_id": "00000000-0000-4000-8000-000000000998"}
+                self.assertEqual(another_instance.post(path, json=follow, headers=headers).status_code, 200)
+                self.assertEqual(pipeline.call_count, 2)
+                self.assertEqual(pipeline.call_args.args[2], "UNCERTAIN")
+                self.assertEqual(pipeline.call_args.kwargs["routed_event"], "turn")
+                self.assertEqual(seen.count("record_synthetic_directed_turn"), 1,
+                                 "uncertain follow-up never enters DIRECTED today transcript")
+                self.assertEqual(another_instance.post(path, json=follow, headers=headers).status_code, 409)
+                self.assertEqual(pipeline.call_count, 2, "duplicate cannot synthesize again")
+                other = {**headers, "Authorization": "Bearer " + "b" * 40}
+                self.assertEqual(another_instance.post(path, json={**follow,
+                    "client_turn_id": "00000000-0000-4000-8000-000000000997"},
+                    headers=other).status_code, 403)
+                self.assertEqual(pipeline.call_count, 2, "other device cannot inherit conversation")
+                race_next_commit = True
+                self.assertEqual(another_instance.post(path, json={**first,
+                    "client_turn_id": "00000000-0000-4000-8000-000000000993"},
+                    headers=headers).status_code, 409)
+                self.assertEqual(pipeline.call_count, 2,
+                                 "concurrent worker CAS loss cannot synthesize")
+                row["state"] = "IDLE"
+                row["last_activity"] = None  # DB's 45-second expiry projection.
+                self.assertEqual(another_instance.post(path, json={**follow,
+                    "client_turn_id": "00000000-0000-4000-8000-000000000996"},
+                    headers=headers).json()["reply"], None)
+                self.assertEqual(pipeline.call_count, 2, "expired UNCERTAIN is discarded")
+                withdraw_after_commit = True
+                self.assertEqual(another_instance.post(path, json={**first,
+                    "transcript": "수민아 제주도 기억나?",
+                    "client_turn_id": "00000000-0000-4000-8000-000000000995"},
+                    headers=headers).status_code, 403)
+                self.assertEqual(pipeline.call_count, 2,
+                                 "withdrawal after CAS and before TTS stops provider")
+                self.assertEqual(semantic.call_count, 1,
+                                 "withdrawal after CAS and before embedding stops provider")
+        self.assertIn("synthetic_conversation_session_read", seen)
+        self.assertIn("synthetic_conversation_session_commit", seen)
 
     def test_internal_audio_requires_auth_and_valid_synthetic_wav_before_provider(self) -> None:
         path = "/internal/synthetic/audio"
@@ -332,7 +487,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_client_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch(
             "kof5_tts.api.run_synthetic_text_pipeline", return_value=("2024년 5월에 갔었어.", b"mp3")
         ) as pipeline:
@@ -415,7 +570,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_client_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline", return_value=("합성 답", b"mp3")) as pipeline:
             hospital_turn = {"transcript": "수민아 CT 검사는 몇 시야?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 200)
@@ -468,7 +623,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_client_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"mp3"), patch(
             "kof5_tts.cloud_prototype.generate_short_reply",
             side_effect=AssertionError("approved hospital fact must not reach LLM"),
@@ -528,7 +683,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_client_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ):
             self.assertEqual(self.client.post(path, headers={"X-Synthetic-Material": "confirmed"}).status_code, 401)
             self.assertEqual(calls, [])
@@ -607,7 +762,7 @@ class SyntheticApiTests(unittest.TestCase):
         sync_class = httpx.Client
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(guardian_db)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(guardian_db))),
         ), patch(
             "kof5_tts.api.httpx.Client",
             side_effect=lambda **_: sync_class(transport=httpx.MockTransport(candidate)),
@@ -691,7 +846,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_client_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline") as pipeline:
             turn = {"transcript": "수민아 우리 휴가 어디였지?", "label": "DIRECTED", "client_turn_id": PAIRED_TURN_ID}
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 502)
@@ -716,8 +871,14 @@ class SyntheticApiTests(unittest.TestCase):
                "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
         headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
                    "Authorization": "Bearer " + "d" * 40}
+        def no_provider(request: httpx.Request) -> httpx.Response:
+            raise AssertionError(f"discard must not call hosted provider: {request.url.path}")
+
+        async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
-            "kof5_tts.api.httpx.AsyncClient", side_effect=AssertionError("discard must not call hosted API"),
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(
+                self._with_synthetic_session(no_provider))),
         ), patch(
             "kof5_tts.api.run_synthetic_text_pipeline",
             side_effect=AssertionError("discard must not call LLM/TTS"),
@@ -765,7 +926,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(preflight)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(preflight))),
         ), patch("kof5_tts.cloud_prototype.generate_short_reply",
                  side_effect=AssertionError("medical policy must not call LLM")), patch(
             "kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"mp3",
@@ -828,7 +989,7 @@ class SyntheticApiTests(unittest.TestCase):
         sync_class = httpx.Client
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(db_and_embedding)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(db_and_embedding))),
         ), patch(
             "kof5_tts.api.httpx.Client",
             side_effect=lambda **_: sync_class(transport=httpx.MockTransport(reply_and_voice)),
@@ -890,7 +1051,7 @@ class SyntheticApiTests(unittest.TestCase):
 
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.api.httpx.Client",
                  side_effect=lambda **_: sync_client_class(transport=httpx.MockTransport(provider))):
             self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
@@ -940,7 +1101,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline") as reply, patch(
             "kof5_tts.api.synthesize_mp3",
         ) as speech:
@@ -991,7 +1152,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(respond)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(respond))),
         ), patch("kof5_tts.api.run_synthetic_text_pipeline") as pipeline:
             self.assertEqual(self.client.post(path, json={k: v for k, v in turn.items()
                                                           if k != "client_turn_id"}, headers=headers).status_code, 422)
@@ -1076,7 +1237,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(hosted))),
         ), patch("kof5_tts.api.enroll_test_voice", return_value=EnrolledVoice("voice123", True)) as create, patch(
             "kof5_tts.api.delete_test_voice", return_value=None,
         ) as remove:
@@ -1148,7 +1309,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(hosted))),
         ), patch("kof5_tts.api.enroll_test_voice") as provider:
             self.assertEqual(self.client.post(path, json=payload, headers=headers).status_code, 503)
             self.assertEqual(seen, ["user", "synthetic_guardian_voice_status"],
@@ -1211,7 +1372,7 @@ class SyntheticApiTests(unittest.TestCase):
         async_class = httpx.AsyncClient
         with patch.dict(os.environ, env), patch(
             "kof5_tts.api.httpx.AsyncClient",
-            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(self._with_synthetic_session(hosted))),
         ), patch("kof5_tts.api.find_test_voice", side_effect=[None, "voice-late"]) as find, patch(
             "kof5_tts.api.delete_test_voice", return_value=None,
         ) as remove, patch(
