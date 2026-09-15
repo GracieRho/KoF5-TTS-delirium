@@ -22,4 +22,4 @@
 - 실험 문서에는 데이터 버전, 모델 버전, 환경과 평가 결과를 남깁니다.
 - 환자 식별정보나 실제 임상 데이터는 문서 예시에도 포함하지 않습니다.
 
-현재 프로젝트 개요는 [project-scope.md](project-scope.md), 폴더 구조는 [repository-layout.md](repository-layout.md), 협업 방식은 [contributing.md](contributing.md)에 정리되어 있습니다.
+현재 프로젝트 개요는 [project-scope.md](project-scope.md), 가족 음성 대화 MVP 초안은 [Delirium_Familiar_Voice_MVP_PRD.md](Delirium_Familiar_Voice_MVP_PRD.md), 폴더 구조는 [repository-layout.md](repository-layout.md), 협업 방식은 [contributing.md](contributing.md)에 정리되어 있습니다.
