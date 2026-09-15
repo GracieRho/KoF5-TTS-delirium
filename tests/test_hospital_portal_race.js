@@ -32,7 +32,7 @@ async function run() {
     'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
-    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -297,7 +297,7 @@ async function runPairing() {
     'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
-    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -423,7 +423,7 @@ async function runSyntheticMessage() {
     'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
     'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
     'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
-    'synthetic-message-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -433,7 +433,11 @@ async function runSyntheticMessage() {
   const approver = '00000000-0000-4000-8000-000000000992';
   let activeUser = proposer;
   let postStatus = 201;
+  let draftReadStatus = 200;
   let patchZero = false;
+  let latePatch = null;
+  let pairingReady = true;
+  let pairingReadyStatus = 200;
   let latePost = null;
   const drafts = [];
   const approvedMessages = [];
@@ -447,8 +451,9 @@ async function runSyntheticMessage() {
     if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, approvedMessages);
     if (url.includes('/hospital_context_current?patient_id=eq.')) return reply(200, []);
     if (url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, approvedMessages);
-    if (url.includes('/synthetic_device_pairing_ready')) return reply(200,
-      [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }]);
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(pairingReadyStatus,
+      pairingReadyStatus === 200 && pairingReady
+        ? [{ patient_id: fixture.patient_id, encounter_id: fixture.encounter_id }] : []);
     if (url.includes('/hospital_message_list?message_id=eq.')) {
       const id = url.match(/message_id=eq\.([^&]+)/)[1];
       return reply(200, approvedMessages.filter(message => message.message_id === id));
@@ -467,22 +472,30 @@ async function runSyntheticMessage() {
           due_at: draft.schedule_mode === 'now' ? approvedAt : draft.requested_due_at,
           delivery_status: 'pending' });
       }
-      return reply(204, null);
+      return latePatch ? latePatch.promise : reply(204, null);
     }
     if (url.includes('/synthetic_hospital_message_draft') && options.method === 'POST') {
       const payload = JSON.parse(options.body);
       posts.push({ options, payload });
-      if (latePost) return latePost.promise;
-      if (postStatus === 201) drafts.push({ ...payload,
-        draft_id: `00000000-0000-4000-8000-00000000090${drafts.length + 1}`,
-        proposed_by_auth_user_id: activeUser, proposed_at: '2026-09-16T01:00:00Z', status: 'draft' });
-      return reply(postStatus, null);
+      const poster = activeUser;
+      const record = response => {
+        if (response.status === 201) drafts.push({ ...payload,
+          draft_id: `00000000-0000-4000-8000-00000000090${drafts.length + 1}`,
+          proposed_by_auth_user_id: poster, proposed_at: '2026-09-16T01:00:00Z', status: 'draft' });
+        return response;
+      };
+      if (latePost) return latePost.promise.then(record);
+      return record(reply(postStatus, null));
     }
     if (url.includes('/synthetic_hospital_message_draft?draft_id=eq.')) {
       const id = url.match(/draft_id=eq\.([^&]+)/)[1];
       return reply(200, drafts.filter(item => item.draft_id === id));
     }
-    if (url.includes('/synthetic_hospital_message_draft?')) return reply(200, drafts.filter(item => item.status === 'draft'));
+    if (url.includes('/synthetic_hospital_message_draft?')) {
+      const requestedAuthor = url.match(/proposed_by_auth_user_id=eq\.([^&]+)/)?.[1];
+      return reply(draftReadStatus, draftReadStatus === 200
+        ? drafts.filter(item => requestedAuthor ? item.proposed_by_auth_user_id === requestedAuthor : item.status === 'draft') : null);
+    }
     throw new Error(`unexpected synthetic message URL ${url}`);
   }
 
@@ -516,7 +529,13 @@ async function runSyntheticMessage() {
   await selectFixture();
   const approveButton = elements['synthetic-drafts'].children[0].children[3];
   assert.equal(typeof approveButton.handlers.click, 'function', 'distinct staff can inspect and approve exact draft');
-  await approveButton.handlers.click();
+  latePatch = pending();
+  const pendingApproval = approveButton.handlers.click();
+  await pause();
+  elements['synthetic-message-text'].value = '승인 대기 중 작성한 새 가상 원문';
+  latePatch.resolve(reply(204, null));
+  await pendingApproval;
+  latePatch = null;
   assert.deepEqual(patches[0].payload, { status: 'approved' }, 'PATCH contains no self-approval or rewritten text');
   assert.equal(patches[0].options.headers.Prefer, 'return=minimal');
   assert.equal(approvedMessages.length, 1);
@@ -525,6 +544,8 @@ async function runSyntheticMessage() {
   assert.equal(elements['queue-items'].children[0].children[2].textContent, exact,
     'approval refreshes hospital pending queue with original wording');
   assert.match(elements['synthetic-message-status'].textContent, /실제 전달은 확인되지/);
+  assert.equal(elements['synthetic-message-text'].value, '승인 대기 중 작성한 새 가상 원문',
+    'approval refresh of the same fixture preserves unsent text edited during PATCH');
 
   elements.logout.handlers.click();
   activeUser = proposer;
@@ -542,6 +563,112 @@ async function runSyntheticMessage() {
     'scheduled draft converts Korean hospital time to ISO without rewriting source text');
   assert.equal(posts[1].payload.proposed_text, '내일 가상 검사 예정입니다.');
 
+  latePost = pending();
+  elements['synthetic-message-text'].value = '제출할 가상 원문 A';
+  elements['synthetic-message-time'].value = '2099-03-01T12:00';
+  const savingA = compose();
+  await pause();
+  elements['synthetic-message-text'].value = '수정 중인 가상 원문 B';
+  elements['synthetic-message-time'].value = '2099-04-01T13:00';
+  latePost.resolve(reply(201, null));
+  await savingA;
+  latePost = null;
+  assert.equal(posts[2].payload.proposed_text, '제출할 가상 원문 A');
+  assert.equal(elements['synthetic-message-text'].value, '수정 중인 가상 원문 B',
+    'late successful POST preserves unsaved edits to the next draft');
+  assert.equal(elements['synthetic-message-time'].value, '2099-04-01T13:00',
+    'late successful POST preserves a changed schedule');
+  assert.match(elements['synthetic-message-status'].textContent, /입력은 그대로 유지/);
+  await compose();
+  assert.equal(posts[3].payload.proposed_text, '수정 중인 가상 원문 B',
+    'preserved edit can be submitted as a separate draft');
+  assert.equal(posts[3].payload.requested_due_at, '2099-04-01T04:00:00.000Z');
+
+  postStatus = 500;
+  elements['synthetic-message-text'].value = '실패 후 보존할 가상 원문';
+  elements['synthetic-message-time'].value = '2099-05-01T14:00';
+  await compose();
+  assert.equal(elements['synthetic-message-section'].hidden, false, 'ordinary POST failure keeps the form visible');
+  assert.equal(elements['synthetic-message-text'].value, '실패 후 보존할 가상 원문');
+  assert.equal(elements['synthetic-message-time'].value, '2099-05-01T14:00');
+  assert.equal(elements['synthetic-message-button'].disabled, true,
+    'unknown POST outcome blocks duplicate resubmission until lists are reviewed');
+  assert.match(elements['synthetic-message-status'].textContent, /확인하기 전에는 재등록하지/);
+  const blockedCount = posts.length;
+  await compose();
+  assert.equal(posts.length, blockedCount, 'disabled unknown draft outcome cannot submit again');
+
+  elements['synthetic-message-text'].value = '실패 후 수정 중인 새 원문 B';
+  elements['synthetic-message-time'].value = '2099-05-02T14:00';
+  await selectFixture();
+  assert.equal(elements['synthetic-message-text'].value, '실패 후 수정 중인 새 원문 B',
+    'same fixture reselect does not erase unsaved text while checking uncertain POST');
+  assert.equal(elements['synthetic-message-time'].value, '2099-05-02T14:00');
+  assert.equal(elements['synthetic-message-button'].disabled, true,
+    'no matching record keeps duplicate submission blocked after list refresh');
+  assert.equal(elements['synthetic-message-review-button'].hidden, false,
+    'successful list read offers explicit review before resuming');
+  elements['synthetic-message-review-button'].handlers.click();
+  assert.equal(elements['synthetic-message-button'].disabled, false,
+    'staff review of refreshed lists resolves a no-match permanent lock');
+
+  postStatus = 201;
+  await selectFixture();
+  draftReadStatus = 503;
+  elements['synthetic-message-text'].value = '저장 후 조회 불명 가상 원문';
+  elements['synthetic-message-time'].value = '2099-06-01T15:00';
+  await compose();
+  assert.equal(elements['synthetic-message-section'].hidden, false,
+    'successful POST followed by failed draft GET does not hide the form');
+  assert.equal(elements['synthetic-message-text'].value, '저장 후 조회 불명 가상 원문');
+  assert.equal(elements['synthetic-message-time'].value, '2099-06-01T15:00');
+  assert.equal(elements['synthetic-message-button'].disabled, true,
+    'confirmed POST with unconfirmed list remains blocked against duplicate drafts');
+  draftReadStatus = 200;
+  elements['synthetic-message-text'].value = '조회 실패 뒤 수정 중인 가상 원문 B';
+  elements['synthetic-message-time'].value = '2099-06-02T15:00';
+  await selectFixture();
+  assert.equal(elements['synthetic-message-text'].value, '조회 실패 뒤 수정 중인 가상 원문 B',
+    'same fixture refresh preserves new text after POST 201 and GET 503');
+  assert.equal(elements['synthetic-message-time'].value, '2099-06-02T15:00');
+  assert.equal(elements['synthetic-message-button'].disabled, false,
+    'finding submitted A in all-status draft list resolves uncertainty without allowing duplicate A');
+  assert.equal(elements['synthetic-message-review-button'].hidden, true);
+
+  postStatus = 500;
+  elements['synthetic-message-text'].value = '자격 철회 전 미제출 가상 원문';
+  elements['synthetic-message-time'].value = '2099-07-01T15:00';
+  await compose();
+  pairingReady = false;
+  await selectFixture();
+  assert.equal(elements['synthetic-message-section'].hidden, true,
+    'readiness withdrawal hides synthetic composer on same fixture refresh');
+  assert.equal(elements['synthetic-message-text'].value, '',
+    'readiness withdrawal discards sensitive unsent text rather than preserving it');
+  assert.equal(elements['synthetic-message-time'].value, '');
+  pairingReady = true;
+  postStatus = 201;
+
+  await selectFixture();
+  postStatus = 500;
+  elements['synthetic-message-text'].value = '자격 조회 실패 전 가상 원문';
+  await compose();
+  pairingReadyStatus = 503;
+  await selectFixture();
+  assert.equal(elements['synthetic-message-section'].hidden, true);
+  assert.equal(elements['synthetic-message-text'].value, '',
+    'failed clinical readiness recheck discards sensitive unsent text');
+  pairingReadyStatus = 200;
+  postStatus = 201;
+
+  await selectFixture();
+  elements['synthetic-message-text'].value = '입원 변경 전 미제출 가상 원문';
+  fixture.encounter_id = null;
+  await selectFixture();
+  assert.equal(elements['synthetic-message-text'].value, '',
+    'same patient with changed encounter discards the previous composer');
+  fixture.encounter_id = '00000000-0000-4000-8000-000000000976';
+
   elements.logout.handlers.click();
   activeUser = approver;
   elements.email.value = 'synthetic-approver@example.invalid';
@@ -550,12 +677,29 @@ async function runSyntheticMessage() {
   await selectFixture();
   patchZero = true;
   const zeroButton = elements['synthetic-drafts'].children[0].children[3];
+  elements['synthetic-message-text'].value = '승인 실패 전 미제출 가상 원문';
   await zeroButton.handlers.click();
   assert.equal(elements['synthetic-message-section'].hidden, true,
     'zero-row PATCH return cannot be mistaken for approval');
   assert.equal(approvedMessages.length, 1);
+  assert.equal(elements['synthetic-message-text'].value, '승인 실패 전 미제출 가상 원문',
+    'unknown approval result does not erase unrelated unsent composer text');
 
+  draftReadStatus = 503;
   await selectFixture();
+  assert.equal(elements['synthetic-message-section'].hidden, false,
+    'ready same fixture retains a visible locked composer when draft list recheck fails');
+  assert.equal(elements['synthetic-message-text'].value, '승인 실패 전 미제출 가상 원문');
+  assert.equal(elements['synthetic-message-button'].disabled, true);
+  const beforeRetry = posts.length;
+  await compose();
+  assert.equal(posts.length, beforeRetry, 'failed draft list refresh cannot submit an unverified composer');
+  draftReadStatus = 200;
+  await selectFixture();
+  assert.equal(elements['synthetic-message-text'].value, '승인 실패 전 미제출 가상 원문',
+    'second same fixture reselect restores the unsent text after a failed list read');
+  assert.equal(elements['synthetic-message-button'].disabled, false,
+    'successful draft list refresh unlocks the preserved unsent composer');
   postStatus = 403;
   elements['synthetic-message-text'].value = '거부할 가상 원문';
   await compose();
