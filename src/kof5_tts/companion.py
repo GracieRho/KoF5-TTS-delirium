@@ -97,7 +97,10 @@ def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
         return "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."
     if any(word in transcript for word in ("너 진짜", "실제 수민", "전화한 거")):
         return "나는 실제 가족과 통화하는 사람이 아니라 AI 음성 대화 도우미야."
-    if re.search(r"(?:지금|현재)\s*(?:시간이?\s*)?몇\s*시", transcript):
+    if re.fullmatch(
+        r"(?:수민아[, ]*)?(?:(?:지금|현재)\s*)?(?:시간이?\s*)?몇\s*시(?:야|지|니|예요|인가요|입니까)?[?.! ]*",
+        transcript.strip(),
+    ):
         return orientation_time(now)
     if re.search(r"몇\s*시에?", transcript):
         return "그 시간은 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."

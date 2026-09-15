@@ -90,7 +90,10 @@ class ConversationSessionTests(unittest.TestCase):
         self.assertEqual(policy_reply("수민아 지금 몇 시야?", "turn",
                                       datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)),
                          "지금은 오후 3시 20분이야.")
-        for unknown_time in ("CT 검사는 몇 시야?", "수민이는 몇 시에 와?", "내일 몇 시에 퇴원해?"):
+        for unknown_time in (
+            "CT 검사는 몇 시야?", "수민이는 몇 시에 와?", "내일 몇 시에 퇴원해?",
+            "지금 몇 시에 검사하러 가야 해?", "간호사가 지금 몇 시에 검사한다고 했지?",
+        ):
             self.assertNotIn(
                 "지금은 오후", policy_reply(unknown_time, "turn",
                                            datetime(2026, 9, 15, 6, 20, tzinfo=timezone.utc)) or "",
