@@ -1,8 +1,8 @@
 project_id = "kof5-familiar-voice-mvp"
 
 [api]
-# Patient/voice tables live in the private kof5 schema, outside the Data API.
-schemas = ["public", "graphql_public"]
+# Only the invoker view in api is exposed; patient/voice tables stay in private kof5.
+schemas = ["public", "graphql_public", "api"]
 
 [db]
 # Match this to the dedicated remote project's actual PostgreSQL major version before linking.
