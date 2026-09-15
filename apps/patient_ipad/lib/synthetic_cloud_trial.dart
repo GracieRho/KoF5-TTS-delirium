@@ -32,23 +32,31 @@ Uint8List pcm16MonoWav(Uint8List pcm) {
   return wav;
 }
 
+void _checkEndpoint(Uri endpoint, String path) {
+  final local = {'localhost', '127.0.0.1', '::1'}.contains(endpoint.host);
+  if (endpoint.path != path ||
+      endpoint.userInfo.isNotEmpty ||
+      endpoint.hasQuery ||
+      endpoint.hasFragment ||
+      !(endpoint.scheme == 'https' || (local && endpoint.scheme == 'http'))) {
+    throw const FormatException('HTTPS 내부 시험 API 주소가 필요합니다.');
+  }
+}
+
+void _checkToken(String token) {
+  if (token.length < 32 || !token.runes.every((code) => code < 128)) {
+    throw const FormatException('32자 이상의 내부 시험 토큰이 필요합니다.');
+  }
+}
+
 Future<SyntheticCloudReply> sendOwnVoiceCandidate(
   HttpClient client,
   Uri endpoint,
   String token,
   Uint8List pcm,
 ) async {
-  final local = {'localhost', '127.0.0.1', '::1'}.contains(endpoint.host);
-  if (endpoint.path != '/internal/synthetic/audio' ||
-      endpoint.userInfo.isNotEmpty ||
-      endpoint.hasQuery ||
-      endpoint.hasFragment ||
-      !(endpoint.scheme == 'https' || (local && endpoint.scheme == 'http'))) {
-    throw const FormatException('HTTPS 내부 오디오 API 주소가 필요합니다.');
-  }
-  if (token.length < 32 || !token.runes.every((code) => code < 128)) {
-    throw const FormatException('32자 이상의 내부 시험 토큰이 필요합니다.');
-  }
+  _checkEndpoint(endpoint, '/internal/synthetic/audio');
+  _checkToken(token);
   final wav = pcm16MonoWav(pcm);
   final request = await client.postUrl(endpoint);
   request.followRedirects =
@@ -58,6 +66,35 @@ Future<SyntheticCloudReply> sendOwnVoiceCandidate(
   request.headers.set('X-Synthetic-Material', 'confirmed');
   request.add(wav);
   final response = await request.close();
+  return _readReply(response);
+}
+
+Future<SyntheticCloudReply> sendOwnVoiceText(
+  HttpClient client,
+  Uri endpoint,
+  String token,
+  String transcript,
+  String label,
+) async {
+  _checkEndpoint(endpoint, '/internal/synthetic/text');
+  _checkToken(token);
+  if (transcript.trim().isEmpty ||
+      transcript.length > 500 ||
+      !{'DIRECTED', 'AMBIENT', 'UNCERTAIN'}.contains(label)) {
+    throw const FormatException('짧은 기기 내 전사와 활성화 판정이 필요합니다.');
+  }
+  final request = await client.postUrl(endpoint);
+  request.followRedirects = false;
+  request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+  request.headers.set('X-Internal-Demo-Token', token);
+  request.headers.set('X-Synthetic-Material', 'confirmed');
+  request.add(
+    utf8.encode(jsonEncode({'transcript': transcript, 'label': label})),
+  );
+  return _readReply(await request.close());
+}
+
+Future<SyntheticCloudReply> _readReply(HttpClientResponse response) async {
   final body = <int>[];
   await for (final chunk in response) {
     if (body.length + chunk.length > 4_000_000) {

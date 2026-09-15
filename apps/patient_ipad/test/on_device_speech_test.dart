@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kof5_patient/main.dart';
 import 'package:kof5_patient/on_device_speech.dart';
+import 'package:kof5_patient/synthetic_cloud_trial.dart';
 import 'package:record_platform_interface/record_platform_interface.dart';
 
 import 'fake_recorder.dart';
@@ -20,6 +21,7 @@ void main() {
   Future<void>? pendingCancel;
   var cancelFails = false;
   var cancelCalls = 0;
+  final textCalls = <(String, String, String)>[];
 
   setUp(() {
     original = RecordPlatform.instance;
@@ -33,6 +35,7 @@ void main() {
     pendingCancel = null;
     cancelFails = false;
     cancelCalls = 0;
+    textCalls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(OnDeviceSpeech.channel, (call) async {
           switch (call.method) {
@@ -63,7 +66,14 @@ void main() {
   });
 
   Future<void> startOwnVoice(WidgetTester tester) async {
-    await tester.pumpWidget(const PatientMicDemo());
+    await tester.pumpWidget(
+      PatientMicDemo(
+        textTrial: (client, endpoint, token, transcript, label) async {
+          textCalls.add((endpoint.path, transcript, label));
+          return SyntheticCloudReply(transcript, '응, 왜?', null);
+        },
+      ),
+    );
     await tester.tap(find.text('마이크 시험 시작'));
     for (var i = 0; i < 20 && fake.starts == 0; i++) {
       await tester.runAsync(
@@ -251,8 +261,28 @@ void main() {
       );
       await tester.pump();
       expect(transcripts, 4);
-      await tester.tap(find.byType(CheckboxListTile));
+      await tester.enterText(
+        find.byType(TextField).first,
+        'https://example.com/internal/synthetic/audio',
+      );
+      await tester.enterText(find.byType(TextField).last, 'x' * 32);
+      await tester.ensureVisible(find.byType(SwitchListTile));
+      await tester.tap(find.byType(SwitchListTile));
       await tester.pump();
+      fake.feedCandidate();
+      for (var i = 0; i < 30 && textCalls.isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(textCalls, [('/internal/synthetic/text', '수민아?', 'DIRECTED')]);
+      expect(
+        fake.stops,
+        1,
+        reason: 'text-only request follows confirmed mic stop',
+      );
+      expect(find.text('응, 왜?'), findsOneWidget);
       await finishWidget(tester);
     },
   );

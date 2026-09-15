@@ -7,16 +7,29 @@ import 'package:record/record.dart';
 
 import 'on_device_speech.dart';
 import 'speech_candidate.dart';
+import 'synthetic_activation.dart';
 import 'synthetic_cloud_trial.dart';
 import 'trial_audio_player.dart';
 
 void main() => runApp(const PatientMicDemo());
 
 class PatientMicDemo extends StatefulWidget {
-  const PatientMicDemo({super.key, this.cloudTrial = sendOwnVoiceCandidate});
+  const PatientMicDemo({
+    super.key,
+    this.cloudTrial = sendOwnVoiceCandidate,
+    this.textTrial = sendOwnVoiceText,
+  });
 
   final Future<SyntheticCloudReply> Function(HttpClient, Uri, String, Uint8List)
   cloudTrial;
+  final Future<SyntheticCloudReply> Function(
+    HttpClient,
+    Uri,
+    String,
+    String,
+    String,
+  )
+  textTrial;
 
   @override
   State<PatientMicDemo> createState() => _PatientMicDemoState();
@@ -28,6 +41,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   final _detector = SpeechCandidateDetector();
   final _player = TrialAudioPlayer();
   final _speech = const OnDeviceSpeech();
+  final _activation = SyntheticActivation();
   final _endpoint = TextEditingController();
   final _token = TextEditingController();
   StreamSubscription<Uint8List>? _subscription;
@@ -57,6 +71,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _localGeneration = 0;
   var _localStatus = '한국어 기기 내 인식 지원 여부를 확인하지 않았습니다.';
   var _localTranscript = '';
+  var _autoTextTrial = false;
 
   @override
   void initState() {
@@ -82,6 +97,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _speechStop != null ||
         _speechStopUnconfirmed;
     _localEnabled = false;
+    _autoTextTrial = false;
+    _activation.reset();
     if (cancellingSpeech) unawaited(_cancelLocalSpeech());
     _cloudClient?.close(force: true);
     _cloudClient = null;
@@ -233,7 +250,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       _candidateCount++;
       _candidateExpiry?.cancel();
       _heldCandidate = _ownVoiceTrial ? candidate : null;
-      _status = '발화 후보 $_candidateCount건 감지 · 자동 전송 없음';
+      _status = _autoTextTrial
+          ? '발화 후보 $_candidateCount건 감지 · 오디오는 자동 전송하지 않습니다.'
+          : '발화 후보 $_candidateCount건 감지 · 자동 전송 없음';
       if (_heldCandidate != null) {
         _cloudStatus = '자가 음성 후보 한 건 준비 · 30초 내 직접 전송 가능';
         _candidateExpiry = Timer(const Duration(seconds: 30), () {
@@ -307,6 +326,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     final generation = ++_localGeneration;
     _recognizing = true;
     setState(() => _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.');
+    String? directedText;
     try {
       final transcript = await _speech
           .transcribe(candidate)
@@ -321,8 +341,15 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _localTranscript = transcript ?? '';
         _localStatus = _localTranscript.isEmpty
             ? '기기 내에서 말을 확인하지 못했습니다. 후보 오디오는 자동 전송하지 않습니다.'
+            : _autoTextTrial
+            ? 'iPad 기기 내 전사 완료 · 환자 역할에게 향한 글만 판정합니다.'
             : 'iPad 기기 내 전사 완료 · 글과 오디오 모두 자동 전송하지 않습니다.';
       });
+      if (_autoTextTrial &&
+          _localTranscript.isNotEmpty &&
+          _activation.accepts(_localTranscript, DateTime.now())) {
+        directedText = _localTranscript;
+      }
     } catch (_) {
       if (mounted && generation == _localGeneration) {
         setState(() => _localStatus = '기기 내 전사에 실패했습니다. 후보 오디오는 자동 전송하지 않습니다.');
@@ -330,11 +357,19 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     } finally {
       if (generation == _localGeneration) _recognizing = false;
     }
+    if (directedText != null &&
+        mounted &&
+        _foreground &&
+        generation == _localGeneration &&
+        _autoTextTrial) {
+      unawaited(_sendTextTrial(directedText));
+    }
   }
 
   Future<void> _sendTrial() async {
     if (!_ownVoiceTrial ||
         _heldCandidate == null ||
+        _autoTextTrial ||
         _sending ||
         _stopping ||
         !_foreground) {
@@ -351,12 +386,54 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       _cloudTranscript = '';
       _cloudReply = '';
     });
+    if (!await _stopForTrial(generation)) return;
+    await _runTrialRequest(generation, (client) {
+      final endpoint = Uri.parse(_endpoint.text.trim());
+      return widget.cloudTrial(client, endpoint, _token.text, pcm);
+    }, textOnly: false);
+  }
+
+  Future<void> _sendTextTrial(String transcript) async {
+    if (!_autoTextTrial ||
+        !_ownVoiceTrial ||
+        _sending ||
+        _speechStopUnconfirmed ||
+        _speechStop != null ||
+        !_foreground) {
+      return;
+    }
+    final generation = ++_trialGeneration;
+    _candidateExpiry?.cancel();
+    _candidateExpiry = null;
+    _heldCandidate = null;
+    setState(() {
+      _sending = true;
+      _cloudStatus = 'iPad 판정 후 글만 보내기 위해 마이크를 중단하고 있습니다.';
+      _cloudTranscript = '';
+      _cloudReply = '';
+    });
+    if (!await _stopForTrial(generation)) return;
+    await _runTrialRequest(generation, (client) {
+      final endpoint = Uri.parse(
+        _endpoint.text.trim(),
+      ).replace(path: '/internal/synthetic/text');
+      return widget.textTrial(
+        client,
+        endpoint,
+        _token.text,
+        transcript,
+        'DIRECTED',
+      );
+    }, textOnly: true);
+  }
+
+  Future<bool> _stopForTrial(int generation) async {
     await _stop();
     if (!mounted ||
         !_foreground ||
         !_ownVoiceTrial ||
         generation != _trialGeneration) {
-      return;
+      return false;
     }
     if (_stopUnconfirmed ||
         _speechStopUnconfirmed ||
@@ -368,22 +445,29 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _sending = false;
         _cloudStatus = '마이크 또는 기기 내 전사 중단을 확인하지 못해 전송하지 않았습니다.';
       });
-      return;
+      return false;
     }
+    return true;
+  }
+
+  Future<void> _runTrialRequest(
+    int generation,
+    Future<SyntheticCloudReply> Function(HttpClient) send, {
+    required bool textOnly,
+  }) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
     _cloudClient = client;
     try {
-      final endpoint = Uri.parse(_endpoint.text.trim());
-      final result = await widget
-          .cloudTrial(client, endpoint, _token.text, pcm)
-          .timeout(const Duration(seconds: 70));
+      final result = await send(client).timeout(const Duration(seconds: 70));
       if (!mounted || !_foreground || generation != _trialGeneration) return;
       setState(() {
         _cloudTranscript = result.transcript;
         _cloudReply = result.reply ?? '';
         _cloudStatus = result.mp3 == null
             ? '서버 안전 경로에서 음성 응답을 만들지 않았습니다.'
+            : textOnly
+            ? '글 전용 클라우드 시험 응답 · 재생 시작'
             : '클라우드 자가 음성 시험 응답 · 재생 시작';
       });
       if (result.mp3 != null) {
@@ -396,6 +480,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         }
       }
     } catch (_) {
+      if (textOnly) _activation.reset();
       if (_playbackOwnerGeneration == generation && _playedReply) {
         final stopped = await _stopReply();
         if (!stopped) return;
@@ -728,6 +813,47 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   border: OutlineInputBorder(),
                                 ),
                               ),
+                              const SizedBox(height: 12),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('내 기기 내 전사 글만 자동 내부 시험'),
+                                subtitle: const Text(
+                                  '내 목소리에서 이름을 부른 뒤 짧은 질문만 같은 서버의 글 API로 보냅니다. '
+                                  '글은 hosted LLM에 전달될 수 있고 후보 오디오는 자동으로 보내지 않습니다.',
+                                ),
+                                value: _autoTextTrial,
+                                onChanged: (value) {
+                                  if (value != true) {
+                                    _discardTrial();
+                                    return;
+                                  }
+                                  if (!_ownVoiceTrial ||
+                                      !_localEnabled ||
+                                      _sending ||
+                                      _speechStopUnconfirmed ||
+                                      _speechStop != null) {
+                                    return;
+                                  }
+                                  final endpoint = Uri.tryParse(
+                                    _endpoint.text.trim(),
+                                  );
+                                  if (endpoint?.path !=
+                                          '/internal/synthetic/audio' ||
+                                      _token.text.length < 32) {
+                                    setState(
+                                      () => _cloudStatus =
+                                          '내부 오디오 API 주소와 토큰을 먼저 확인하세요.',
+                                    );
+                                    return;
+                                  }
+                                  _activation.reset();
+                                  setState(() {
+                                    _autoTextTrial = true;
+                                    _cloudStatus =
+                                        '자가 음성의 기기 내 판정된 글만 내부 API로 자동 시험합니다.';
+                                  });
+                                },
+                              ),
                               const SizedBox(height: 20),
                               SizedBox(
                                 width: double.infinity,
@@ -735,6 +861,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   onPressed:
                                       _ownVoiceTrial &&
                                           _heldCandidate != null &&
+                                          !_autoTextTrial &&
                                           !_sending &&
                                           !_starting &&
                                           !_stopping &&
