@@ -24,6 +24,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _starting = false;
   var _stopping = false;
   var _foreground = true;
+  var _stopUnconfirmed = false;
   var _candidateCount = 0;
   var _status = '마이크 시험을 시작할 수 있습니다.';
 
@@ -40,13 +41,20 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   }
 
   Future<void> _start() async {
-    if (_starting || _stopping || _listening || !_foreground) return;
+    if (_starting ||
+        _stopping ||
+        _listening ||
+        _stopUnconfirmed ||
+        !_foreground) {
+      return;
+    }
     setState(() => _starting = true);
     try {
       if (!await _recorder.hasPermission()) {
         if (mounted) setState(() => _status = '마이크 권한이 필요합니다.');
         return;
       }
+      if (!mounted || !_foreground) return;
       final stream = await _recorder.startStream(
         const RecordConfig(
           encoder: AudioEncoder.pcm16bits,
@@ -64,7 +72,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _onAudio,
         onError: (Object error) {
           _stop().then((_) {
-            if (mounted) setState(() => _status = '마이크 입력이 중단됐습니다.');
+            if (mounted && !_stopUnconfirmed) {
+              setState(() => _status = '마이크 입력이 중단됐습니다.');
+            }
           });
         },
       );
@@ -93,20 +103,28 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
     _listening = false;
+    var confirmed = true;
     try {
       await _recorder.stop();
     } catch (_) {
-      // An interrupted recorder still needs its stream and PCM released.
+      confirmed = false;
     }
     try {
       await _subscription?.cancel();
     } catch (_) {
-      // Continue clearing local buffers if a plugin stream fails to cancel.
+      confirmed = false;
     }
     _subscription = null;
     _detector.reset();
+    _stopUnconfirmed = !confirmed;
     _stopping = false;
-    if (mounted) setState(() => _status = '마이크 시험을 중단했습니다.');
+    if (mounted) {
+      setState(
+        () => _status = confirmed
+            ? '마이크 시험을 중단했습니다.'
+            : '마이크 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.',
+      );
+    }
   }
 
   @override
@@ -135,7 +153,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                 Text(_status, textAlign: TextAlign.center),
                 const SizedBox(height: 24),
                 FilledButton(
-                  onPressed: _starting || _stopping
+                  onPressed: _starting || _stopping || _stopUnconfirmed
                       ? null
                       : (_listening ? _stop : _start),
                   child: Text(
