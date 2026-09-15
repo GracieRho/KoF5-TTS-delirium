@@ -34,7 +34,7 @@
 ├── docs/                  # 프로젝트·연구 문서
 ├── scripts/               # 실행 진입점과 작업 자동화
 ├── src/kof5_tts/          # 재사용 가능한 제품·연구 코드
-├── supabase/              # Auth/Postgres 설정·기본 차단 환자 스키마
+├── supabase/              # Auth/Postgres 설정·환자/직원/보호자 RLS 초안
 ├── tests/                 # 단위·통합 테스트
 ├── .editorconfig          # 공통 편집기 설정
 ├── .gitignore             # 비밀정보, 데이터, 모델 산출물 제외 규칙
@@ -64,6 +64,8 @@ uv run python scripts/run_backend.py
 브라우저에서 `http://127.0.0.1:8765/demo`를 열면 팀 내부 합성 발화를 입력하고 대화 상태·응답·거부·주변 발화 폐기를 확인할 수 있습니다. 화면의 날짜·시간은 한국 시간으로 표시됩니다.
 `http://127.0.0.1:8765/demo/hospital`은 가상 환자·입원 등록과 동의 상태에 따른 약 30초 자가 음성 채집 화면을 시험합니다. 입력과 오디오는 브라우저 메모리에서만 처리하고 서버로 보내거나 환자 화자 특징으로 등록하지 않습니다.
 `http://127.0.0.1:8765/demo/guardian`은 가상 가족 기억을 화면에서만 바꾸고, 피해야 할 주제가 대화 후보에서 제외되는 것을 시험합니다. 보호자 로그인·환자 연결·기억 저장·음성 등록은 연결되지 않았습니다.
+
+`http://127.0.0.1:8765/guardian`은 별도 **보호자 웹 초안**입니다. 전용 Supabase의 URL과 publishable 키를 서버 환경 변수 `KOF5_SUPABASE_URL`, `KOF5_SUPABASE_PUBLISHABLE_KEY`로 설정해야 로그인할 수 있습니다. 원격 프로젝트에는 `KOF5_SUPABASE_PROJECT_REF`도 설정해야 하며, 공유 `yai-hub-production` 주소는 거부합니다. 브라우저는 Supabase Auth에 로그인하고 검증된 환자 연결의 가족 기억만 Data API/RLS로 읽고 저장합니다. 토큰은 페이지 메모리에만 있어 새로고침하면 다시 로그인해야 합니다. 작업 전용 **로컬 합성 계정**에서는 로그인·기억 저장·철회 후 차단을 브라우저로 확인했지만, 원격 전용 프로젝트·기관 직원 승인·실제 환자 데이터 처리·음성 등록은 아직 연결되지 않았습니다. 실제 가족/환자 정보는 안전 게이트 통과 전 입력하지 마세요.
 
 내부 오디오 API `POST /internal/synthetic/audio`는 `KOF5_INTERNAL_DEMO_TOKEN`(32자 이상), 공급자 키·voice ID, `VOICE_OWNER_CONSENT_RECORD_ID`가 서버에 설정된 경우에만 열립니다. 요청에는 `X-Internal-Demo-Token`, `X-Synthetic-Material: confirmed`, `Content-Type: audio/wav`가 필요하며, PCM16 WAV 원문(2 MB 이하·30초 이하)을 전송합니다. 응답은 전사·짧은 답·MP3의 base64입니다. 이 확인은 내부 시험자의 선언이며 실제 동의 검증이나 환자 인증이 아닙니다. 오디오는 메모리에서만 처리하고 앱 DB에 저장하지 않습니다. 실제 환자 오디오를 보내지 마세요.
 
