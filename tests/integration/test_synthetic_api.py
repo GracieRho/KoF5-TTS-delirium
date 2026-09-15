@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.api import SYNTHETIC_DB_PATIENT, app  # noqa: E402
-from tests.synthetic_wav import SYNTHETIC_WAV  # noqa: E402
+from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
 
 
 class SyntheticApiTests(unittest.TestCase):
@@ -581,6 +581,39 @@ class SyntheticApiTests(unittest.TestCase):
                 self.assertIsNone(result.json()["reply"])
                 self.assertIsNone(result.json()["audio_mp3_base64"])
 
+    def test_paired_policy_medical_question_skips_embedding_and_llm(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+               "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+               "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+               "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice"}
+        headers = {"X-Internal-Demo-Token": "t" * 32, "X-Synthetic-Material": "confirmed",
+                   "Authorization": "Bearer " + "d" * 40}
+        seen: list[str] = []
+
+        def preflight(request: httpx.Request) -> httpx.Response:
+            seen.append(request.url.path.rsplit("/", 1)[-1])
+            self.assertTrue(request.url.path.endswith("/patient_device_context"),
+                            "policy-only speech must not call embeddings or family facts")
+            return httpx.Response(200, json=[{"patient_id": SYNTHETIC_DB_PATIENT,
+                                              "encounter_id": "synthetic-encounter"}])
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(preflight)),
+        ), patch("kof5_tts.cloud_prototype.generate_short_reply",
+                 side_effect=AssertionError("medical policy must not call LLM")), patch(
+            "kof5_tts.cloud_prototype.synthesize_mp3", return_value=b"mp3",
+        ):
+            result = self.client.post(path, json={"transcript": "수민아 무슨 약을 먹어야 해?",
+                                                  "label": "DIRECTED"}, headers=headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("의료진", result.json()["reply"])
+        self.assertEqual(seen, ["patient_device_context"])
+
     def test_semantic_fact_reaches_real_reply_pipeline_without_word_overlap(self) -> None:
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
         env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
@@ -685,6 +718,151 @@ class SyntheticApiTests(unittest.TestCase):
             authorized = False
             self.assertEqual(self.client.post(path, headers=headers).status_code, 403)
             self.assertEqual(voice.call_count, 1, "withdrawn message must never reach TTS")
+
+    def test_guardian_voice_pending_before_provider_and_absence_before_deleted(self) -> None:
+        from base64 import b64encode
+        from kof5_tts.cloud_prototype import EnrolledVoice
+
+        patient = SYNTHETIC_DB_PATIENT
+        clone_id = "00000000-0000-4000-8000-000000000412"
+        guardian_id = "00000000-0000-4000-8000-000000000413"
+        consent_id = "00000000-0000-4000-8000-000000000414"
+        request_key = "00000000-0000-4000-8000-000000000415"
+        name = "KoF5 internal self-voice test " + request_key.replace("-", "")
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_SUPABASE_SECRET_KEY": "sb_secret_" + "s" * 32,
+               "KOF5_SYNTHETIC_GUARDIAN_VOICE_UPLOAD_ENABLED": "1",
+               "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"Authorization": "Bearer " + "g" * 40, "X-Synthetic-Material": "confirmed"}
+        state = "none"
+        withdrawn_during_create = False
+        calls: list[str] = []
+
+        def hosted(request: httpx.Request) -> httpx.Response:
+            nonlocal state
+            route = request.url.path.rsplit("/", 1)[-1]
+            calls.append(route)
+            if route == "user":
+                return httpx.Response(200, json={"id": guardian_id, "is_anonymous": False})
+            if route == "synthetic_guardian_voice_status":
+                return httpx.Response(200, json=[{"authorized": True, "clone_id": clone_id if state != "none" else None,
+                                                  "ready": state == "none", "consent_id": consent_id,
+                                                  "status": state, "provider": "elevenlabs" if state != "none" else None,
+                                                  "provider_name": name if state != "none" else None}])
+            if route == "synthetic_guardian_voice_begin":
+                self.assertEqual(request.headers["apikey"], env["KOF5_SUPABASE_SECRET_KEY"])
+                self.assertNotIn("authorization", request.headers)
+                body = json.loads(request.read())
+                self.assertEqual(body["p_guardian_user_id"], guardian_id)
+                self.assertEqual(body["p_consent_id"], consent_id)
+                self.assertEqual(body["p_sample_durations_ms"], [20000] * 3)
+                state = "pending"
+                return httpx.Response(200, json=[{"authorized": True, "clone_id": clone_id,
+                                                  "status": "pending", "provider_name": name,
+                                                  "newly_created": True}])
+            if route == "synthetic_guardian_voice_provider_result":
+                self.assertEqual(json.loads(request.read())["p_verification_confirmed"], False)
+                state = "deletion_pending" if withdrawn_during_create else "verification_pending"
+                return httpx.Response(200, json=[{"authorized": True, "clone_id": clone_id,
+                                                  "status": state, "provider_name": name,
+                                                  "voice_id": "voice123"}])
+            if route == "synthetic_guardian_voice_request_deletion":
+                state = "deletion_pending"
+                return httpx.Response(200, json=[{"authorized": True, "clone_id": clone_id,
+                                                  "status": state, "provider_name": name,
+                                                  "voice_id": "voice123"}])
+            if route == "synthetic_guardian_voice_confirm_remote_absence":
+                self.assertEqual(json.loads(request.read())["p_method"], "voice_id_not_found")
+                state = "deleted"
+                return httpx.Response(200, json=[{"authorized": True, "clone_id": clone_id,
+                                                  "status": state, "provider_name": name,
+                                                  "voice_id": "voice123"}])
+            raise AssertionError(f"unexpected hosted route: {route}")
+
+        sample = b64encode(make_synthetic_wav(20)).decode("ascii")
+        enrollment = {"consent_id": consent_id, "request_key": request_key,
+                      "own_voice_confirmed": True, "samples_wav_base64": [sample] * 3}
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+        ), patch("kof5_tts.api.enroll_test_voice", return_value=EnrolledVoice("voice123", True)) as create, patch(
+            "kof5_tts.api.delete_test_voice", return_value=None,
+        ) as remove, patch("kof5_tts.api.test_voice_present", return_value=True) as present:
+            self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/enroll",
+                                              json=enrollment, headers=headers).json(),
+                             {"status": "verification_pending", "clone_id": clone_id})
+            self.assertEqual(calls[:3], ["user", "synthetic_guardian_voice_status",
+                                         "synthetic_guardian_voice_begin"])
+            self.assertEqual(create.call_count, 1, "provider POST starts after pending DB row")
+            self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/{clone_id}/delete",
+                                              headers=headers).json(), {"status": "deleted", "clone_id": clone_id})
+            self.assertEqual(remove.call_count, 1)
+            self.assertEqual(calls[-2:], ["synthetic_guardian_voice_request_deletion",
+                                          "synthetic_guardian_voice_confirm_remote_absence"])
+            state = "verification_pending"  # Simulate a retry after remote DELETE but uncertain DB confirmation.
+            present.return_value = False
+            self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/{clone_id}/delete",
+                                              headers=headers).json(), {"status": "deleted", "clone_id": clone_id})
+            self.assertEqual(remove.call_count, 1, "already absent ID must not be deleted again")
+            state = "none"
+            withdrawn_during_create = True
+            present.return_value = True
+            self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/enroll",
+                                              json=enrollment, headers=headers).json(),
+                             {"status": "deleted", "clone_id": clone_id})
+            self.assertEqual(remove.call_count, 2,
+                             "late consent withdrawal must start remote deletion immediately")
+
+    def test_guardian_voice_upload_gate_and_idempotent_retry_never_post_twice(self) -> None:
+        from base64 import b64encode
+
+        patient = SYNTHETIC_DB_PATIENT
+        guardian = "00000000-0000-4000-8000-000000000513"
+        consent = "00000000-0000-4000-8000-000000000514"
+        request_key = "00000000-0000-4000-8000-000000000515"
+        path = f"/internal/synthetic/guardian/{patient}/voice/enroll"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_SUPABASE_SECRET_KEY": "sb_secret_" + "s" * 32,
+               "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"Authorization": "Bearer " + "g" * 40, "X-Synthetic-Material": "confirmed"}
+        sample = b64encode(make_synthetic_wav(20)).decode("ascii")
+        payload = {"consent_id": consent, "request_key": request_key,
+                   "own_voice_confirmed": True, "samples_wav_base64": [sample] * 3}
+        seen: list[str] = []
+
+        def hosted(request: httpx.Request) -> httpx.Response:
+            route = request.url.path.rsplit("/", 1)[-1]
+            seen.append(route)
+            if route == "user":
+                return httpx.Response(200, json={"id": guardian, "is_anonymous": False})
+            if route == "synthetic_guardian_voice_status":
+                return httpx.Response(200, json=[{"authorized": True, "status": "none",
+                                                  "ready": True, "consent_id": consent}])
+            if route == "synthetic_guardian_voice_begin":
+                return httpx.Response(200, json=[{"authorized": True,
+                                                  "clone_id": "00000000-0000-4000-8000-000000000512",
+                                                  "status": "pending",
+                                                  "provider_name": "KoF5 internal self-voice test " + request_key.replace("-", ""),
+                                                  "newly_created": False}])
+            raise AssertionError("retry must not call provider")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+        ), patch("kof5_tts.api.enroll_test_voice") as provider:
+            self.assertEqual(self.client.post(path, json=payload, headers=headers).status_code, 503)
+            self.assertEqual(seen, ["user", "synthetic_guardian_voice_status"],
+                             "default-off gate blocks begin and provider")
+            seen.clear()
+            with patch.dict(os.environ, {"KOF5_SYNTHETIC_GUARDIAN_VOICE_UPLOAD_ENABLED": "1"}):
+                self.assertEqual(self.client.post(path, json=payload, headers=headers).status_code, 409)
+            self.assertEqual(seen, ["user", "synthetic_guardian_voice_status",
+                                    "synthetic_guardian_voice_begin"])
+            provider.assert_not_called()
 
 
 if __name__ == "__main__":

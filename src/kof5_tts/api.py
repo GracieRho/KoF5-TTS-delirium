@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from base64 import b64encode
+from base64 import b64decode, b64encode
+from binascii import Error as Base64Error
 from datetime import datetime, timezone
 from hashlib import md5
 from hmac import compare_digest
@@ -11,6 +12,7 @@ import os
 from pathlib import Path
 import re
 from typing import Literal
+from uuid import UUID
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -19,8 +21,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from kof5_tts.cloud_prototype import (
-    CloudCredentials, hospital_fact_question, run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
+    CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice, hospital_fact_question,
+    run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3, test_voice_present,
     validate_short_wav,
+    validate_test_voice_samples,
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
@@ -149,6 +153,17 @@ def _device_bearer(request: Request) -> str:
 def _api_headers(config: dict[str, str], bearer: str) -> dict[str, str]:
     return {"apikey": config["publishable_key"], "Authorization": bearer,
             "Accept-Profile": "api", "Content-Profile": "api"}
+
+
+def _service_headers() -> dict[str, str]:
+    secret = os.environ.get("KOF5_SUPABASE_SECRET_KEY", "")
+    legacy = os.environ.get("KOF5_SUPABASE_SERVICE_ROLE_KEY", "")
+    if secret.startswith("sb_secret_") and len(secret) >= 32:
+        return {"apikey": secret, "Accept-Profile": "api", "Content-Profile": "api"}
+    if legacy.startswith("eyJ") and len(legacy) >= 40:
+        return {"apikey": legacy, "Authorization": f"Bearer {legacy}",
+                "Accept-Profile": "api", "Content-Profile": "api"}
+    raise HTTPException(status_code=503, detail="서버 전용 권한이 준비되지 않았습니다")
 
 
 def _bounded_json(response: httpx.Response, limit: int) -> object:
@@ -293,6 +308,261 @@ async def _paired_semantic_memory(request: Request, patient_id: str, transcript:
         raise HTTPException(status_code=503, detail="기기 권한·의미 검색 조회가 실패했습니다") from None
 
 
+class VoiceEnrollment(BaseModel):
+    consent_id: UUID
+    request_key: UUID
+    own_voice_confirmed: Literal[True]
+    samples_wav_base64: list[str] = Field(min_length=3, max_length=3)
+
+
+def _synthetic_guardian_voice(request: Request, patient_id: str) -> str:
+    if patient_id != SYNTHETIC_DB_PATIENT:
+        raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
+    if request.headers.get("x-synthetic-material") != "confirmed":
+        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+    return _device_bearer(request)
+
+
+async def _voice_rpc(name: str, payload: dict, headers: dict[str, str]) -> dict:
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.post(f'{config["url"]}/rest/v1/rpc/{name}',
+                                         json=payload, headers=headers)
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="음성 상태 권한이 필요합니다")
+            response.raise_for_status()
+            rows = _bounded_json(response, 4096)
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("voice transition response is invalid")
+            return rows[0]
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="음성 상태 조회·전환이 실패했습니다") from None
+
+
+async def _guardian_voice_identity(request: Request, bearer: str) -> str:
+    config = guardian_config()
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            response = await client.get(
+                f'{config["url"]}/auth/v1/user',
+                headers={"apikey": config["publishable_key"], "Authorization": bearer},
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="본인 보호자 로그인이 필요합니다")
+            response.raise_for_status()
+            user = _bounded_json(response, 4096)
+            if (not isinstance(user, dict) or user.get("is_anonymous") is True
+                    or not isinstance(user.get("id"), str)):
+                raise HTTPException(status_code=403, detail="본인 보호자 로그인이 필요합니다")
+            return str(UUID(user["id"]))
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="보호자 로그인 확인이 실패했습니다") from None
+
+
+async def _guardian_voice_status(patient_id: str, bearer: str) -> dict:
+    config = guardian_config()
+    row = await _voice_rpc("synthetic_guardian_voice_status", {"p_patient_id": patient_id},
+                           _api_headers(config, bearer))
+    if row.get("authorized") is not True:
+        raise HTTPException(status_code=403, detail="현재 검증된 보호자 연결이 필요합니다")
+    if row.get("status") not in {"none", "pending", "created", "verification_pending",
+                                 "deletion_pending", "deleted", "failed"}:
+        raise HTTPException(status_code=503, detail="보호자 음성 상태를 확인하지 못했습니다")
+    if type(row.get("ready")) is not bool:
+        raise HTTPException(status_code=503, detail="보호자 본인 음성 동의를 확인하지 못했습니다")
+    if row["ready"]:
+        try:
+            UUID(row["consent_id"])
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(status_code=503, detail="보호자 본인 음성 동의를 확인하지 못했습니다") from None
+    return row
+
+
+def _remove_test_clone(name: str, voice_id: str | None, key: str) -> str:
+    with httpx.Client(timeout=30) as client:
+        if isinstance(voice_id, str) and voice_id:
+            if test_voice_present(client, voice_id, key):
+                delete_test_voice(client, voice_id, key)
+            return "voice_id_not_found"
+        found = find_test_voice(client, name, key)
+        if found:
+            delete_test_voice(client, found, key)
+            if find_test_voice(client, name, key) is not None:
+                raise ValueError("provider still lists clone name")
+        return "provider_name_not_found"
+
+
+async def _confirm_test_clone_absence(clone_id: str, method: str, headers: dict[str, str]) -> bool:
+    confirmed = await _voice_rpc("synthetic_guardian_voice_confirm_remote_absence", {
+        "p_clone_id": clone_id, "p_method": method,
+        "p_checked_at": datetime.now(timezone.utc).isoformat(),
+    }, headers)
+    return confirmed.get("authorized") is True and confirmed.get("status") == "deleted"
+
+
+@app.get("/internal/synthetic/guardian/{patient_id}/voice/status", include_in_schema=False)
+async def guardian_voice_status(patient_id: str, request: Request) -> dict:
+    bearer = _synthetic_guardian_voice(request, patient_id)
+    await _guardian_voice_identity(request, bearer)
+    row = await _guardian_voice_status(patient_id, bearer)
+    return {**{field: row.get(field) for field in
+               ("clone_id", "status", "provider", "provider_name", "created_at",
+                "remote_absence_verified_at", "ready", "consent_id")},
+            "authorized": True,
+            "upload_enabled": (os.environ.get("KOF5_SYNTHETIC_GUARDIAN_VOICE_UPLOAD_ENABLED") == "1"
+                               and bool(os.environ.get("ELEVENLABS_API_KEY")))}
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/voice/enroll", include_in_schema=False)
+async def enroll_synthetic_guardian_voice(patient_id: str, request: Request) -> dict[str, str | None]:
+    bearer = _synthetic_guardian_voice(request, patient_id)
+    user_id = await _guardian_voice_identity(request, bearer)
+    status = await _guardian_voice_status(patient_id, bearer)
+    if status["status"] not in {"none", "failed", "deleted"}:
+        raise HTTPException(status_code=409, detail="기존 음성 등록·삭제 상태를 먼저 정리해야 합니다")
+    if os.environ.get("KOF5_SYNTHETIC_GUARDIAN_VOICE_UPLOAD_ENABLED") != "1":
+        raise HTTPException(status_code=503, detail="합성 자가 음성 공급자 업로드가 비활성화됐습니다")
+    provider_key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if not provider_key:
+        raise HTTPException(status_code=503, detail="합성 자가 음성 공급자 설정이 필요합니다")
+    service_headers = _service_headers()
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+        raise HTTPException(status_code=415, detail="짧은 WAV JSON만 허용합니다")
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 8_500_000:
+            raise HTTPException(status_code=413, detail="자가 음성 시험 자료가 너무 큽니다")
+        body.extend(chunk)
+    try:
+        enrollment = VoiceEnrollment.model_validate_json(bytes(body))
+        if status.get("ready") is not True or status.get("consent_id") != str(enrollment.consent_id):
+            raise HTTPException(status_code=403, detail="현재 별도 본인 음성 동의가 필요합니다")
+        if any(len(sample) > 2_700_000 for sample in enrollment.samples_wav_base64):
+            raise ValueError("voice sample too large")
+        samples = [b64decode(sample, validate=True) for sample in enrollment.samples_wav_base64]
+        validate_test_voice_samples(samples)
+        durations = [round(validate_short_wav(sample) * 1000) for sample in samples]
+    except (ValidationError, ValueError, Base64Error):
+        raise HTTPException(status_code=422, detail="본인 음성 확인과 20~30초 PCM16 WAV 세 개가 필요합니다") from None
+    begun = await _voice_rpc("synthetic_guardian_voice_begin", {
+        "p_patient_id": patient_id, "p_guardian_user_id": user_id,
+        "p_consent_id": str(enrollment.consent_id), "p_provider": "elevenlabs",
+        "p_request_key": str(enrollment.request_key), "p_sample_durations_ms": durations,
+    }, service_headers)
+    if begun.get("authorized") is not True:
+        raise HTTPException(status_code=403, detail="별도 본인 음성 동의·보호자 연결이 필요합니다")
+    clone_id = begun.get("clone_id")
+    name = begun.get("provider_name")
+    if (not isinstance(clone_id, str) or not isinstance(name, str)
+            or not re.fullmatch(r"KoF5 internal self-voice test [0-9a-f]{32}", name)
+            or begun.get("status") != "pending" or begun.get("newly_created") is not True):
+        raise HTTPException(status_code=409, detail="이미 시작된 음성 등록은 다시 업로드하지 않습니다")
+
+    def create() -> object:
+        with httpx.Client(timeout=30) as client:
+            return enroll_test_voice(client, samples, provider_key, True, name)
+
+    try:
+        voice = await run_in_threadpool(create)
+    except (httpx.HTTPError, ValueError):
+        return {"status": "pending", "clone_id": clone_id}  # Provider outcome is uncertain.
+    result = await _voice_rpc("synthetic_guardian_voice_provider_result", {
+        "p_clone_id": clone_id, "p_voice_id": voice.voice_id,
+        "p_verification_confirmed": voice.requires_verification is False,
+    }, service_headers)
+    if result.get("authorized") is not True or result.get("status") not in {
+        "created", "verification_pending", "deletion_pending"
+    }:
+        raise HTTPException(status_code=503, detail="공급자 음성 생성 상태를 확인하지 못했습니다")
+    if result["status"] == "deletion_pending":
+        try:
+            method = await run_in_threadpool(_remove_test_clone, name, voice.voice_id, provider_key)
+            if await _confirm_test_clone_absence(clone_id, method, service_headers):
+                return {"status": "deleted", "clone_id": clone_id}
+        except (httpx.HTTPError, ValueError, HTTPException):
+            pass  # Keep deletion_pending if remote or DB outcome is uncertain.
+    return {"status": result["status"], "clone_id": clone_id}
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/voice/{clone_id}/reconcile", include_in_schema=False)
+async def reconcile_synthetic_guardian_voice(patient_id: str, clone_id: str, request: Request) -> dict[str, str]:
+    bearer = _synthetic_guardian_voice(request, patient_id)
+    await _guardian_voice_identity(request, bearer)
+    status = await _guardian_voice_status(patient_id, bearer)
+    if status.get("clone_id") != clone_id:
+        raise HTTPException(status_code=404, detail="본인 시험 음성이 아닙니다")
+    if status.get("status") != "pending" or status.get("provider") != "elevenlabs":
+        raise HTTPException(status_code=409, detail="대기 중인 음성만 조회할 수 있습니다")
+    name = status.get("provider_name")
+    if not isinstance(name, str) or not re.fullmatch(r"KoF5 internal self-voice test [0-9a-f]{32}", name):
+        raise HTTPException(status_code=503, detail="시험 공급자 이름이 유효하지 않습니다")
+    key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if not key:
+        raise HTTPException(status_code=503, detail="시험 음성 공급자 설정이 필요합니다")
+
+    def find() -> str | None:
+        with httpx.Client(timeout=30) as client:
+            return find_test_voice(client, name, key)
+
+    try:
+        voice_id = await run_in_threadpool(find)
+    except (httpx.HTTPError, ValueError):
+        return {"status": "pending", "clone_id": clone_id}
+    if not voice_id:
+        return {"status": "pending", "clone_id": clone_id}
+    result = await _voice_rpc("synthetic_guardian_voice_provider_result", {
+        "p_clone_id": clone_id, "p_voice_id": voice_id,
+        "p_verification_confirmed": False,
+    }, _service_headers())
+    if result.get("authorized") is not True or result.get("status") not in {
+        "verification_pending", "deletion_pending"
+    }:
+        raise HTTPException(status_code=503, detail="공급자 생성 조회 결과를 기록하지 못했습니다")
+    return {"status": result["status"], "clone_id": clone_id}
+
+
+@app.post("/internal/synthetic/guardian/{patient_id}/voice/{clone_id}/delete", include_in_schema=False)
+async def delete_synthetic_guardian_voice(patient_id: str, clone_id: str, request: Request) -> dict[str, str]:
+    bearer = _synthetic_guardian_voice(request, patient_id)
+    try:
+        UUID(clone_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="합성 시험 음성만 사용할 수 있습니다") from None
+    await _guardian_voice_identity(request, bearer)
+    status = await _guardian_voice_status(patient_id, bearer)
+    if status.get("clone_id") != clone_id:
+        raise HTTPException(status_code=404, detail="본인 시험 음성이 아닙니다")
+    service_headers = _service_headers()
+    deletion = await _voice_rpc("synthetic_guardian_voice_request_deletion",
+                                {"p_clone_id": clone_id}, service_headers)
+    if deletion.get("authorized") is not True:
+        raise HTTPException(status_code=403, detail="시험 음성 삭제 권한이 없습니다")
+    if deletion.get("status") == "deleted":
+        return {"status": "deleted", "clone_id": clone_id}
+    if deletion.get("status") != "deletion_pending":
+        raise HTTPException(status_code=503, detail="시험 음성 삭제 상태를 확인하지 못했습니다")
+    if deletion.get("provider_name") != status.get("provider_name") or status.get("provider") != "elevenlabs":
+        raise HTTPException(status_code=503, detail="음성 공급자 연결을 확인하지 못했습니다")
+    key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if not key:
+        raise HTTPException(status_code=503, detail="삭제 대기: 음성 공급자 설정이 필요합니다")
+    voice_id = deletion.get("voice_id")
+    name = deletion.get("provider_name")
+
+    try:
+        method = await run_in_threadpool(_remove_test_clone, name, voice_id, key)
+    except (httpx.HTTPError, ValueError):
+        return {"status": "deletion_pending", "clone_id": clone_id}
+    if not await _confirm_test_clone_absence(clone_id, method, service_headers):
+        raise HTTPException(status_code=503, detail="공급자 음성 부재 확인 기록이 실패했습니다")
+    return {"status": "deleted", "clone_id": clone_id}
+
+
 @app.post("/internal/synthetic/guardian/{patient_id}/fact/{fact_id}/embedding", include_in_schema=False)
 async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Request) -> dict[str, str]:
     """Read one current guardian fact under JWT/RLS, then index the fixed synthetic fixture."""
@@ -307,14 +577,7 @@ async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Re
             raise HTTPException(status_code=413, detail="색인 요청 본문은 비워주세요")
     bearer = _device_bearer(request)
     config = guardian_config()
-    secret_key = os.environ.get("KOF5_SUPABASE_SECRET_KEY", "")
-    legacy_key = os.environ.get("KOF5_SUPABASE_SERVICE_ROLE_KEY", "")
-    if secret_key.startswith("sb_secret_") and len(secret_key) >= 32:
-        service_headers = {"apikey": secret_key}
-    elif legacy_key.startswith("eyJ") and len(legacy_key) >= 40:
-        service_headers = {"apikey": legacy_key, "Authorization": f"Bearer {legacy_key}"}
-    else:
-        raise HTTPException(status_code=503, detail="서버 색인 권한이 준비되지 않았습니다")
+    service_headers = _service_headers()
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             link = await client.get(
@@ -366,7 +629,7 @@ async def index_synthetic_family_fact(patient_id: str, fact_id: str, request: Re
                 f'{config["url"]}/rest/v1/rpc/upsert_synthetic_family_fact_embedding',
                 json={"p_fact_id": fact_id, "p_embedding": vector, "p_model": EMBEDDING_MODEL,
                       "p_content_md5": md5(content.encode("utf-8")).hexdigest()},
-                headers={**service_headers, "Accept-Profile": "api", "Content-Profile": "api"},
+                headers=service_headers,
             )
             response.raise_for_status()
             if _bounded_json(response, 4096) is not True:
