@@ -103,7 +103,13 @@
         <h3 id="avoid-title">피해야 할 이야기</h3>
         <p class="small">대화에 쓰지 않을 주제를 따로 남겨주세요.</p>
         <div id="avoid-facts" class="facts avoid-facts" aria-labelledby="avoid-title" aria-live="polite"></div>
+        <p class="hint">현재 화면은 합성 자료로만 시험합니다. 실제 환자·가족 정보는 기관 승인과 환자 동의·거부 절차가 확정될 때까지 입력하지 마세요.</p>
         <form id="memory-form">
+          <label for="starter-question">어디서부터 이야기할까요? (선택)</label>
+          <select id="starter-question">
+            <option value="">시작 질문을 골라보세요</option>
+          </select>
+          <p id="starter-hint" class="small">하나의 질문을 골라도, 확인한 이야기만 자유롭게 적을 수 있습니다.</p>
           <label for="category">기억 종류</label>
           <select id="category">
             <optgroup label="가족과 일상">
@@ -141,6 +147,37 @@
     const state = { config: null, token: null, userId: null, links: [], generation: 0, authRequest: 0, factRequest: 0, saveRequest: 0, draftRevision: 0, editingFactId: null };
     const $ = id => document.getElementById(id);
     const labels = { family: '가족', relationship: '가족과 관계', hometown: '고향', occupation: '예전 일', food: '좋아하는 음식', hobby: '취미', friend: '친구', pet: '반려동물', daily_routine: '평소 일과', travel: '함께한 여행', family_event: '가족 행사', favorite_story: '좋아하는 이야기', recent_event: '최근 일', comfort_topic: '안심되는 이야기', avoid_topic: '피해야 할 이야기' };
+    const prompts = [
+      ['relationship', '환자분과 어떤 관계인가요?'],
+      ['relationship', '평소 환자분을 어떻게 부르나요?'],
+      ['relationship', '환자분은 보호자를 어떻게 부르나요?'],
+      ['family', '배우자에 대해 알려주실 수 있나요?'],
+      ['family', '자녀에 대해 알려주실 수 있나요?'],
+      ['family', '손자녀와 함께한 이야기가 있나요?'],
+      ['hometown', '고향은 어디였나요?'],
+      ['hometown', '오래 살았던 곳은 어디인가요?'],
+      ['occupation', '예전에 어떤 일을 하셨나요?'],
+      ['occupation', '가장 좋아했던 일은 무엇인가요?'],
+      ['food', '좋아하는 음식은 무엇인가요?'],
+      ['food', '싫어하는 음식은 무엇인가요?'],
+      ['hobby', '좋아하는 음악이나 가수는 누구인가요?'],
+      ['hobby', '좋아하는 TV 프로그램은 무엇인가요?'],
+      ['travel', '함께 갔던 여행은 어디였나요?'],
+      ['travel', '가장 기억에 남는 여행은 무엇인가요?'],
+      ['family_event', '가족의 기억에 남는 행사가 있나요?'],
+      ['friend', '친한 친구와 어떤 이야기를 나누셨나요?'],
+      ['pet', '함께 지낸 반려동물이 있나요?'],
+      ['daily_routine', '평소 하루 일과는 어땠나요?'],
+      ['favorite_story', '자주 하시던 말이나 이야기가 있나요?'],
+      ['comfort_topic', '환자분을 안심시키는 이야기는 무엇인가요?'],
+      ['avoid_topic', '대화에서 피해야 할 이야기가 있나요?'],
+    ];
+    for (const [index, [, question]] of prompts.entries()) {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = question;
+      $('starter-question').append(option);
+    }
     const current = link => link.access_status === 'verified'
       && Date.parse(link.effective_at) <= Date.now()
       && (!link.expires_at || Date.parse(link.expires_at) > Date.now());
@@ -195,6 +232,14 @@
       state.editingFactId = null;
       $('save-memory').textContent = '기억 저장';
       $('cancel-edit').hidden = true;
+      $('starter-question').disabled = false;
+      clearStarter();
+    }
+
+    function clearStarter() {
+      $('starter-question').value = '';
+      $('starter-hint').textContent = '하나의 질문을 골라도, 확인한 이야기만 자유롭게 적을 수 있습니다.';
+      $('content').placeholder = '예: 함께 제주도에 갔을 때 성산일출봉을 좋아하셨어요.';
     }
 
     async function loadFacts() {
@@ -236,6 +281,8 @@
           state.saveRequest += 1;
           state.draftRevision += 1;
           state.editingFactId = fact.fact_id;
+          clearStarter();
+          $('starter-question').disabled = true;
           $('category').value = fact.category;
           $('content').value = fact.content;
           $('save-memory').textContent = '기억 수정';
@@ -352,7 +399,18 @@
       $('memory-status').textContent = '수정을 취소했습니다.';
     });
     $('content').addEventListener('input', () => { state.draftRevision += 1; });
-    $('category').addEventListener('change', () => { state.draftRevision += 1; });
+    $('starter-question').addEventListener('change', () => {
+      const selected = prompts[Number($('starter-question').value)];
+      if (!selected || !$('starter-question').value) return;
+      $('category').value = selected[0];
+      $('starter-hint').textContent = selected[1];
+      $('content').placeholder = '확인한 이야기만 짧고 정확하게 적어주세요.';
+      state.draftRevision += 1;
+    });
+    $('category').addEventListener('change', () => {
+      clearStarter();
+      state.draftRevision += 1;
+    });
     $('memory-form').addEventListener('submit', async event => {
       event.preventDefault();
       const generation = state.generation;

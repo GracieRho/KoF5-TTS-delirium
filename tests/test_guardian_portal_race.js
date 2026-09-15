@@ -31,7 +31,8 @@ async function run() {
     'signin-form', 'signin-button', 'signin-status', 'signin-card', 'email', 'password',
     'signup-button', 'signup-status',
     'portal-card', 'portal-status', 'memory-card', 'memory-form', 'memory-status',
-    'links', 'patient', 'facts', 'avoid-facts', 'category', 'content', 'save-memory', 'cancel-edit', 'logout',
+    'links', 'patient', 'facts', 'avoid-facts', 'starter-question', 'starter-hint',
+    'category', 'content', 'save-memory', 'cancel-edit', 'logout',
   ].map(id => [id, new Element(id)]));
   const body = { classList: { add() {}, remove() {} } };
   const document = { body, getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -102,6 +103,16 @@ async function run() {
   firstA.resolve(reply(200, [{ fact_id: 'A-fact', category: 'travel', content: 'A memory' }]));
   await login;
   assert.deepEqual(displayed(), ['B memory'], 'late A read cannot appear on B screen');
+  assert.equal(elements['starter-question'].children.length, 23, 'PRD core questions remain optional');
+  elements.content.value = '지금 쓰던 합성 초안';
+  elements['starter-question'].value = '22';
+  elements['starter-question'].handlers.change();
+  assert.equal(elements.category.value, 'avoid_topic');
+  assert.ok(elements['starter-hint'].textContent.includes('피해야'));
+  assert.equal(elements.content.value, '지금 쓰던 합성 초안', 'starter choice cannot erase a draft');
+  elements.category.value = 'travel';
+  elements.category.handlers.change();
+  assert.equal(elements['starter-question'].value, '', 'manual category choice clears the starter prompt');
 
   elements.patient.value = 'A';
   await elements.patient.handlers.change();
@@ -150,6 +161,7 @@ async function run() {
   elements.facts.children[0].children[2].handlers.click();
   assert.equal(elements.content.value, 'B memory');
   assert.equal(elements['save-memory'].textContent, '기억 수정');
+  assert.equal(elements['starter-question'].disabled, true, 'editing does not override a saved fact with onboarding prompt');
   elements.category.value = 'avoid_topic';
   elements.category.handlers.change();
   elements.content.value = '가상으로 피할 주제';
@@ -164,6 +176,7 @@ async function run() {
   assert.equal(elements['avoid-facts'].children[0].children[1].textContent, '가상으로 피할 주제');
   assert.equal(elements['memory-status'].textContent, '확인한 기억을 수정했습니다.');
   assert.equal(elements['cancel-edit'].hidden, true);
+  assert.equal(elements['starter-question'].disabled, false);
 
   elements['avoid-facts'].children[0].children[2].handlers.click();
   elements.content.value = '철회된 연결에서 저장 불가';
@@ -213,6 +226,9 @@ async function run() {
   assert.equal(elements['memory-card'].hidden, true, 'account without verified links sees no memory');
   assert.equal(elements.patient.hidden, true, 'account without verified links sees no patient selector');
   assert.equal(aReads, readsBeforeLogin, 'unlinked account does not request family facts');
+  elements.content.value = '연결 없는 합성 초안';
+  await submit(elements['memory-form'].handlers.submit);
+  assert.equal(posts.length, 3, 'unlinked account cannot save a family memory from the screen');
 
   elements.logout.handlers.click();
   elements.email.value = 'new-guardian@example.invalid';
