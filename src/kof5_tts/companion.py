@@ -106,6 +106,8 @@ def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
         return "그 시간은 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
     if any(word in transcript for word in ("며칠", "날짜")):
         return orientation_date(now)
+    if transcript.strip().rstrip(".,!? ") == "수민아":
+        return "응, 왜?"
     # ponytail: keyword policy covers only internal synthetic cases; clinical review and measured safety eval precede patient use.
     return None
 

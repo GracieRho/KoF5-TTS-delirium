@@ -59,8 +59,6 @@ def _reply(event: str, transcript: str, now: datetime) -> str | None:
     override = policy_reply(transcript, event, now)
     if override is not None:
         return override
-    if transcript.strip().startswith("수민아"):
-        return "응, 왜?"
     facts = relevant_facts([FAMILY_FACT], SYNTHETIC_PATIENT, "family_context", transcript, now)
     return facts[0].content if facts else "지금 확인된 정보가 없어서 모르겠어."
 

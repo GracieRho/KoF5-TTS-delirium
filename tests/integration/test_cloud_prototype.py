@@ -134,6 +134,27 @@ class CloudPrototypeTests(unittest.TestCase):
                 else:
                     self.assertIn(expected_reply, result[1])
 
+    def test_directed_name_activation_reaches_tts_without_llm(self) -> None:
+        hosts = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.deepgram.com":
+                return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                    {"transcript": "수민아?"},
+                ]}]}})
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("directed name activation must not call LLM")
+
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            result = run_synthetic_pipeline(
+                client, SYNTHETIC_WAV, "2024년 5월 제주도 여행",
+                CloudCredentials("d", "o", "e", "v", True),
+            )
+        self.assertEqual(result, ("수민아?", "응, 왜?", b"synthetic-mp3"))
+        self.assertEqual(hosts, ["api.deepgram.com", "api.elevenlabs.io"])
+
     def test_credentials_repr_and_incomplete_llm_response(self) -> None:
         credentials = CloudCredentials("secret-d", "secret-o", "secret-e", "voice-test", True)
         self.assertNotIn("secret-", repr(credentials))
