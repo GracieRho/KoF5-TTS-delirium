@@ -122,7 +122,12 @@ class CloudPrototypeTests(unittest.TestCase):
                 )
                 self.assertIn("확인된 정보가 없어서", reply)
                 self.assertEqual(audio, b"synthetic-mp3")
-        self.assertEqual(hosts, ["api.elevenlabs.io"] * 3)
+            reply, audio = run_synthetic_text_pipeline(
+                client, "우리 여행 이야기해줘", "DIRECTED", "", credentials,
+            )
+            self.assertIn("확인된 정보가 없어서", reply)
+            self.assertEqual(audio, b"synthetic-mp3")
+        self.assertEqual(hosts, ["api.elevenlabs.io"] * 4)
 
     def test_llm_extra_hospital_or_date_claim_does_not_reach_tts(self) -> None:
         for invented in ("내일 CT 검사를 받으러 가.", "2027년 5월에 제주도 갔었어.",

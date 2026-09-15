@@ -22,6 +22,7 @@ from kof5_tts.cloud_prototype import (
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
 SYNTHETIC_PATIENT = "synthetic_patient"
+SYNTHETIC_DB_PATIENT = "00000000-0000-4000-8000-000000000975"
 FAMILY_FACT = Fact(
     SYNTHETIC_PATIENT,
     "family_context",
@@ -130,6 +131,56 @@ def _internal_demo_credentials(request: Request) -> CloudCredentials:
         raise HTTPException(status_code=503, detail="Hosted 공급자 설정이 필요합니다") from exc
 
 
+def _device_bearer(request: Request) -> str:
+    supplied = request.headers.get("authorization", "")
+    if not re.fullmatch(r"Bearer [A-Za-z0-9._-]{40,8192}", supplied):
+        raise HTTPException(status_code=401, detail="기기 로그인이 필요합니다")
+    return supplied
+
+
+async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
+    config = guardian_config()
+    bearer = _device_bearer(request)
+    headers = {
+        "apikey": config["publishable_key"], "Authorization": bearer,
+        "Accept-Profile": "api", "Content-Profile": "api",
+    }
+    url = config["url"]
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            context = await client.get(
+                f"{url}/rest/v1/patient_device_context",
+                params={"select": "patient_id,encounter_id", "patient_id": f"eq.{patient_id}", "limit": 1},
+                headers=headers,
+            )
+            if context.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            context.raise_for_status()
+            rows = context.json()
+            if (not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict)
+                    or rows[0].get("patient_id") != patient_id
+                    or not isinstance(rows[0].get("encounter_id"), str)):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            search = await client.post(
+                f"{url}/rest/v1/rpc/patient_family_search",
+                json={"p_patient_id": patient_id, "p_term": term}, headers=headers,
+            )
+            if search.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="가족 기억 접근이 중단됐습니다")
+            search.raise_for_status()
+            facts = search.json()
+            if not isinstance(facts, list) or len(facts) > 3 or any(
+                not isinstance(row, dict) or not isinstance(row.get("content"), str)
+                or not 1 <= len(row["content"]) <= 1000 for row in facts
+            ):
+                raise ValueError("family memory response is invalid")
+            return "\n".join(row["content"] for row in facts)
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+        raise HTTPException(status_code=503, detail="기기 권한·가족 기억 조회가 실패했습니다") from None
+
+
 @app.post("/internal/synthetic/audio", include_in_schema=False)
 async def synthetic_audio(request: Request) -> dict[str, str | None]:
     """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
@@ -161,10 +212,7 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
     }
 
 
-@app.post("/internal/synthetic/text", include_in_schema=False)
-async def synthetic_text(request: Request) -> dict[str, str | None]:
-    """Internal text-only iPad path; candidate PCM stays on the device."""
-    credentials = _internal_demo_credentials(request)
+async def _read_text_turn(request: Request) -> SpeechTurn:
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         raise HTTPException(status_code=415, detail="JSON 전사만 허용합니다")
     body = bytearray()
@@ -178,11 +226,46 @@ async def synthetic_text(request: Request) -> dict[str, str | None]:
         raise HTTPException(status_code=422, detail="짧은 한국어 전사와 활성화 판정이 필요합니다") from None
     if not speech.transcript.strip():
         raise HTTPException(status_code=422, detail="빈 전사는 처리하지 않습니다")
+    return speech
+
+
+@app.post("/internal/synthetic/text", include_in_schema=False)
+async def synthetic_text(request: Request) -> dict[str, str | None]:
+    """Internal text-only iPad path; candidate PCM stays on the device."""
+    credentials = _internal_demo_credentials(request)
+    speech = await _read_text_turn(request)
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
             return run_synthetic_text_pipeline(client, speech.transcript, speech.label, FAMILY_FACT.content,
                                                credentials)
+
+    try:
+        reply, audio = await run_in_threadpool(run)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="글·음성 공급자 처리가 실패했습니다") from None
+    return {
+        "transcript": speech.transcript,
+        "reply": reply,
+        "audio_mp3_base64": b64encode(audio).decode("ascii") if audio else None,
+    }
+
+
+@app.post("/internal/synthetic/paired/{patient_id}/text", include_in_schema=False)
+async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, str | None]:
+    """Paired device JWT/RLS, refreshed family facts and text-only synthetic turn."""
+    if patient_id != SYNTHETIC_DB_PATIENT:
+        raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
+    credentials = _internal_demo_credentials(request)
+    speech = await _read_text_turn(request)
+    # No family text reaches hosted providers before the device is rechecked each turn.
+    known_fact = await _paired_memory(request, patient_id, speech.transcript)
+
+    def run() -> tuple[str | None, bytes | None]:
+        with httpx.Client(timeout=20) as client:
+            return run_synthetic_text_pipeline(
+                client, speech.transcript, speech.label, known_fact, credentials,
+            )
 
     try:
         reply, audio = await run_in_threadpool(run)

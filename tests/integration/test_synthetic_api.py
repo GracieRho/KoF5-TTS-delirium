@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import unittest
@@ -13,7 +14,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from kof5_tts.api import app  # noqa: E402
+from kof5_tts.api import SYNTHETIC_DB_PATIENT, app  # noqa: E402
 from tests.synthetic_wav import SYNTHETIC_WAV  # noqa: E402
 
 
@@ -264,6 +265,68 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(result.json(), {"transcript": "수민아?", "reply": "응, 왜?",
                                               "audio_mp3_base64": "c3ludGhldGljLW1wMw=="})
             self.assertEqual(pipeline.call_count, 1)
+
+    def test_paired_device_rechecks_memory_before_hosted_turn(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {
+            "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+            "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {
+            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+            "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
+        }
+        calls = []
+        assigned = True
+        memory_rows = [{"content": "2024년 5월 제주도에 함께 갔었다."}]
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append((request.url.path, request.headers.get("authorization")))
+            self.assertEqual(request.headers["apikey"], "sb_publishable_local")
+            if request.url.path.endswith("/patient_device_context"):
+                self.assertEqual(request.headers["accept-profile"], "api")
+                return httpx.Response(200, json=[{
+                    "patient_id": SYNTHETIC_DB_PATIENT, "encounter_id": "synthetic-encounter",
+                }] if assigned else [])
+            if request.url.path.endswith("/patient_family_search"):
+                self.assertEqual(request.headers["content-profile"], "api")
+                self.assertEqual(json.loads(request.read()), {
+                    "p_patient_id": SYNTHETIC_DB_PATIENT, "p_term": "제주도 언제 갔었어?",
+                })
+                return httpx.Response(200, json=memory_rows)
+            raise AssertionError("unexpected Supabase route")
+
+        async_client_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+        ), patch(
+            "kof5_tts.api.run_synthetic_text_pipeline", return_value=("2024년 5월에 갔었어.", b"mp3")
+        ) as pipeline:
+            self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
+                                              json={"transcript": "제주도 언제 갔었어?", "label": "DIRECTED"},
+                                              headers=headers).status_code, 404)
+            self.assertEqual(self.client.post(path, json={"transcript": "제주도 언제 갔었어?",
+                                                          "label": "DIRECTED"},
+                                              headers={k: v for k, v in headers.items()
+                                                       if k != "Authorization"}).status_code, 401)
+            pipeline.assert_not_called()
+            turn = {"transcript": "제주도 언제 갔었어?", "label": "DIRECTED"}
+            result = self.client.post(path, json=turn, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(pipeline.call_args.args[3], "2024년 5월 제주도에 함께 갔었다.")
+            self.assertEqual(result.json()["audio_mp3_base64"], "bXAz")
+            self.assertEqual(len(calls), 2)
+            memory_rows = []
+            self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_args.args[3], "", "each turn gets fresh memory")
+            assigned = False
+            self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
+            self.assertEqual(pipeline.call_count, 2, "revoked device cannot use stale memory")
 
 
 if __name__ == "__main__":

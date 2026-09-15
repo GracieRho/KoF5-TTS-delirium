@@ -278,7 +278,7 @@ def run_synthetic_text_pipeline(
         return None, None
     reply = policy_reply(transcript, event, now)
     if reply is None:
-        if _unsupported_fact_question(transcript, known_fact):
+        if not known_fact.strip() or _unsupported_fact_question(transcript, known_fact):
             reply = "지금 확인된 정보가 없어서 모르겠어. 의료진이나 보호자에게 확인해주세요."
         else:
             # ponytail: lexical grounding is an internal-test ceiling; measured safety eval precedes patients.
