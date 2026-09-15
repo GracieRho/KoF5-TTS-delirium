@@ -41,7 +41,7 @@ class LocalHttpSmokeBoundaryTest(unittest.TestCase):
                 raise TimeoutError("response lost after server created account")
             return 204, None
 
-        keys = {"API_URL": "http://127.0.0.1:54341", "ANON_KEY": "local-public", "SERVICE_ROLE_KEY": "local-admin"}
+        keys = {"API_URL": "http://127.0.0.1:54341", "PUBLISHABLE_KEY": "sb_publishable_local", "SERVICE_ROLE_KEY": "local-admin"}
         with patch.object(smoke, "local_keys", return_value=keys), \
              patch.object(smoke, "uuid4", side_effect=[patient, email_suffix]), \
              patch.object(smoke, "sql", side_effect=fake_sql), \

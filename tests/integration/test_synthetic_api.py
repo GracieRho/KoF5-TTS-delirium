@@ -98,6 +98,43 @@ class SyntheticApiTests(unittest.TestCase):
         }).status_code, 409)
         self.assertEqual(self.client.post(f"{root}/end").json()["state"], "IDLE")
 
+    def test_guardian_portal_exposes_only_a_dedicated_public_supabase_config(self) -> None:
+        portal = self.client.get("/guardian")
+        self.assertEqual(portal.status_code, 200)
+        self.assertIn("보호자 로그인", portal.text)
+        env = {
+            "KOF5_SUPABASE_URL": "", "KOF5_SUPABASE_PUBLISHABLE_KEY": "",
+            "KOF5_SUPABASE_PROJECT_REF": "", "VERCEL": "",
+        }
+        with patch.dict(os.environ, env):
+            self.assertEqual(self.client.get("/guardian/config").status_code, 503)
+        with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+                                          "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+                                          "SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
+            config = self.client.get("/guardian/config")
+            self.assertEqual(config.json(), {
+                "url": "http://127.0.0.1:54341", "publishable_key": "sb_publishable_local",
+            })
+            self.assertNotIn("sb_secret_never_return", config.text)
+        with patch.dict(os.environ, {**env, "VERCEL": "1", "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+                                          "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local"}):
+            self.assertEqual(self.client.get("/guardian/config").status_code, 503)
+        ref = "abcdefghijklmnopqrst"
+        with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": f"https://{ref}.supabase.co",
+                                          "KOF5_SUPABASE_PROJECT_REF": ref,
+                                          "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_remote"}):
+            self.assertEqual(self.client.get("/guardian/config").json(), {
+                "url": f"https://{ref}.supabase.co", "publishable_key": "sb_publishable_remote",
+            })
+        with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": f"https://{ref}.supabase.co",
+                                          "KOF5_SUPABASE_PROJECT_REF": "otherproject",
+                                          "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_remote"}):
+            self.assertEqual(self.client.get("/guardian/config").status_code, 503)
+        with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": "https://dqjplezbvtjbsunabxbg.supabase.co",
+                                          "KOF5_SUPABASE_PROJECT_REF": "dqjplezbvtjbsunabxbg",
+                                          "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_shared"}):
+            self.assertEqual(self.client.get("/guardian/config").status_code, 503)
+
     def test_stale_session_expires_before_uncertain_turn(self) -> None:
         root = "/patients/synthetic_patient/conversation"
         self.client.post(f"{root}/start", json={"transcript": "수민아?", "label": "DIRECTED"})

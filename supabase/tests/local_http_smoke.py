@@ -34,13 +34,15 @@ def verify_local_target(keys: dict[str, str]) -> None:
     api = urlparse(keys["API_URL"])
     if (config["project_id"] != PROJECT or api.scheme != "http"
             or api.hostname != "127.0.0.1" or api.port != config["api"]["port"]
-            or api.port != 54341):
+            or api.port != 54341 or not keys["PUBLISHABLE_KEY"].startswith("sb_publishable_")):
         raise ValueError("작업 전용 로컬 Supabase API 주소가 아닙니다")
 
 
 def request(url: str, method: str, key: str, token: str | None = None,
             payload: dict | None = None, schema: str | None = None) -> tuple[int, object]:
-    headers = {"apikey": key, "Authorization": f"Bearer {token or key}"}
+    headers = {"apikey": key}
+    if token or key.startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {token or key}"
     if schema:
         headers["Content-Profile" if method == "POST" else "Accept-Profile"] = schema
     body = None if payload is None else json.dumps(payload).encode()
@@ -69,7 +71,7 @@ def main() -> None:
     keys = local_keys()
     verify_local_target(keys)
     url = keys["API_URL"]
-    public = keys["ANON_KEY"]
+    public = keys["PUBLISHABLE_KEY"]
     admin = keys["SERVICE_ROLE_KEY"]
     patient = uuid4()
     user_id: UUID | None = None

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from hmac import compare_digest
 import os
 from pathlib import Path
+import re
 from typing import Literal
 
 import httpx
@@ -46,6 +47,26 @@ def hospital_demo() -> FileResponse:
 @app.get("/demo/guardian", include_in_schema=False)
 def guardian_demo() -> FileResponse:
     return FileResponse(Path(__file__).with_name("synthetic_guardian_demo.html"))
+
+
+@app.get("/guardian", include_in_schema=False)
+def guardian_portal() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("guardian_portal.html"))
+
+
+@app.get("/guardian/config", include_in_schema=False)
+def guardian_config() -> dict[str, str]:
+    """Public browser configuration; never expose a Supabase secret key."""
+    url = os.environ.get("KOF5_SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("KOF5_SUPABASE_PUBLISHABLE_KEY", "")
+    project_ref = os.environ.get("KOF5_SUPABASE_PROJECT_REF", "")
+    local = url == "http://127.0.0.1:54341" and not os.environ.get("VERCEL")
+    remote = (bool(re.fullmatch(r"[a-z0-9]+", project_ref))
+              and project_ref != "dqjplezbvtjbsunabxbg"
+              and url == f"https://{project_ref}.supabase.co")
+    if not (local or remote) or not key.startswith("sb_publishable_"):
+        raise HTTPException(status_code=503, detail="전용 Supabase 로그인 연결이 아직 준비되지 않았습니다")
+    return {"url": url, "publishable_key": key}
 
 
 class SpeechTurn(BaseModel):
