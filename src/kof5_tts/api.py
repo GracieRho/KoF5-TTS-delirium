@@ -43,6 +43,11 @@ def hospital_demo() -> FileResponse:
     return FileResponse(Path(__file__).with_name("synthetic_hospital_demo.html"))
 
 
+@app.get("/demo/guardian", include_in_schema=False)
+def guardian_demo() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("synthetic_guardian_demo.html"))
+
+
 class SpeechTurn(BaseModel):
     transcript: str = Field(min_length=1, max_length=500)
     label: Literal["DIRECTED", "AMBIENT", "UNCERTAIN"]

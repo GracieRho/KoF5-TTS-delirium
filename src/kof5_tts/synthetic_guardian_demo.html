@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>보호자 기억 입력 · 내부 시험</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; background: #f7f9f8; color: #172d2a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; word-break: keep-all; overflow-wrap: anywhere; }
+    header { padding: 32px clamp(20px, 4vw, 64px); background: #fff; border-bottom: 1px solid #e2e8e5; }
+    header > * { max-width: 1120px; margin-left: auto; margin-right: auto; }
+    h1 { margin: 14px auto 8px; font-size: clamp(30px, 3.6vw, 42px); letter-spacing: -.04em; }
+    h2 { margin: 0 0 16px; font-size: 23px; letter-spacing: -.025em; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    p { line-height: 1.55; }
+    a { color: #225d54; text-underline-offset: 3px; }
+    .badge { color: #276057; font-size: 14px; font-weight: 800; letter-spacing: .04em; }
+    .muted { color: #566562; font-size: 17px; }
+    .notice { color: #596965; font-size: 14px; }
+    .warning { padding: 12px 16px; border-left: 3px solid #ad6d42; background: #fbf7f2; }
+    main { max-width: 1160px; margin: 28px auto; padding: 0 20px; display: grid; grid-template-columns: minmax(300px, 1fr) minmax(340px, 1fr); gap: 20px; }
+    section { padding: clamp(24px, 3vw, 36px); background: white; border: 1px solid #e2e8e5; border-radius: 20px; }
+    .full { grid-column: 1 / -1; }
+    .facts { display: grid; gap: 12px; margin-top: 20px; }
+    .fact { padding: 18px; border: 1px solid #d9e4df; border-radius: 12px; background: #fafcfb; }
+    .fact.avoid { border-left: 4px solid #ad6d42; }
+    .fact p { margin: 0 0 10px; }
+    .meta { color: #566562; font-size: 14px; }
+    label { display: block; margin: 18px 0 8px; font-weight: 700; }
+    select { width: 100%; min-height: 50px; padding: 11px; font: inherit; color: inherit; border: 1px solid #bacbc5; border-radius: 10px; background: #fff; }
+    button { min-height: 48px; margin-top: 20px; border: 0; border-radius: 10px; padding: 11px 18px; font: inherit; font-weight: 700; color: white; background: #173e38; cursor: pointer; }
+    button:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #5da58b; outline-offset: 2px; }
+    .status { min-height: 48px; margin-top: 20px; padding: 14px 18px; border-left: 3px solid #27685d; border-radius: 8px; background: #eef6f2; line-height: 1.5; }
+    .steps { margin: 18px 0 0; padding-left: 24px; line-height: 1.8; }
+    .preview { padding: 18px; border-radius: 12px; background: #f6f9f7; }
+    .preview ul { margin-bottom: 0; padding-left: 22px; line-height: 1.7; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { header { padding: 24px 20px; } main { padding: 0 12px; } section { padding: 22px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="badge">팀 내부 · 합성 환자 정보만</span>
+    <h1>보호자 기억 입력 화면 시험</h1>
+    <p class="muted">가족이 아는 이야기와 병원이 확인하는 사실을 분리하는 입력 흐름을 살펴봅니다.</p>
+    <p class="notice warning">이 화면에는 로그인·환자 연결·저장·동의 검증이 없습니다. 아래 내용은 가상 예시이며 실제 가족 정보나 음성을 입력하지 마세요.</p>
+    <p><a href="/demo">합성 대화 화면</a> · <a href="/demo/hospital">병원 등록 화면 시험</a></p>
+  </header>
+  <main>
+    <section aria-labelledby="memory-title">
+      <h2 id="memory-title">합성 가족 기억</h2>
+      <p class="notice">보호자가 확인한 이야기만 표시합니다. 병실·검사·약물 정보는 보호자 기억에 넣지 않습니다.</p>
+      <div id="facts" class="facts"></div>
+    </section>
+    <section aria-labelledby="onboarding-title">
+      <h2 id="onboarding-title">기억 입력 흐름</h2>
+      <p>긴 설문 대신 관계·좋아하는 것·피해야 할 주제부터 묻습니다.</p>
+      <form id="memory-form">
+        <label for="category">가상 질문</label>
+        <select id="category">
+          <option value="travel">함께 갔던 곳은 어디인가요?</option>
+          <option value="food">좋아하는 음식은 무엇인가요?</option>
+          <option value="avoid_topic">피해야 할 이야기가 있나요?</option>
+        </select>
+        <label for="answer">가상 답변</label>
+        <select id="answer"></select>
+        <button type="submit">예시 기억에 반영</button>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite">예시를 선택해 화면에서만 바꿔볼 수 있습니다.</div>
+      <p class="notice">화면을 새로고침하면 예시는 초기화됩니다. 서버로 전송하거나 저장하지 않습니다.</p>
+    </section>
+    <section class="full" aria-labelledby="boundary-title">
+      <h2 id="boundary-title">대화에 쓰일 정보 확인</h2>
+      <div class="preview">
+        <h3>가족 기억 후보 · 피해야 할 주제 제외</h3>
+        <ul id="preview-list"></ul>
+      </div>
+      <h3 style="margin-top: 24px">보호자 음성 등록</h3>
+      <ol class="steps">
+        <li>보호자 본인·환자 연결과 동의 범위를 확인합니다.</li>
+        <li>평상시·다정한·천천히 또렷한 말투를 각각 20~30초 녹음합니다.</li>
+        <li>품질·복제 음성 고지·삭제 경로를 확인한 뒤 활성화합니다.</li>
+      </ol>
+      <p class="notice">음성 등록은 아직 구현되지 않았습니다. 환자 목소리 특징 등록과 보호자 복제 음성 등록은 서로 다른 동의 범위입니다.</p>
+    </section>
+  </main>
+  <script>
+    const examples = {
+      travel: ['2024년 5월 수민과 제주도 여행을 갔고 흑돼지를 좋아했다.', '수민과 성산일출봉을 함께 걸었던 일을 자주 이야기했다.'],
+      food: ['흑돼지를 좋아했다.', '따뜻한 미역국을 좋아했다.'],
+      avoid_topic: ['퇴원 날짜를 확정된 것처럼 말하지 않는다.', '가족의 걱정스러운 소식을 먼저 꺼내지 않는다.'],
+    };
+    const facts = [
+      { category: 'relationship', content: '수민은 환자의 딸이다.' },
+      { category: 'travel', content: examples.travel[0] },
+      { category: 'avoid_topic', content: examples.avoid_topic[0] },
+    ];
+    const category = document.querySelector('#category');
+    const answer = document.querySelector('#answer');
+    const list = document.querySelector('#facts');
+    const preview = document.querySelector('#preview-list');
+    const status = document.querySelector('#status');
+    const titles = { relationship: '관계', travel: '함께한 여행', food: '좋아하는 음식', avoid_topic: '피해야 할 주제' };
+
+    function answers() {
+      answer.replaceChildren();
+      for (const content of examples[category.value]) {
+        const option = document.createElement('option');
+        option.value = content;
+        option.textContent = content;
+        answer.append(option);
+      }
+    }
+    function render() {
+      list.replaceChildren();
+      preview.replaceChildren();
+      for (const fact of facts) {
+        const card = document.createElement('article');
+        card.className = fact.category === 'avoid_topic' ? 'fact avoid' : 'fact';
+        const heading = document.createElement('h3');
+        heading.textContent = titles[fact.category];
+        const body = document.createElement('p');
+        body.textContent = fact.content;
+        const meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = '가상 보호자 확인 · 화면 예시';
+        card.append(heading, body, meta);
+        list.append(card);
+        if (fact.category !== 'avoid_topic') {
+          const item = document.createElement('li');
+          item.textContent = fact.content;
+          preview.append(item);
+        }
+      }
+    }
+    category.addEventListener('change', answers);
+    document.querySelector('#memory-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const existing = facts.find(fact => fact.category === category.value);
+      if (existing) existing.content = answer.value;
+      else facts.push({ category: category.value, content: answer.value });
+      render();
+      status.textContent = '가상 가족 기억을 화면에서만 바꿨습니다. 피해야 할 주제는 대화 후보에서 제외됩니다.';
+    });
+    answers();
+    render();
+  </script>
+</body>
+</html>

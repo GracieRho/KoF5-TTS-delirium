@@ -62,6 +62,7 @@ uv run python scripts/run_backend.py
 `http://127.0.0.1:8765/health`는 현재 `synthetic_demo_only`를 반환합니다. 환자 ID는 `synthetic_patient`만 허용하며, 일반 대화 API는 합성 텍스트 시험에 한정됩니다. 실제 환자 데이터와 임상 시험에는 사용하지 않습니다.
 브라우저에서 `http://127.0.0.1:8765/demo`를 열면 팀 내부 합성 발화를 입력하고 대화 상태·응답·거부·주변 발화 폐기를 확인할 수 있습니다. 화면의 날짜·시간은 한국 시간으로 표시됩니다.
 `http://127.0.0.1:8765/demo/hospital`은 가상 환자·입원 등록과 동의 상태에 따른 약 30초 자가 음성 채집 화면을 시험합니다. 입력과 오디오는 브라우저 메모리에서만 처리하고 서버로 보내거나 환자 화자 특징으로 등록하지 않습니다.
+`http://127.0.0.1:8765/demo/guardian`은 가상 가족 기억을 화면에서만 바꾸고, 피해야 할 주제가 대화 후보에서 제외되는 것을 시험합니다. 보호자 로그인·환자 연결·기억 저장·음성 등록은 연결되지 않았습니다.
 
 내부 오디오 API `POST /internal/synthetic/audio`는 `KOF5_INTERNAL_DEMO_TOKEN`(32자 이상), 공급자 키·voice ID, `VOICE_OWNER_CONSENT_RECORD_ID`가 서버에 설정된 경우에만 열립니다. 요청에는 `X-Internal-Demo-Token`, `X-Synthetic-Material: confirmed`, `Content-Type: audio/wav`가 필요하며, PCM16 WAV 원문(2 MB 이하·30초 이하)을 전송합니다. 응답은 전사·짧은 답·MP3의 base64입니다. 이 확인은 내부 시험자의 선언이며 실제 동의 검증이나 환자 인증이 아닙니다. 오디오는 메모리에서만 처리하고 앱 DB에 저장하지 않습니다. 실제 환자 오디오를 보내지 마세요.
 
