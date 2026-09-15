@@ -789,7 +789,7 @@ class SyntheticApiTests(unittest.TestCase):
             side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
         ), patch("kof5_tts.api.enroll_test_voice", return_value=EnrolledVoice("voice123", True)) as create, patch(
             "kof5_tts.api.delete_test_voice", return_value=None,
-        ) as remove, patch("kof5_tts.api.test_voice_present", return_value=True) as present:
+        ) as remove:
             self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/enroll",
                                               json=enrollment, headers=headers).json(),
                              {"status": "verification_pending", "clone_id": clone_id})
@@ -801,18 +801,24 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(remove.call_count, 1)
             self.assertEqual(calls[-2:], ["synthetic_guardian_voice_request_deletion",
                                           "synthetic_guardian_voice_confirm_remote_absence"])
-            state = "verification_pending"  # Simulate a retry after remote DELETE but uncertain DB confirmation.
-            present.return_value = False
+            state = "verification_pending"  # Prior ack does not authorize skipping a retry DELETE.
+            request = httpx.Request("DELETE", "https://api.elevenlabs.io/v1/voices/voice123")
+            remove.side_effect = httpx.HTTPStatusError("not found", request=request,
+                                                       response=httpx.Response(404, request=request))
+            self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/{clone_id}/delete",
+                                              headers=headers).json(),
+                             {"status": "deletion_pending", "clone_id": clone_id})
+            self.assertEqual(remove.call_count, 2, "404 cannot prove safe deletion")
+            remove.side_effect = None
             self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/{clone_id}/delete",
                                               headers=headers).json(), {"status": "deleted", "clone_id": clone_id})
-            self.assertEqual(remove.call_count, 1, "already absent ID must not be deleted again")
+            self.assertEqual(remove.call_count, 3)
             state = "none"
             withdrawn_during_create = True
-            present.return_value = True
             self.assertEqual(self.client.post(f"/internal/synthetic/guardian/{patient}/voice/enroll",
                                               json=enrollment, headers=headers).json(),
                              {"status": "deleted", "clone_id": clone_id})
-            self.assertEqual(remove.call_count, 2,
+            self.assertEqual(remove.call_count, 4,
                              "late consent withdrawal must start remote deletion immediately")
 
     def test_guardian_voice_upload_gate_and_idempotent_retry_never_post_twice(self) -> None:
@@ -863,6 +869,104 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(seen, ["user", "synthetic_guardian_voice_status",
                                     "synthetic_guardian_voice_begin"])
             provider.assert_not_called()
+
+    def test_pending_create_delete_waits_for_late_exact_id_then_cleans_up(self) -> None:
+        patient = SYNTHETIC_DB_PATIENT
+        clone_id = "00000000-0000-4000-8000-000000000612"
+        guardian = "00000000-0000-4000-8000-000000000613"
+        name = "KoF5 internal self-voice test " + "a" * 32
+        path = f"/internal/synthetic/guardian/{patient}/voice/{clone_id}/delete"
+        env = {"KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+               "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+               "KOF5_SUPABASE_SECRET_KEY": "sb_secret_" + "s" * 32,
+               "ELEVENLABS_API_KEY": "test-eleven"}
+        headers = {"Authorization": "Bearer " + "g" * 40, "X-Synthetic-Material": "confirmed"}
+        calls: list[str] = []
+        db_status = "pending"
+        attached_id: str | None = None
+
+        def hosted(request: httpx.Request) -> httpx.Response:
+            nonlocal db_status, attached_id
+            route = request.url.path.rsplit("/", 1)[-1]
+            calls.append(route)
+            if route == "user":
+                return httpx.Response(200, json={"id": guardian, "is_anonymous": False})
+            if route == "synthetic_guardian_voice_status":
+                return httpx.Response(200, json=[{"authorized": True, "ready": False,
+                                                  "consent_id": None, "clone_id": clone_id,
+                                                  "status": db_status, "provider": "elevenlabs",
+                                                  "provider_name": name}])
+            if route == "synthetic_guardian_voice_request_deletion":
+                db_status = "deletion_pending"
+                return httpx.Response(200, json=[{"authorized": True, "status": db_status,
+                                                  "clone_id": clone_id, "provider_name": name,
+                                                  "voice_id": attached_id}])
+            if route == "synthetic_guardian_voice_provider_result":
+                self.assertEqual(json.loads(request.read()), {
+                    "p_clone_id": clone_id, "p_voice_id": "voice-late",
+                    "p_verification_confirmed": False,
+                })
+                attached_id = "voice-late"
+                return httpx.Response(200, json=[{"authorized": True, "status": "deletion_pending",
+                                                  "clone_id": clone_id, "provider_name": name,
+                                                  "voice_id": attached_id}])
+            if route == "synthetic_guardian_voice_confirm_remote_absence":
+                self.assertEqual(json.loads(request.read())["p_method"], "voice_id_not_found")
+                db_status = "deleted"
+                return httpx.Response(200, json=[{"authorized": True, "status": "deleted",
+                                                  "clone_id": clone_id, "provider_name": name,
+                                                  "voice_id": attached_id}])
+            raise AssertionError("unexpected hosted route")
+
+        async_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_class(transport=httpx.MockTransport(hosted)),
+        ), patch("kof5_tts.api.find_test_voice", side_effect=[None, "voice-late"]) as find, patch(
+            "kof5_tts.api.delete_test_voice", return_value=None,
+        ) as remove, patch(
+            "kof5_tts.api.enroll_test_voice",
+            side_effect=AssertionError("deletion retry must never repeat provider POST"),
+        ):
+            first = self.client.post(path, headers=headers)
+            self.assertEqual(first.json(), {"status": "deletion_pending", "clone_id": clone_id})
+            self.assertNotIn("synthetic_guardian_voice_confirm_remote_absence", calls,
+                             "empty name search cannot prove a slow create absent")
+            remove.assert_not_called()
+            second = self.client.post(path, headers=headers)
+            self.assertEqual(second.json(), {"status": "deleted", "clone_id": clone_id})
+            self.assertEqual(find.call_count, 2)
+            remove.assert_called_once()
+            self.assertEqual(calls[-2:], ["synthetic_guardian_voice_provider_result",
+                                          "synthetic_guardian_voice_confirm_remote_absence"])
+
+    def test_exact_id_delete_requires_ack_even_if_provider_list_is_empty(self) -> None:
+        from kof5_tts.api import _remove_test_clone
+
+        seen: list[str] = []
+        rejected = True
+
+        def provider(request: httpx.Request) -> httpx.Response:
+            nonlocal rejected
+            seen.append(request.method)
+            if request.method == "DELETE":
+                if rejected:
+                    rejected = False
+                    return httpx.Response(404)
+                return httpx.Response(200, json={"status": "ok"})
+            if request.method == "GET":
+                return httpx.Response(200, json={"voices": [], "has_more": False})
+            raise AssertionError("unexpected provider method")
+
+        sync_class = httpx.Client
+        with patch("kof5_tts.api.httpx.Client",
+                   side_effect=lambda **_: sync_class(transport=httpx.MockTransport(provider))):
+            with self.assertRaises(httpx.HTTPStatusError):
+                _remove_test_clone("voice-late", "test-key")
+            self.assertEqual(seen, ["DELETE"], "empty list cannot replace a DELETE ack")
+            self.assertEqual(_remove_test_clone("voice-late", "test-key"), "voice_id_not_found")
+        self.assertEqual(seen, ["DELETE", "DELETE", "GET"],
+                         "acknowledged DELETE must precede exact-ID absence check")
 
 
 if __name__ == "__main__":

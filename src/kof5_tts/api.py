@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from kof5_tts.cloud_prototype import (
     CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice, hospital_fact_question,
-    run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3, test_voice_present,
+    run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
     validate_short_wav,
     validate_test_voice_samples,
 )
@@ -383,18 +383,12 @@ async def _guardian_voice_status(patient_id: str, bearer: str) -> dict:
     return row
 
 
-def _remove_test_clone(name: str, voice_id: str | None, key: str) -> str:
+def _remove_test_clone(voice_id: str, key: str) -> str:
+    if not isinstance(voice_id, str) or not voice_id:
+        raise ValueError("exact provider voice ID is required for deletion")
     with httpx.Client(timeout=30) as client:
-        if isinstance(voice_id, str) and voice_id:
-            if test_voice_present(client, voice_id, key):
-                delete_test_voice(client, voice_id, key)
-            return "voice_id_not_found"
-        found = find_test_voice(client, name, key)
-        if found:
-            delete_test_voice(client, found, key)
-            if find_test_voice(client, name, key) is not None:
-                raise ValueError("provider still lists clone name")
-        return "provider_name_not_found"
+        delete_test_voice(client, voice_id, key)  # DELETE ack, then exact ID absence in the helper.
+        return "voice_id_not_found"
 
 
 async def _confirm_test_clone_absence(clone_id: str, method: str, headers: dict[str, str]) -> bool:
@@ -481,7 +475,7 @@ async def enroll_synthetic_guardian_voice(patient_id: str, request: Request) -> 
         raise HTTPException(status_code=503, detail="공급자 음성 생성 상태를 확인하지 못했습니다")
     if result["status"] == "deletion_pending":
         try:
-            method = await run_in_threadpool(_remove_test_clone, name, voice.voice_id, provider_key)
+            method = await run_in_threadpool(_remove_test_clone, voice.voice_id, provider_key)
             if await _confirm_test_clone_absence(clone_id, method, service_headers):
                 return {"status": "deleted", "clone_id": clone_id}
         except (httpx.HTTPError, ValueError, HTTPException):
@@ -523,6 +517,13 @@ async def reconcile_synthetic_guardian_voice(patient_id: str, clone_id: str, req
         "verification_pending", "deletion_pending"
     }:
         raise HTTPException(status_code=503, detail="공급자 생성 조회 결과를 기록하지 못했습니다")
+    if result["status"] == "deletion_pending":
+        try:
+            method = await run_in_threadpool(_remove_test_clone, voice_id, key)
+            if await _confirm_test_clone_absence(clone_id, method, _service_headers()):
+                return {"status": "deleted", "clone_id": clone_id}
+        except (httpx.HTTPError, ValueError, HTTPException):
+            pass
     return {"status": result["status"], "clone_id": clone_id}
 
 
@@ -554,8 +555,29 @@ async def delete_synthetic_guardian_voice(patient_id: str, clone_id: str, reques
     voice_id = deletion.get("voice_id")
     name = deletion.get("provider_name")
 
+    if not isinstance(voice_id, str) or not voice_id:
+        if not isinstance(name, str) or not re.fullmatch(r"KoF5 internal self-voice test [0-9a-f]{32}", name):
+            raise HTTPException(status_code=503, detail="시험 공급자 이름이 유효하지 않습니다")
+
+        def find() -> str | None:
+            with httpx.Client(timeout=30) as client:
+                return find_test_voice(client, name, key)
+
+        try:
+            voice_id = await run_in_threadpool(find)
+        except (httpx.HTTPError, ValueError):
+            return {"status": "deletion_pending", "clone_id": clone_id}
+        if not voice_id:
+            return {"status": "deletion_pending", "clone_id": clone_id}
+        observed = await _voice_rpc("synthetic_guardian_voice_provider_result", {
+            "p_clone_id": clone_id, "p_voice_id": voice_id,
+            "p_verification_confirmed": False,
+        }, service_headers)
+        if observed.get("authorized") is not True or observed.get("status") != "deletion_pending":
+            raise HTTPException(status_code=503, detail="공급자 음성 ID 기록이 실패했습니다")
+
     try:
-        method = await run_in_threadpool(_remove_test_clone, name, voice_id, key)
+        method = await run_in_threadpool(_remove_test_clone, voice_id, key)
     except (httpx.HTTPError, ValueError):
         return {"status": "deletion_pending", "clone_id": clone_id}
     if not await _confirm_test_clone_absence(clone_id, method, service_headers):
