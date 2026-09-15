@@ -470,8 +470,8 @@
       active: '합성 메타데이터 활성', revoked: '합성 메타데이터 철회', deleted: '합성 메타데이터 삭제' };
 
     function voiceForeground() {
-      return document.visibilityState === 'visible'
-        || (document.visibilityState == null && !document.hidden);
+      return !document.hidden
+        && (document.visibilityState == null || document.visibilityState === 'visible');
     }
 
     function stopPendingVoiceStream() {
