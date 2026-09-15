@@ -71,7 +71,7 @@ uv run python scripts/run_backend.py
 
 내부 오디오 API `POST /internal/synthetic/audio`는 `KOF5_INTERNAL_DEMO_TOKEN`(32자 이상), 공급자 키·voice ID, `VOICE_OWNER_CONSENT_RECORD_ID`가 서버에 설정된 경우에만 열립니다. 요청에는 `X-Internal-Demo-Token`, `X-Synthetic-Material: confirmed`, `Content-Type: audio/wav`가 필요하며, PCM16 WAV 원문(2 MB 이하·30초 이하)을 전송합니다. 응답은 전사·짧은 답·MP3의 base64입니다. 이 확인은 내부 시험자의 선언이며 실제 동의 검증이나 환자 인증이 아닙니다. 오디오는 메모리에서만 처리하고 앱 DB에 저장하지 않습니다. 실제 환자 오디오를 보내지 마세요.
 
-별도 `POST /internal/synthetic/text`는 같은 내부 토큰·합성 자료 확인·시험 음성 소유자 동의 표시를 요구하고, `Content-Type: application/json`의 4 KB 이하 `{"transcript":"...","label":"DIRECTED"}`를 받습니다. 이 경로는 후보 오디오를 받거나 hosted STT를 호출하지 않으며, `AMBIENT`/거부 발화는 음성 응답 없이 폐기합니다. 글은 hosted LLM에, 승인된 짧은 답은 시험 TTS 제공업체에 전달될 수 있습니다. 현재 iPad 화면의 자동 글 전송은 아직 연결되지 않았고, 실제 환자 오디오·글은 안전 게이트 통과 전 보내지 않습니다.
+별도 `POST /internal/synthetic/text`는 같은 내부 토큰·합성 자료 확인·시험 음성 소유자 동의 표시를 요구하고, `Content-Type: application/json`의 4 KB 이하 `{"transcript":"...","label":"DIRECTED"}`를 받습니다. 이 경로는 후보 오디오를 받거나 hosted STT를 호출하지 않으며, `AMBIENT`/거부 발화는 음성 응답 없이 폐기합니다. 글은 hosted LLM에, 승인된 짧은 답은 시험 TTS 제공업체에 전달될 수 있습니다. iPad 내부 시험 화면은 시험자 본인 음성·기기 내 전사·별도 스위치를 켠 경우에만 이름 호출과 짧은 후속 질문의 글을 이 API로 보냅니다. 이름/질문 규칙은 TV·의료진 발화나 환자 화자를 구분하지 못하며, 재생 후 마이크도 수동으로 다시 켜야 합니다. 실제 환자 오디오·글은 안전 게이트 통과 전 보내지 않습니다.
 
 루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
 
