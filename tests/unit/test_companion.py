@@ -4,6 +4,7 @@ import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -11,6 +12,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from kof5_tts.companion import (  # noqa: E402
     ConversationSession,
     Fact,
+    HospitalMessage,
+    due_hospital_message,
     orientation_date,
     relevant_facts,
 )
@@ -80,6 +83,30 @@ class ConversationSessionTests(unittest.TestCase):
                          "오늘은 9월 15일 화요일이야.")
         self.assertEqual(orientation_date(datetime(2026, 9, 14, 16, tzinfo=timezone.utc)),
                          "오늘은 9월 15일 화요일이야.")
+
+    def test_approved_hospital_text_and_risk_event_never_claim_staff_ack(self) -> None:
+        now = datetime(2026, 9, 15, 15, 20, tzinfo=ZoneInfo("Asia/Seoul"))
+        session = ConversationSession()
+        message = HospitalMessage(
+            "synthetic_patient", "오늘 오후 4시에 CT 촬영 예정입니다.\n준비해주세요.",
+            "synthetic_staff", now + timedelta(minutes=1),
+        )
+        self.assertIsNone(due_hospital_message(session, message, "synthetic_patient", now))
+        with self.assertRaises(ValueError):
+            due_hospital_message(session, message, "other_patient", now + timedelta(minutes=1))
+        self.assertEqual(
+            due_hospital_message(session, message, "synthetic_patient", now + timedelta(minutes=1)),
+            message.text,
+        )
+        self.assertEqual(session.state, "ACTIVE_LISTENING")
+        session.speaking()
+        self.assertEqual(
+            session.hear("숨을 못 쉬겠어", "UNCERTAIN", now + timedelta(minutes=1)),
+            "barge_in_risk_candidate",
+        )
+        self.assertFalse(session.proactive_paused)
+        with self.assertRaises(ValueError):
+            HospitalMessage("synthetic_patient", "CT 일정", "", now)
 
 
 if __name__ == "__main__":

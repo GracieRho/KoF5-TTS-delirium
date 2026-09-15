@@ -12,6 +12,7 @@ VALID_LABELS = {"DIRECTED", "AMBIENT", "UNCERTAIN"}
 # ponytail: labels come from a later activation layer; add scored STT/context signals after measured false activations.
 DISSENT_PHRASES = ("이거 꺼", "말 걸지 마", "대화 그만")
 END_PHRASES = ("나 좀 잘게", "이제 됐다", "나중에 얘기하자")
+RISK_PHRASES = ("숨을 못 쉬", "숨이 너무 차", "가슴이 아파", "넘어졌", "살려줘")
 WEEKDAYS = ("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
 
@@ -76,6 +77,33 @@ def orientation_date(now: datetime, zone: str = "Asia/Seoul") -> str:
     return f"오늘은 {local.month}월 {local.day}일 {WEEKDAYS[local.weekday()]}이야."
 
 
+@dataclass(frozen=True)
+class HospitalMessage:
+    patient_id: str
+    text: str
+    approved_by_staff_id: str
+    due_at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.patient_id or not self.text.strip() or not self.approved_by_staff_id:
+            raise ValueError("hospital message requires patient, text and staff approval")
+        if self.due_at.utcoffset() is None:
+            raise ValueError("hospital message due time must include a timezone")
+
+
+def due_hospital_message(
+    session: ConversationSession, message: HospitalMessage, patient_id: str, now: datetime
+) -> str | None:
+    """Start delivery only when due and return the approved source text unchanged."""
+    if now.utcoffset() is None:
+        raise ValueError("delivery time must include a timezone")
+    if message.patient_id != patient_id:
+        raise ValueError("hospital message belongs to another patient")
+    if now < message.due_at or not session.start_scheduled(now):
+        return None
+    return message.text
+
+
 @dataclass
 class ConversationSession:
     state: str = "IDLE"
@@ -102,6 +130,9 @@ class ConversationSession:
         was_speaking = self.state == "SPEAKING"
         self.state = "ACTIVE_LISTENING"
         self.last_activity = now
+        # ponytail: keywords only flag an auxiliary candidate; add clinical review of recall before any alert pathway.
+        if any(phrase in speech for phrase in RISK_PHRASES):
+            return "barge_in_risk_candidate" if was_speaking else "auxiliary_alert_candidate"
         return "barge_in" if was_speaking else "turn"
 
     def start_scheduled(self, now: datetime) -> bool:
