@@ -28,9 +28,12 @@ def main() -> None:
     url, public, admin = keys["API_URL"], keys["PUBLISHABLE_KEY"], keys["SERVICE_ROLE_KEY"]
     assert sql(f"SELECT count(*) FROM kof5.hospital_patient WHERE patient_id='{PATIENT}'") == "0"
     created_users: list[UUID] = []
+    created_emails: list[str] = []
+    anonymous_marker = uuid4().hex
 
     def create_user(name: str) -> tuple[UUID, str]:
         email = f"kof5-{name}-{uuid4().hex}@example.invalid"
+        created_emails.append(email)
         password = secrets.token_urlsafe(24)
         status, user = request(f"{url}/auth/v1/admin/users", "POST", admin,
                                payload={"email": email, "password": password,
@@ -48,13 +51,16 @@ def main() -> None:
         unassigned, unassigned_token = create_user("unassigned")
         guardian, _ = create_user("guardian")
         status, anonymous = request(f"{url}/auth/v1/signup", "POST", public,
-                                    payload={"data": {},
+                                    payload={"data": {"kof5_synthetic_run": anonymous_marker},
                                              "gotrue_meta_security": {"captcha_token": None}})
         assert status == 200 and anonymous["user"]["is_anonymous"] is True, \
             f"task-local anonymous Auth failed: {status}"
         device = UUID(anonymous["user"]["id"])
         created_users.append(device)
         device_token = anonymous["access_token"]
+        assert sql("SELECT raw_user_meta_data ->> 'kof5_synthetic_run' "
+                   f"FROM auth.users WHERE id='{device}';") == anonymous_marker, \
+            "anonymous response-loss cleanup marker was not stored"
 
         sql(f"""
             INSERT INTO kof5.hospital_patient
@@ -249,21 +255,32 @@ def main() -> None:
             hosted.assert_not_called()
         print("Task-local Auth → staff pair → atomic device memory/FastAPI → revocation: PASS")
     finally:
-        sql(f"""
-            DELETE FROM kof5.patient_device_assignment WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.family_fact WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.patient_guardian_link WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.patient_voice_profile WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.consent_record WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.hospital_staff_assignment WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.hospital_staff_membership WHERE hospital_ref='{HOSPITAL}';
-            DELETE FROM kof5.hospital_encounter WHERE patient_id='{PATIENT}';
-            DELETE FROM kof5.hospital_registry_activation WHERE hospital_ref='{HOSPITAL}';
-            DELETE FROM kof5.hospital_patient WHERE patient_id='{PATIENT}';
-        """)
-        for user_id in created_users:
-            status, _ = request(f"{url}/auth/v1/admin/users/{user_id}", "DELETE", admin)
-            assert status in (200, 204), f"local synthetic Auth cleanup failed: {status}"
+        try:
+            sql(f"""
+                DELETE FROM kof5.patient_device_assignment WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.family_fact WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.patient_guardian_link WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.patient_voice_profile WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.consent_record WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.hospital_staff_assignment WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.hospital_staff_membership WHERE hospital_ref='{HOSPITAL}';
+                DELETE FROM kof5.hospital_encounter WHERE patient_id='{PATIENT}';
+                DELETE FROM kof5.hospital_registry_activation WHERE hospital_ref='{HOSPITAL}';
+                DELETE FROM kof5.hospital_patient WHERE patient_id='{PATIENT}';
+            """)
+        finally:
+            recovered = set(created_users)
+            for email in created_emails:
+                found = sql(f"SELECT id FROM auth.users WHERE email='{email}';")
+                if found:
+                    recovered.add(UUID(found))
+            found = sql("SELECT id FROM auth.users WHERE is_anonymous IS TRUE "
+                        f"AND raw_user_meta_data ->> 'kof5_synthetic_run'='{anonymous_marker}';")
+            if found:
+                recovered.add(UUID(found))
+            for user_id in recovered:
+                status, _ = request(f"{url}/auth/v1/admin/users/{user_id}", "DELETE", admin)
+                assert status in (200, 204), f"local synthetic Auth cleanup failed: {status}"
 
 
 if __name__ == "__main__":

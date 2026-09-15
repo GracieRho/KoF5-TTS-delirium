@@ -20,9 +20,12 @@ def main() -> None:
     url, public, admin = keys["API_URL"], keys["PUBLISHABLE_KEY"], keys["SERVICE_ROLE_KEY"]
     assert sql(f"SELECT count(*) FROM kof5.hospital_patient WHERE patient_id='{PATIENT}'") == "0"
     users: list[UUID] = []
+    emails: list[str] = []
+    anonymous_marker = uuid4().hex
 
     def permanent(name: str) -> tuple[UUID, str]:
         email = f"kof5-message-{name}-{uuid4().hex}@example.invalid"
+        emails.append(email)  # Recovery still works if Auth creates a user but its response is lost.
         password = secrets.token_urlsafe(24)
         status, user = request(f"{url}/auth/v1/admin/users", "POST", admin,
                                payload={"email": email, "password": password, "email_confirm": True})
@@ -39,12 +42,16 @@ def main() -> None:
         approver, approver_token = permanent("approver")
         guardian, guardian_token = permanent("guardian")
         status, anonymous = request(f"{url}/auth/v1/signup", "POST", public,
-                                    payload={"data": {}, "gotrue_meta_security": {"captcha_token": None}})
+                                    payload={"data": {"kof5_synthetic_run": anonymous_marker},
+                                             "gotrue_meta_security": {"captcha_token": None}})
         assert status == 200 and anonymous["user"]["is_anonymous"] is True, \
             f"local anonymous device Auth: {status}"
         device = UUID(anonymous["user"]["id"])
         users.append(device)
         device_token = anonymous["access_token"]
+        assert sql("SELECT raw_user_meta_data ->> 'kof5_synthetic_run' "
+                   f"FROM auth.users WHERE id='{device}';") == anonymous_marker, \
+            "anonymous response-loss cleanup marker was not stored"
 
         sql(f"""
             INSERT INTO kof5.hospital_patient
@@ -166,7 +173,16 @@ def main() -> None:
                 DELETE FROM kof5.hospital_registry_activation WHERE hospital_ref='{HOSPITAL}';
             """)
         finally:
-            for uid in users:
+            recovered = set(users)
+            for email in emails:
+                found = sql(f"SELECT id FROM auth.users WHERE email='{email}';")
+                if found:
+                    recovered.add(UUID(found))
+            found = sql("SELECT id FROM auth.users WHERE is_anonymous IS TRUE "
+                        f"AND raw_user_meta_data ->> 'kof5_synthetic_run'='{anonymous_marker}';")
+            if found:
+                recovered.add(UUID(found))
+            for uid in recovered:
                 status, _ = request(f"{url}/auth/v1/admin/users/{uid}", "DELETE", admin)
                 assert status in (200, 204), f"synthetic Auth cleanup: {status}"
 
