@@ -62,6 +62,8 @@ uv run python scripts/run_backend.py
 `http://127.0.0.1:8765/health`는 현재 `synthetic_text_only`를 반환합니다. 환자 ID는 `synthetic_patient`만 허용하며 인증·오디오·클라우드 공급자는 아직 연결되지 않았습니다. 실제 환자 데이터와 임상 시험에는 사용하지 않습니다.
 브라우저에서 `http://127.0.0.1:8765/demo`를 열면 팀 내부 합성 발화를 입력하고 대화 상태·응답·거부·주변 발화 폐기를 확인할 수 있습니다. 화면의 날짜·시간은 한국 시간으로 표시됩니다.
 
+루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 이 설정은 **합성 텍스트 API의 배포 준비**만 뜻합니다. 현재 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
+
 별도 `cloud_prototype.py`에는 Phase 0용 배치 WAV→STT→LLM→MP3 호출을 합성 데이터 기준으로 구현했습니다. Deepgram Nova-3, OpenAI Responses, ElevenLabs IVC는 현재 **비교 후보**이고, 공급업체 선정과 실제 서비스 검증은 남아 있습니다. [Deepgram MIP 제외](https://developers.deepgram.com/docs/the-deepgram-model-improvement-partnership-program)와 [OpenAI `store=false`](https://developers.openai.com/api/docs/guides/your-data)를 요청에 적용하지만, [ElevenLabs 복제 음성 샘플은 Zero Retention 적용 대상이 아니므로](https://elevenlabs.io/docs/eleven-api/resources/zero-retention-mode) 실제 보호자 샘플 등록은 동의·보존·삭제 계약을 확인하기 전까지 진행하지 않습니다. 테스트는 네트워크 없이 모의 응답만 사용합니다.
 
 후보 API를 실제 합성 자료로 시험할 때는 세 API key, `ELEVENLABS_VOICE_ID`, `VOICE_OWNER_CONSENT_RECORD_ID`를 로컬 환경 변수에 설정하고 `uv run python scripts/demo_cloud_pipeline.py <합성 WAV> --synthetic-only`를 실행합니다. 동의 기록 ID 입력은 **내부 시험자의 확인 표시**일 뿐 실제 환자 시험의 승인·동의 절차가 아닙니다. Deepgram에는 WAV, OpenAI에는 전사 문장과 합성 사실, ElevenLabs에는 응답 문장과 시험용 voice ID가 전달됩니다. 결과 MP3는 Git에서 제외된 `runs/synthetic-preview-*.mp3`에 저장합니다. 현재 실서비스 호출은 수행하지 않았습니다.

@@ -9,6 +9,7 @@ Thumbs.db
 
 # Local worktrees
 .worktrees/
+.vercel/
 
 # Secrets and local configuration
 .env
