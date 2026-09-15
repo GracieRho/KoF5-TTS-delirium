@@ -60,6 +60,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _playedReply = false;
   var _trialGeneration = 0;
   int? _playbackOwnerGeneration;
+  int? _autoResumeOwnerGeneration;
   Future<bool>? _replyStop;
   var _cloudStatus = '자가 음성 시험을 확인하면 발화 후보 한 건을 직접 보낼 수 있습니다.';
   var _cloudTranscript = '';
@@ -99,6 +100,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _localEnabled = false;
     _autoTextTrial = false;
     _activation.reset();
+    _autoResumeOwnerGeneration = null;
     if (cancellingSpeech) unawaited(_cancelLocalSpeech());
     _cloudClient?.close(force: true);
     _cloudClient = null;
@@ -165,6 +167,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _listening ||
         _sending ||
         _stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _speechStop != null ||
         !_foreground) {
       return;
     }
@@ -227,6 +231,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     try {
       await _player.stop().timeout(const Duration(seconds: 5));
       _playedReply = false;
+      _autoResumeOwnerGeneration = null;
       if (mounted) {
         setState(() {
           _cloudStatus = successStatus;
@@ -472,8 +477,15 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       });
       if (result.mp3 != null) {
         _playbackOwnerGeneration = generation;
+        _autoResumeOwnerGeneration = textOnly ? generation : null;
         setState(() => _playedReply = true);
         await _player.play(result.mp3!).timeout(const Duration(seconds: 10));
+        if (textOnly &&
+            mounted &&
+            _foreground &&
+            generation == _trialGeneration) {
+          unawaited(_awaitReplyFinish(generation));
+        }
         if ((!mounted || !_foreground || generation != _trialGeneration) &&
             _playbackOwnerGeneration == generation) {
           await _stopReply(successStatus: '시험 자료를 폐기했습니다.');
@@ -493,8 +505,52 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       if (_cloudClient == client) _cloudClient = null;
       if (mounted && generation == _trialGeneration) {
         setState(() => _sending = false);
+        _resumeAfterReplyIfReady(generation);
       }
     }
+  }
+
+  Future<void> _awaitReplyFinish(int generation) async {
+    try {
+      final finished = await _player.waitFinished();
+      if (!finished ||
+          !mounted ||
+          !_foreground ||
+          !_ownVoiceTrial ||
+          !_autoTextTrial ||
+          _autoResumeOwnerGeneration != generation ||
+          generation != _trialGeneration) {
+        return;
+      }
+      setState(() {
+        _playedReply = false;
+        _cloudStatus = '음성 응답 재생을 마쳤습니다. 기기에서 다시 듣습니다.';
+      });
+      _resumeAfterReplyIfReady(generation);
+    } catch (_) {
+      if (mounted && generation == _trialGeneration && _playedReply) {
+        setState(
+          () => _cloudStatus = '재생 완료를 확인하지 못했습니다. 직접 중단 후 듣기를 다시 시작하세요.',
+        );
+      }
+    }
+  }
+
+  void _resumeAfterReplyIfReady(int generation) {
+    if (_sending ||
+        !_foreground ||
+        !_ownVoiceTrial ||
+        !_autoTextTrial ||
+        _playedReply ||
+        _stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _speechStop != null ||
+        _autoResumeOwnerGeneration != generation ||
+        generation != _trialGeneration) {
+      return;
+    }
+    _autoResumeOwnerGeneration = null;
+    unawaited(_start());
   }
 
   Future<void> _stop() async {
@@ -698,7 +754,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                 _starting ||
                                     _stopping ||
                                     _sending ||
-                                    _stopUnconfirmed
+                                    _stopUnconfirmed ||
+                                    _speechStopUnconfirmed ||
+                                    _speechStop != null
                                 ? null
                                 : (_listening ? _stop : _start),
                             icon: Icon(

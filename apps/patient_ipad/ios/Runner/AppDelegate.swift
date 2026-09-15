@@ -4,9 +4,11 @@ import Speech
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVAudioPlayerDelegate {
   private var trialPlayer: AVAudioPlayer?
   private var trialSessionActive = false
+  private var trialFinishedNaturally = false
+  private var trialFinishedResult: FlutterResult?
   private var trialChannel: FlutterMethodChannel?
   private var speechChannel: FlutterMethodChannel?
   private let koreanRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ko-KR"))
@@ -42,6 +44,7 @@ import UIKit
             try AVAudioSession.sharedInstance().setActive(true)
             self.trialSessionActive = true
             self.trialPlayer = player
+            player.delegate = self
             guard player.prepareToPlay(), player.play() else {
               throw NSError(domain: "KoF5TrialAudio", code: 1)
             }
@@ -55,6 +58,14 @@ import UIKit
             result(nil)
           } else {
             result(FlutterError(code: "stop_unconfirmed", message: "Could not deactivate trial playback", details: nil))
+          }
+        case "waitFinished":
+          if self.trialFinishedNaturally {
+            result(true)
+          } else if self.trialPlayer != nil && self.trialFinishedResult == nil {
+            self.trialFinishedResult = result
+          } else {
+            result(false)
           }
         default:
           result(FlutterMethodNotImplemented)
@@ -169,6 +180,10 @@ import UIKit
   }
 
   @discardableResult private func stopTrialAudio() -> Bool {
+    trialFinishedNaturally = false
+    let finishedResult = trialFinishedResult
+    trialFinishedResult = nil
+    finishedResult?(false)
     trialPlayer?.stop()
     trialPlayer = nil
     guard trialSessionActive else { return true }
@@ -179,6 +194,20 @@ import UIKit
     } catch {
       return false
     }
+  }
+
+  func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    guard trialPlayer === player else { return }
+    let finishedResult = trialFinishedResult
+    trialFinishedResult = nil
+    let stopped = stopTrialAudio()
+    trialFinishedNaturally = flag && stopped
+    finishedResult?(trialFinishedNaturally)
+  }
+
+  func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+    guard trialPlayer === player else { return }
+    _ = stopTrialAudio()
   }
 
   deinit {
