@@ -111,15 +111,16 @@ void main() {
 
   Future<void> finishWidget(WidgetTester tester) async {
     if (find.text('시험 중단').evaluate().isNotEmpty) {
+      final priorStops = fake.stops;
       await tester.ensureVisible(find.text('시험 중단'));
       await tester.tap(find.text('시험 중단'));
-      for (var i = 0; i < 20 && fake.stops == 0; i++) {
+      for (var i = 0; i < 20 && fake.stops == priorStops; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
         await tester.pump();
       }
-      expect(fake.stops, 1);
+      expect(fake.stops, priorStops + 1);
       for (
         var i = 0;
         i < 20 && find.text('마이크 시험을 중단했습니다.').evaluate().isEmpty;
@@ -142,6 +143,22 @@ void main() {
     'local speech respects support and withdrawal, including late results',
     (tester) async {
       await startOwnVoice(tester);
+      Future<void> restartMic() async {
+        for (var i = 0; i < 40 && find.text('마이크 시험 시작').evaluate().isEmpty; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+          await tester.pump();
+        }
+        expect(find.text('마이크 시험 시작'), findsOneWidget,
+          reason: 'withdrawal should stop capture before restart; starts=${fake.starts} stops=${fake.stops} texts=${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | ')}');
+        await tester.ensureVisible(find.text('마이크 시험 시작'));
+        await tester.tap(find.text('마이크 시험 시작'));
+        await tester.pump();
+        for (var i = 0; i < 40 && find.text('기기에서 듣고 있습니다').evaluate().isEmpty; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+          await tester.pump();
+        }
+        expect(find.text('기기에서 듣고 있습니다'), findsOneWidget, reason: 'new mic must be active before feeding a candidate');
+      }
       fake.feedCandidate();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
@@ -159,6 +176,7 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
       );
       await tester.pump();
+      await restartMic();
       fake.feedCandidate();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
@@ -172,6 +190,12 @@ void main() {
       expect(find.textContaining('지원하지 않아 후보를 전사하지 않습니다'), findsOneWidget);
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
+      expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value, false);
+      for (var i = 0; i < 40 && fake.stops < 2; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(fake.stops, 2, reason: 'second consent withdrawal stops normal capture');
 
       final late = Completer<String?>();
       pendingTranscript = late.future;
@@ -181,6 +205,7 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
       );
       await tester.pump();
+      await restartMic();
       fake.feedCandidate();
       for (var i = 0; i < 20 && transcripts < 2; i++) {
         await tester.runAsync(
@@ -214,6 +239,7 @@ void main() {
       expect(find.textContaining('늦게 온 환자 발화'), findsNothing);
 
       pendingTranscript = null;
+      await restartMic();
       fake.feedCandidate();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
@@ -255,6 +281,7 @@ void main() {
       await tester.pump();
       expect(find.textContaining('한국어 기기 내 전사 준비됨'), findsOneWidget);
       expect(cancelCalls, greaterThanOrEqualTo(3));
+      await restartMic();
       fake.feedCandidate();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
@@ -269,6 +296,7 @@ void main() {
       await tester.ensureVisible(find.byType(SwitchListTile));
       await tester.tap(find.byType(SwitchListTile));
       await tester.pump();
+      final priorStops = fake.stops;
       fake.feedCandidate();
       for (var i = 0; i < 30 && textCalls.isEmpty; i++) {
         await tester.runAsync(
@@ -279,7 +307,7 @@ void main() {
       expect(textCalls, [('/internal/synthetic/text', '수민아?', 'DIRECTED')]);
       expect(
         fake.stops,
-        1,
+        priorStops + 1,
         reason: 'text-only request follows confirmed mic stop',
       );
       expect(find.text('응, 왜?'), findsOneWidget);

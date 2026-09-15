@@ -140,13 +140,23 @@ void main() {
         3,
         reason: 'interrupted echo candidate is still local only',
       );
+      await tester.ensureVisible(find.byType(FilterChip));
+      await tester.tap(find.byType(FilterChip));
+      await _until(tester, () => fake.stops == 4 && fake.starts == 5);
+      expect(fake.lastConfig?.echoCancel, false, reason: 'turning off barge-in replaces the shared mic with normal idle capture');
+      expect(confirm, findsNothing, reason: 'turning off the experiment discards the unconfirmed interrupted text');
+      fake.feedCandidate();
+      await _until(tester, () => textCalls == 4 && fake.starts == 6);
+      expect(textCalls, 4, reason: 'normal on-device candidate recognition resumes after chip withdrawal');
       await tester.ensureVisible(find.byType(CheckboxListTile));
       await tester.tap(find.byType(CheckboxListTile));
-      await _until(tester, () => fake.stops == 4);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+      expect(fake.stops, 6, reason: 'withdrawal must stop the normal idle microphone');
       expect(
         textCalls,
-        3,
-        reason: 'withdrawal before confirmation sends no extra text',
+        4,
+        reason: 'self-voice withdrawal sends no extra text',
       );
       expect(confirm, findsNothing);
       expect(find.text('기기 내 전사: 제주도는?'), findsNothing);

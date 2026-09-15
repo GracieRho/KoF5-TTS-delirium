@@ -106,7 +106,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _localEnabled = false;
     _autoTextTrial = false;
     _proactivePaused = false;
-    final hadBargeInMic = _bargeInListeningGeneration != null;
+    final hadActiveMic = _listening || _subscription != null;
     _bargeInTrial = false;
     _bargeInListeningGeneration = null;
     _pendingBargeInText = null;
@@ -139,7 +139,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (stoppingPlayback) {
       unawaited(_stopReply(successStatus: '시험 자료를 폐기했습니다.').then((_) {}));
     }
-    if (hadBargeInMic) unawaited(_stop());
+    if (hadActiveMic) unawaited(_stop());
   }
 
   Future<bool> _cancelLocalSpeech() {
@@ -176,6 +176,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   Future<bool> _start({int? duringReplyGeneration}) async {
     final duringReply = duringReplyGeneration != null;
+    final startGeneration = _trialGeneration;
     if (_starting ||
         _stopping ||
         _listening ||
@@ -200,6 +201,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       }
       if (!mounted ||
           !_foreground ||
+          startGeneration != _trialGeneration ||
           (duringReply && duringReplyGeneration != _trialGeneration)) {
         return false;
       }
@@ -214,6 +216,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       );
       if (!mounted ||
           !_foreground ||
+          startGeneration != _trialGeneration ||
           (duringReply &&
               (!_bargeInTrial ||
                   !_autoTextTrial ||
@@ -559,6 +562,33 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       return;
     }
     unawaited(_sendTextTrial(transcript));
+  }
+
+  Future<void> _turnOffBargeInTrial() async {
+    final generation = _trialGeneration;
+    final sharedMic = _bargeInListeningGeneration != null;
+    setState(() {
+      _bargeInTrial = false;
+      _pendingBargeInText = null;
+      _pendingBargeInGeneration = null;
+      _cloudStatus = sharedMic
+          ? '끼어들기 실험을 끄고 일반 듣기로 전환하고 있습니다.'
+          : '재생 중 끼어들기 실험을 껐습니다.';
+    });
+    if (!sharedMic) return;
+    await _stop();
+    if (mounted &&
+        _foreground &&
+        _ownVoiceTrial &&
+        _autoTextTrial &&
+        !_sending &&
+        !_playedReply &&
+        !_stopUnconfirmed &&
+        !_speechStopUnconfirmed &&
+        _speechStop == null &&
+        generation == _trialGeneration) {
+      await _start();
+    }
   }
 
   Future<bool> _stopForTrial(int generation) async {
@@ -1084,15 +1114,13 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   onSelected: _sending || _playedReply
                                       ? null
                                       : (enabled) {
+                                          if (!enabled) {
+                                            unawaited(_turnOffBargeInTrial());
+                                            return;
+                                          }
                                           setState(() {
-                                            _bargeInTrial = enabled;
-                                            if (!enabled) {
-                                              _pendingBargeInText = null;
-                                              _pendingBargeInGeneration = null;
-                                            }
-                                            _cloudStatus = enabled
-                                                ? '재생 중 마이크를 함께 켜서 새 발화 후보에 응답을 중단합니다. 실제 iPad 검증 전 내부 실험입니다.'
-                                                : '재생 중 끼어들기 실험을 껐습니다.';
+                                            _bargeInTrial = true;
+                                            _cloudStatus = '재생 중 마이크를 함께 켜서 새 발화 후보에 응답을 중단합니다. 실제 iPad 검증 전 내부 실험입니다.';
                                           });
                                         },
                                 ),
