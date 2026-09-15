@@ -52,6 +52,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _cloudReply = '';
   var _localEnabled = false;
   var _recognizing = false;
+  var _speechStopUnconfirmed = false;
+  Future<bool>? _speechStop;
   var _localGeneration = 0;
   var _localStatus = '한국어 기기 내 인식 지원 여부를 확인하지 않았습니다.';
   var _localTranscript = '';
@@ -74,9 +76,13 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   void _discardTrial() {
     _trialGeneration++;
     _localGeneration++;
+    final cancellingSpeech =
+        _recognizing ||
+        _localEnabled ||
+        _speechStop != null ||
+        _speechStopUnconfirmed;
     _localEnabled = false;
-    _recognizing = false;
-    unawaited(_speech.cancel().catchError((Object _) {}));
+    if (cancellingSpeech) unawaited(_cancelLocalSpeech());
     _cloudClient?.close(force: true);
     _cloudClient = null;
     _token.clear();
@@ -94,11 +100,45 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _cloudTranscript = '';
         _cloudReply = '';
         _localTranscript = '';
-        _localStatus = '기기 내 전사 후보를 폐기했습니다.';
+        _localStatus = cancellingSpeech
+            ? '기기 내 전사 중단 확인 중 · 후보를 화면에서 숨겼습니다.'
+            : '기기 내 전사 후보를 폐기했습니다.';
       });
     }
     if (stoppingPlayback) {
       unawaited(_stopReply(successStatus: '시험 자료를 폐기했습니다.').then((_) {}));
+    }
+  }
+
+  Future<bool> _cancelLocalSpeech() {
+    final pending = _speechStop;
+    if (pending != null) return pending;
+    final future = _performCancelLocalSpeech();
+    _speechStop = future;
+    future.whenComplete(() {
+      if (identical(_speechStop, future)) _speechStop = null;
+    });
+    return future;
+  }
+
+  Future<bool> _performCancelLocalSpeech() async {
+    try {
+      await _speech.cancel().timeout(const Duration(seconds: 5));
+      _recognizing = false;
+      _speechStopUnconfirmed = false;
+      if (mounted && !_ownVoiceTrial) {
+        setState(() => _localStatus = '기기 내 전사 중단을 확인하고 후보를 폐기했습니다.');
+      }
+      return true;
+    } catch (_) {
+      _speechStopUnconfirmed = true;
+      _localEnabled = false;
+      if (mounted) {
+        setState(
+          () => _localStatus = '기기 내 전사 중단을 확인하지 못했습니다. 다시 확인하기 전 새 전사를 차단합니다.',
+        );
+      }
+      return false;
     }
   }
 
@@ -206,7 +246,11 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         });
       }
     });
-    if (_localEnabled && !_recognizing && _ownVoiceTrial) {
+    if (_localEnabled &&
+        !_recognizing &&
+        !_speechStopUnconfirmed &&
+        _speechStop == null &&
+        _ownVoiceTrial) {
       unawaited(_recognizeCandidate(candidate));
     }
   }
@@ -214,6 +258,18 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _enableLocalSpeech() async {
     final generation = ++_localGeneration;
     try {
+      if (_speechStop != null || _speechStopUnconfirmed) {
+        setState(() => _localStatus = '이전 기기 내 전사 중단을 다시 확인하고 있습니다.');
+        if (!await _cancelLocalSpeech()) {
+          return;
+        }
+        if (!mounted ||
+            !_foreground ||
+            !_ownVoiceTrial ||
+            generation != _localGeneration) {
+          return;
+        }
+      }
       final available = await _speech.available();
       if (!mounted ||
           !_foreground ||
@@ -302,10 +358,15 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         generation != _trialGeneration) {
       return;
     }
-    if (_stopUnconfirmed || _stopping || _listening) {
+    if (_stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _speechStop != null ||
+        _recognizing ||
+        _stopping ||
+        _listening) {
       setState(() {
         _sending = false;
-        _cloudStatus = '마이크 중단을 확인하지 못해 전송하지 않았습니다.';
+        _cloudStatus = '마이크 또는 기기 내 전사 중단을 확인하지 못해 전송하지 않았습니다.';
       });
       return;
     }
@@ -355,8 +416,13 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
     _localGeneration++;
-    _recognizing = false;
-    unawaited(_speech.cancel().catchError((Object _) {}));
+    final speechStopped =
+        _recognizing ||
+            _localEnabled ||
+            _speechStop != null ||
+            _speechStopUnconfirmed
+        ? _cancelLocalSpeech()
+        : Future<bool>.value(true);
     _listening = false;
     _detector.reset();
     _candidateExpiry?.cancel();
@@ -380,6 +446,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         setState(() => _status = '마이크 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.');
       }
     }
+    await speechStopped;
     _detector.reset();
     _stopUnconfirmed = !confirmed;
     _stopping = false;
@@ -397,7 +464,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     WidgetsBinding.instance.removeObserver(this);
     _trialGeneration++;
     _localGeneration++;
-    unawaited(_speech.cancel().catchError((Object _) {}));
+    if (_recognizing ||
+        _localEnabled ||
+        _speechStop != null ||
+        _speechStopUnconfirmed) {
+      unawaited(_cancelLocalSpeech());
+    }
     _candidateExpiry?.cancel();
     _subscription?.cancel();
     _recorder.dispose();
@@ -616,17 +688,23 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                         }
                                       },
                               ),
-                              if (_ownVoiceTrial) ...[
+                              const SizedBox(height: 8),
+                              Semantics(
+                                liveRegion: true,
+                                child: Text(_localStatus),
+                              ),
+                              if (_ownVoiceTrial &&
+                                  _localTranscript.isNotEmpty) ...[
                                 const SizedBox(height: 8),
-                                Semantics(
-                                  liveRegion: true,
-                                  child: Text(_localStatus),
-                                ),
-                                if (_localTranscript.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text('기기 내 전사: $_localTranscript'),
-                                ],
+                                Text('기기 내 전사: $_localTranscript'),
                               ],
+                              if (_speechStopUnconfirmed && _ownVoiceTrial)
+                                TextButton(
+                                  onPressed: _speechStop == null
+                                      ? () => unawaited(_enableLocalSpeech())
+                                      : null,
+                                  child: const Text('전사 중단 다시 확인'),
+                                ),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: _endpoint,
@@ -660,6 +738,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                           !_sending &&
                                           !_starting &&
                                           !_stopping &&
+                                          !_speechStopUnconfirmed &&
+                                          _speechStop == null &&
                                           _foreground
                                       ? _sendTrial
                                       : null,

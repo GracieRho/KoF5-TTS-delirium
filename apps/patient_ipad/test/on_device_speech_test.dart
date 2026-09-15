@@ -17,6 +17,9 @@ void main() {
   var transcripts = 0;
   var recognizedText = '수민아?';
   Future<String?>? pendingTranscript;
+  Future<void>? pendingCancel;
+  var cancelFails = false;
+  var cancelCalls = 0;
 
   setUp(() {
     original = RecordPlatform.instance;
@@ -27,6 +30,9 @@ void main() {
     transcripts = 0;
     recognizedText = '수민아?';
     pendingTranscript = null;
+    pendingCancel = null;
+    cancelFails = false;
+    cancelCalls = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(OnDeviceSpeech.channel, (call) async {
           switch (call.method) {
@@ -39,6 +45,12 @@ void main() {
               expect(call.arguments, isA<Uint8List>());
               return pendingTranscript ?? recognizedText;
             case 'cancel':
+              cancelCalls++;
+              if (pendingCancel != null) {
+                await pendingCancel;
+                return null;
+              }
+              if (cancelFails) throw PlatformException(code: 'cancel_failed');
               return null;
           }
           throw MissingPluginException();
@@ -167,11 +179,80 @@ void main() {
         await tester.pump();
       }
       expect(transcripts, 2);
+      final delayedCancel = Completer<void>();
+      pendingCancel = delayedCancel.future;
       await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
+      expect(find.textContaining('중단 확인 중'), findsOneWidget);
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+      fake.feedCandidate();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(transcripts, 2, reason: 'pending cancel blocks a new recognition');
+      delayedCancel.complete();
+      pendingCancel = null;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(find.textContaining('한국어 기기 내 전사 준비됨'), findsOneWidget);
       late.complete('늦게 온 환자 발화');
       await tester.pump();
       expect(find.textContaining('늦게 온 환자 발화'), findsNothing);
+
+      pendingTranscript = null;
+      fake.feedCandidate();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(transcripts, 3);
+      cancelFails = true;
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(find.textContaining('중단을 확인하지 못했습니다'), findsOneWidget);
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      fake.feedCandidate();
+      await tester.pump();
+      expect(
+        transcripts,
+        3,
+        reason: 'failed retry cannot unlock native recognition',
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, '자가 음성 후보 한 건 보내기'),
+            )
+            .onPressed,
+        isNull,
+      );
+      cancelFails = false;
+      await tester.tap(find.text('전사 중단 다시 확인'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(find.textContaining('한국어 기기 내 전사 준비됨'), findsOneWidget);
+      expect(cancelCalls, greaterThanOrEqualTo(3));
+      fake.feedCandidate();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump();
+      expect(transcripts, 4);
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
       await finishWidget(tester);
     },
   );
