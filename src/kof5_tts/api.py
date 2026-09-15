@@ -14,9 +14,11 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-from kof5_tts.cloud_prototype import CloudCredentials, run_synthetic_pipeline, validate_short_wav
+from kof5_tts.cloud_prototype import (
+    CloudCredentials, run_synthetic_pipeline, run_synthetic_text_pipeline, validate_short_wav,
+)
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 
 SYNTHETIC_PATIENT = "synthetic_patient"
@@ -105,9 +107,7 @@ def health() -> dict[str, str]:
     return {"status": "synthetic_demo_only"}
 
 
-@app.post("/internal/synthetic/audio", include_in_schema=False)
-async def synthetic_audio(request: Request) -> dict[str, str | None]:
-    """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
+def _internal_demo_credentials(request: Request) -> CloudCredentials:
     token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
     if len(token) < 32 or not token.isascii():
         raise HTTPException(status_code=503, detail="내부 오디오 시험이 설정되지 않았습니다")
@@ -116,12 +116,10 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
         raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
     if request.headers.get("x-synthetic-material") != "confirmed":
         raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
-    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/wav":
-        raise HTTPException(status_code=415, detail="WAV 오디오만 허용합니다")
     if not os.environ.get("VOICE_OWNER_CONSENT_RECORD_ID", "").strip():
         raise HTTPException(status_code=503, detail="시험용 음성 소유자 동의 기록이 필요합니다")
     try:
-        credentials = CloudCredentials(
+        return CloudCredentials(
             os.environ.get("DEEPGRAM_API_KEY", ""),
             os.environ.get("OPENAI_API_KEY", ""),
             os.environ.get("ELEVENLABS_API_KEY", ""),
@@ -130,6 +128,14 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=503, detail="Hosted 공급자 설정이 필요합니다") from exc
+
+
+@app.post("/internal/synthetic/audio", include_in_schema=False)
+async def synthetic_audio(request: Request) -> dict[str, str | None]:
+    """Internal Phase-0 WAV→STT→reply→TTS; no real-patient route or storage."""
+    credentials = _internal_demo_credentials(request)
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/wav":
+        raise HTTPException(status_code=415, detail="WAV 오디오만 허용합니다")
     wav = bytearray()
     async for chunk in request.stream():
         if len(wav) + len(chunk) > 2_000_000:
@@ -150,6 +156,40 @@ async def synthetic_audio(request: Request) -> dict[str, str | None]:
         raise HTTPException(status_code=502, detail="음성 공급자 처리가 실패했습니다") from None
     return {
         "transcript": transcript,
+        "reply": reply,
+        "audio_mp3_base64": b64encode(audio).decode("ascii") if audio else None,
+    }
+
+
+@app.post("/internal/synthetic/text", include_in_schema=False)
+async def synthetic_text(request: Request) -> dict[str, str | None]:
+    """Internal text-only iPad path; candidate PCM stays on the device."""
+    credentials = _internal_demo_credentials(request)
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+        raise HTTPException(status_code=415, detail="JSON 전사만 허용합니다")
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 4096:
+            raise HTTPException(status_code=413, detail="짧은 전사만 허용합니다")
+        body.extend(chunk)
+    try:
+        speech = SpeechTurn.model_validate_json(bytes(body))
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="짧은 한국어 전사와 활성화 판정이 필요합니다") from None
+    if not speech.transcript.strip():
+        raise HTTPException(status_code=422, detail="빈 전사는 처리하지 않습니다")
+
+    def run() -> tuple[str | None, bytes | None]:
+        with httpx.Client(timeout=20) as client:
+            return run_synthetic_text_pipeline(client, speech.transcript, speech.label, FAMILY_FACT.content,
+                                               credentials)
+
+    try:
+        reply, audio = await run_in_threadpool(run)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(status_code=502, detail="글·음성 공급자 처리가 실패했습니다") from None
+    return {
+        "transcript": speech.transcript,
         "reply": reply,
         "audio_mp3_base64": b64encode(audio).decode("ascii") if audio else None,
     }

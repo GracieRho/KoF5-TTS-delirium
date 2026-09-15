@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.cloud_prototype import (  # noqa: E402
     CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice,
-    run_synthetic_pipeline,
+    run_synthetic_pipeline, run_synthetic_text_pipeline,
 )
 from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
 
@@ -78,6 +78,31 @@ class CloudPrototypeTests(unittest.TestCase):
         self.assertIn("language=ko", str(calls[0].url))
         self.assertIn(b'"store":false', calls[1].content)
         self.assertEqual(calls[2].url.path, "/v1/text-to-speech/voice-test")
+
+    def test_local_text_path_skips_hosted_stt_and_discards_ambient_speech(self) -> None:
+        hosts = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.openai.com":
+                return httpx.Response(200, json={"status": "completed", "output": [{
+                    "type": "message", "content": [{"type": "output_text", "text": "2024년 5월에 같이 갔어."}],
+                }]})
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("text path must not call hosted STT")
+
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            self.assertEqual(run_synthetic_text_pipeline(
+                client, "TV 뉴스입니다", "AMBIENT", "2024년 5월 제주도 여행", credentials,
+            ), (None, None))
+            with self.assertRaises(ValueError):
+                run_synthetic_text_pipeline(client, " " * 3, "DIRECTED", "known fact", credentials)
+            self.assertEqual(run_synthetic_text_pipeline(
+                client, "우리 제주도 언제 갔었지?", "DIRECTED", "2024년 5월 제주도 여행", credentials,
+            ), ("2024년 5월에 같이 갔어.", b"synthetic-mp3"))
+        self.assertEqual(hosts, ["api.openai.com", "api.elevenlabs.io"])
 
     def test_missing_consent_and_invalid_audio_never_reach_providers(self) -> None:
         with self.assertRaises(ValueError):

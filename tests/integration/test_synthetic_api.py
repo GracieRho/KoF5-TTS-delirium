@@ -237,5 +237,34 @@ class SyntheticApiTests(unittest.TestCase):
         })
 
 
+    def test_internal_text_requires_trial_auth_and_never_needs_candidate_audio(self) -> None:
+        env = {
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        path = "/internal/synthetic/text"
+        turn = {"transcript": "수민아?", "label": "DIRECTED"}
+        headers = {"X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+                   "X-Synthetic-Material": "confirmed"}
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.run_synthetic_text_pipeline", return_value=("응, 왜?", b"synthetic-mp3")
+        ) as pipeline:
+            self.assertEqual(self.client.post(path, json=turn).status_code, 401)
+            self.assertEqual(self.client.post(path, json=turn, headers={
+                "X-Internal-Demo-Token": headers["X-Internal-Demo-Token"],
+            }).status_code, 400)
+            self.assertEqual(self.client.post(path, content=b"not-json", headers={
+                **headers, "Content-Type": "text/plain",
+            }).status_code, 415)
+            pipeline.assert_not_called()
+            result = self.client.post(path, json=turn, headers=headers)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json(), {"transcript": "수민아?", "reply": "응, 왜?",
+                                              "audio_mp3_base64": "c3ludGhldGljLW1wMw=="})
+            self.assertEqual(pipeline.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

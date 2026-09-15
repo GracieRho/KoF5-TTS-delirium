@@ -227,13 +227,24 @@ def run_synthetic_pipeline(
 ) -> tuple[str, str | None, bytes | None]:
     """Keep the WAV and generated MP3 in memory; callers decide if they may save them."""
     transcript = transcribe_wav(client, wav, credentials.deepgram_key)
+    reply, audio = run_synthetic_text_pipeline(client, transcript, "DIRECTED", known_fact, credentials)
+    return transcript, reply, audio
+
+
+def run_synthetic_text_pipeline(
+    client: httpx.Client, transcript: str, label: str,
+    known_fact: str, credentials: CloudCredentials,
+) -> tuple[str | None, bytes | None]:
+    """Process a bounded iPad transcript without sending candidate audio to hosted STT."""
+    if not transcript.strip() or len(transcript) > 500 or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}:
+        raise ValueError("bounded local transcript and activation label are required")
     now = datetime.now(timezone.utc)
-    event = ConversationSession().hear(transcript, "DIRECTED", now)
+    event = ConversationSession().hear(transcript, label, now)
     if event in {"patient_dissent", "closed", "discarded"}:
-        return transcript, None, None
+        return None, None
     reply = policy_reply(transcript, event, now)
     if reply is None:
         # ponytail: keyword and length guards are an internal-test ceiling; clinical review and measured safety eval precede patients.
         reply = generate_short_reply(client, transcript, known_fact, credentials.openai_key)
     audio = synthesize_mp3(client, reply, credentials)
-    return transcript, reply, audio
+    return reply, audio
