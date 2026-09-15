@@ -6,4 +6,6 @@ Flutter/`record`의 16 kHz mono PCM 스트림으로 기기 내 발화 **후보**
 
 글 시험 API가 MP3 없이 응답하면 동의·foreground·마이크/전사 중단을 확인한 뒤 일반 듣기를 재개합니다. `reply=null`인 서버 거부에서는 기기 내 듣기만 유지하고 자동 글 전송을 중단합니다. 시험을 다시 시작하려면 자기 음성 동의를 철회하고 새로 확인해야 합니다. 클라우드 처리 중에도 철회할 수 있으며, 철회 뒤 늦게 도착한 응답은 듣기를 재개하지 않습니다.
 
+기기 내 전사에서 ‘그만해’ 같은 명시적 거부 후보가 확인되면 글·오디오를 서버에 보내지 않고 듣기와 자동 글 시험을 중단합니다. 마이크 재시작은 시험 자료를 폐기하고 본인 음성 동의를 새로 확인할 때까지 차단합니다. 이 어휘 검사는 팀 내부 자가 음성 경로의 안전 중단일 뿐 환자/주변 발화의 신뢰할 수 있는 구분이나 임상 거부 판정은 아닙니다.
+
 `flutter test`, `flutter analyze`, iOS 시뮬레이터 빌드로 코드 경로를 확인할 수 있습니다. 실제 iPad의 한국어 기기 내 인식 지원·정확도, 마이크·권한·중단·재생 동작과 클라우드 왕복은 기기/공급자 설정 후 따로 검증해야 합니다. [Apple의 요청 설정 설명](https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition)에 따라 `supportsOnDeviceRecognition`을 먼저 확인하고 `requiresOnDeviceRecognition=true`를 적용하지만, 한국어 사용 가능 여부는 기기별로 다를 수 있습니다. 이 화면은 내부/자가 음성 시험 전용이며 [안전 게이트](../../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md) 통과 전 실제 환자에게 사용하지 않습니다.

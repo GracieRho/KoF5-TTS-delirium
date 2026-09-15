@@ -74,6 +74,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _localTranscript = '';
   var _autoTextTrial = false;
   var _proactivePaused = false;
+  var _dissentStopped = false;
   var _bargeInTrial = false;
   var _interruptingReply = false;
   int? _bargeInListeningGeneration;
@@ -182,6 +183,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _listening ||
         (_sending && !duringReply) ||
         _stopUnconfirmed ||
+        _dissentStopped ||
         _speechStopUnconfirmed ||
         _speechStop != null ||
         !_foreground ||
@@ -201,6 +203,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       }
       if (!mounted ||
           !_foreground ||
+          _dissentStopped ||
           startGeneration != _trialGeneration ||
           (duringReply && duringReplyGeneration != _trialGeneration)) {
         return false;
@@ -216,6 +219,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       );
       if (!mounted ||
           !_foreground ||
+          _dissentStopped ||
           startGeneration != _trialGeneration ||
           (duringReply &&
               (!_bargeInTrial ||
@@ -295,9 +299,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     setState(() {
       _candidateCount++;
       _candidateExpiry?.cancel();
-      _heldCandidate = _playedReply
-          ? null
-          : _ownVoiceTrial
+      _heldCandidate = !_playedReply && _ownVoiceTrial && !_autoTextTrial
           ? candidate
           : null;
       _status = _autoTextTrial
@@ -441,6 +443,19 @@ class _PatientMicDemoState extends State<PatientMicDemo>
             ? 'iPad 기기 내 전사 완료 · 환자 역할에게 향한 글만 판정합니다.'
             : 'iPad 기기 내 전사 완료 · 글과 오디오 모두 자동 전송하지 않습니다.';
       });
+      if (_autoTextTrial && SyntheticActivation.isDissent(_localTranscript)) {
+        _proactivePaused = true;
+        _dissentStopped = true;
+        _activation.reset();
+        _pendingBargeInText = null;
+        _pendingBargeInGeneration = null;
+        setState(() {
+          _localStatus = '그만하라는 발화 후보를 확인했습니다. 자동 글 시험을 중단합니다.';
+          _cloudStatus = '거부 후보로 듣기와 응답을 중단합니다. 다시 시험하려면 내 목소리 동의를 새로 확인하세요.';
+        });
+        unawaited(_stopMicAndReply());
+        return;
+      }
       if (fromPlayback) {
         _pendingBargeInText = _localTranscript.isEmpty
             ? null
@@ -950,6 +965,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                     _stopping ||
                                     _sending ||
                                     _stopUnconfirmed ||
+                                    _dissentStopped ||
                                     _speechStopUnconfirmed ||
                                     _speechStop != null
                                 ? null
@@ -1020,7 +1036,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   if (value != true) {
                                     _discardTrial();
                                   } else if (!_sending) {
-                                    setState(() => _ownVoiceTrial = true);
+                                    setState(() {
+                                      _ownVoiceTrial = true;
+                                      _dissentStopped = false;
+                                    });
                                     unawaited(_enableLocalSpeech());
                                   }
                                 },
@@ -1120,7 +1139,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                           }
                                           setState(() {
                                             _bargeInTrial = true;
-                                            _cloudStatus = '재생 중 마이크를 함께 켜서 새 발화 후보에 응답을 중단합니다. 실제 iPad 검증 전 내부 실험입니다.';
+                                            _cloudStatus =
+                                                '재생 중 마이크를 함께 켜서 새 발화 후보에 응답을 중단합니다. 실제 iPad 검증 전 내부 실험입니다.';
                                           });
                                         },
                                 ),

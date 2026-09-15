@@ -2,12 +2,18 @@
 class SyntheticActivation {
   DateTime? _lastTurn;
 
+  // ponytail: lexical stop can pause on quoted or background speech; validate speaker/intent before patient use.
+  static bool isDissent(String transcript) {
+    final text = transcript.trim();
+    return ['이거 꺼', '말 걸지 마', '대화 그만', '그만해'].any(text.contains) ||
+        text.replaceAll(RegExp(r'[.!?\s]+$'), '') == '싫어';
+  }
+
   // ponytail: scripted name/question rule; replace only after measured ward activation and speaker evidence.
   bool accepts(String transcript, DateTime now) {
     final text = transcript.trim();
     if (text.isEmpty) return false;
-    if (['이거 꺼', '말 걸지 마', '대화 그만', '그만해'].any(text.contains) ||
-        text.replaceAll(RegExp(r'[.!?\s]+$'), '') == '싫어') {
+    if (isDissent(text)) {
       _lastTurn = null;
       return false;
     }

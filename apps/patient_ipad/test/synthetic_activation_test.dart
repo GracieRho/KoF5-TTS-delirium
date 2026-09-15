@@ -45,6 +45,7 @@ void main() {
       '싫어.',
     ]) {
       final activation = SyntheticActivation();
+      expect(SyntheticActivation.isDissent(refusal), isTrue);
       expect(activation.accepts('수민아?', now), isTrue);
       expect(
         activation.accepts(refusal, now.add(const Duration(seconds: 1))),
@@ -55,5 +56,6 @@ void main() {
         isFalse,
       );
     }
+    expect(SyntheticActivation.isDissent('싫어하는 음식은 뭐야?'), isFalse);
   });
 }
