@@ -148,27 +148,19 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
     url = config["url"]
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            context = await client.get(
-                f"{url}/rest/v1/patient_device_context",
-                params={"select": "patient_id,encounter_id", "patient_id": f"eq.{patient_id}", "limit": 1},
-                headers=headers,
-            )
-            if context.status_code in (401, 403):
-                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
-            context.raise_for_status()
-            rows = context.json()
-            if (not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict)
-                    or rows[0].get("patient_id") != patient_id
-                    or not isinstance(rows[0].get("encounter_id"), str)):
-                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
-            search = await client.post(
-                f"{url}/rest/v1/rpc/patient_family_search",
+            turn = await client.post(
+                f"{url}/rest/v1/rpc/patient_family_turn_context",
                 json={"p_patient_id": patient_id, "p_term": term}, headers=headers,
             )
-            if search.status_code in (401, 403):
-                raise HTTPException(status_code=403, detail="가족 기억 접근이 중단됐습니다")
-            search.raise_for_status()
-            facts = search.json()
+            if turn.status_code in (401, 403):
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 필요합니다")
+            turn.raise_for_status()
+            rows = turn.json()
+            if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+                raise ValueError("paired turn context is invalid")
+            if rows[0].get("authorized") is not True:
+                raise HTTPException(status_code=403, detail="입원 기기 배정이 중단됐습니다")
+            facts = rows[0].get("facts")
             if not isinstance(facts, list) or len(facts) > 3 or any(
                 not isinstance(row, dict) or not isinstance(row.get("content"), str)
                 or not 1 <= len(row["content"]) <= 1000 for row in facts

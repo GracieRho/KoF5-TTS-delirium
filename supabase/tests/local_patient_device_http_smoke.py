@@ -110,6 +110,7 @@ def main() -> None:
         ready = f"{base}/synthetic_device_pairing_ready?select=patient_id,encounter_id"
         context = f"{base}/patient_device_context?select=patient_id,encounter_id"
         search = f"{base}/rpc/patient_family_search"
+        turn_context = f"{base}/rpc/patient_family_turn_context"
         pair = f"{base}/patient_device_pairing"
         status, rows = request(ready, "GET", public, unassigned_token, schema="api")
         assert status == 200 and rows == [], "unassigned staff saw pairing readiness"
@@ -138,6 +139,11 @@ def main() -> None:
         assert status == 200 and facts == [{"category": "travel",
                                             "content": "2024년 5월 제주도에 함께 갔었다."}], \
             "paired device failed bounded family retrieval"
+        status, turn = request(turn_context, "POST", public, device_token,
+                               {"p_patient_id": str(PATIENT),
+                                "p_term": "제주도 언제 갔었어?"}, schema="api")
+        assert status == 200 and turn == [{"authorized": True, "facts": facts}], \
+            "atomic paired-turn context missed a current fact"
         status, rows = request(f"{base}/family_context?select=content", "GET", public,
                                device_token, schema="api")
         assert status == 200 and rows == [], "device enumerated guardian edit view"
@@ -160,6 +166,11 @@ def main() -> None:
                                 {"p_patient_id": str(PATIENT), "p_term": "장치오류 알려줘"},
                                 schema="api")
         assert status == 200 and facts == [], "anonymous-authored fact reached patient memory"
+        status, turn = request(turn_context, "POST", public, device_token,
+                               {"p_patient_id": str(PATIENT), "p_term": "장치오류 알려줘"},
+                               schema="api")
+        assert status == 200 and turn == [{"authorized": True, "facts": []}], \
+            "authorized empty memory must exclude anonymous author"
         status, _ = request(f"{base}/family_context", "POST", public, device_token,
                             {"patient_id": str(PATIENT),
                              "author_guardian_user_id": str(device),
@@ -206,6 +217,11 @@ def main() -> None:
                                 {"p_patient_id": str(PATIENT), "p_term": "제주도 언제 갔었어?"},
                                 schema="api")
         assert status == 200 and facts == [], "guardian revocation left fact visible"
+        status, turn = request(turn_context, "POST", public, device_token,
+                               {"p_patient_id": str(PATIENT),
+                                "p_term": "제주도 언제 갔었어?"}, schema="api")
+        assert status == 200 and turn == [{"authorized": True, "facts": []}], \
+            "guardian withdrawal must be authorized-but-memory-empty"
         with patch.dict(os.environ, backend_env), patch(
             "kof5_tts.api.run_synthetic_text_pipeline", return_value=("모르겠어.", b"mock-mp3"),
         ) as hosted, TestClient(app) as backend:
@@ -218,6 +234,11 @@ def main() -> None:
             f"WHERE patient_id='{PATIENT}' AND scope='ambient_processing';")
         status, rows = request(context, "GET", public, device_token, schema="api")
         assert status == 200 and rows == [], "ambient withdrawal left device active"
+        status, turn = request(turn_context, "POST", public, device_token,
+                               {"p_patient_id": str(PATIENT),
+                                "p_term": "제주도 언제 갔었어?"}, schema="api")
+        assert status == 200 and turn == [{"authorized": False, "facts": []}], \
+            "consent withdrawal must be explicit authorization failure"
         with patch.dict(os.environ, backend_env), patch(
             "kof5_tts.api.run_synthetic_text_pipeline", return_value=("unsafe", b"mock-mp3"),
         ) as hosted, TestClient(app) as backend:
@@ -226,7 +247,7 @@ def main() -> None:
             }, headers=backend_headers)
             assert response.status_code == 403, "backend used device after ambient withdrawal"
             hosted.assert_not_called()
-        print("Task-local anonymous Auth → staff pair → device family search → revocation: PASS")
+        print("Task-local Auth → staff pair → atomic device memory/FastAPI → revocation: PASS")
     finally:
         sql(f"""
             DELETE FROM kof5.patient_device_assignment WHERE patient_id='{PATIENT}';

@@ -287,17 +287,14 @@ class SyntheticApiTests(unittest.TestCase):
         def respond(request: httpx.Request) -> httpx.Response:
             calls.append((request.url.path, request.headers.get("authorization")))
             self.assertEqual(request.headers["apikey"], "sb_publishable_local")
-            if request.url.path.endswith("/patient_device_context"):
-                self.assertEqual(request.headers["accept-profile"], "api")
-                return httpx.Response(200, json=[{
-                    "patient_id": SYNTHETIC_DB_PATIENT, "encounter_id": "synthetic-encounter",
-                }] if assigned else [])
-            if request.url.path.endswith("/patient_family_search"):
+            if request.url.path.endswith("/patient_family_turn_context"):
                 self.assertEqual(request.headers["content-profile"], "api")
                 self.assertEqual(json.loads(request.read()), {
                     "p_patient_id": SYNTHETIC_DB_PATIENT, "p_term": "제주도 언제 갔었어?",
                 })
-                return httpx.Response(200, json=memory_rows)
+                return httpx.Response(200, json=[{
+                    "authorized": assigned, "facts": memory_rows if assigned else [],
+                }])
             raise AssertionError("unexpected Supabase route")
 
         async_client_class = httpx.AsyncClient
@@ -320,7 +317,7 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(result.status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "2024년 5월 제주도에 함께 갔었다.")
             self.assertEqual(result.json()["audio_mp3_base64"], "bXAz")
-            self.assertEqual(len(calls), 2)
+            self.assertEqual(len(calls), 1, "one RPC atomically checks permission and memory")
             memory_rows = []
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 200)
             self.assertEqual(pipeline.call_args.args[3], "", "each turn gets fresh memory")
