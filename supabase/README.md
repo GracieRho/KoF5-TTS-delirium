@@ -45,6 +45,8 @@ supabase migration list --local
 
 합성 환자 전용 `api.patient_hospital_turn_context`는 현재 기기 결속과 승인된 병원 사실을 한 조회로 검사한다. `api.synthetic_alert_create`는 위험 범주와 중복 방지 UUID만 기록하고, 직원의 포털 표시·확인·해결·시간 초과 판정은 별도 RPC로 남긴다. 이 상태는 실제 임상 경고 전달을 뜻하지 않는다. 새 합성 검사는 아래 두 HTTP 스크립트와 `supabase test db`에서 수행한다.
 
+`api.synthetic_voice_enrollment_ready`는 고정 합성 환자의 **첫 음성 시험 준비**만 담당 `care_staff`에게 반환한다. 활성 환자·현재 입원·유효한 기관 승인·환자 참여/음성 기능 동의와 assent·입원 중 `patient_dissent` 없음이 필요하지만, **아직 없는 활성 음성 프로필은 요구하지 않는다**. `voice_profile_state`는 `none/pending/active/revoked/deleted` 정보이며 사용 허가가 아니다. [준비 migration](migrations/20260916110000_synthetic_voice_enrollment_ready.sql)과 브라우저 자가 음성 30초 시험은 원본 업로드·특징/프로필 생성·실환자 등록을 수행하지 않는다. 별도 동의 업무·삭제 및 [Gate07](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)은 계속 미완료다.
+
 ```bash
 supabase start --exclude edge-runtime,imgproxy,mailpit,postgres-meta,realtime,storage-api,studio,logflare,vector,supavisor
 python3 supabase/tests/local_http_smoke.py
@@ -53,6 +55,7 @@ python3 supabase/tests/local_staff_http_smoke.py
 python3 supabase/tests/local_patient_registration_http_smoke.py
 python3 supabase/tests/local_patient_hospital_http_smoke.py
 python3 supabase/tests/local_synthetic_alert_http_smoke.py
+python3 supabase/tests/local_synthetic_voice_enrollment_ready_http_smoke.py
 python3 -m unittest supabase/tests/test_local_http_smoke.py
 supabase stop --project-id kof5-familiar-voice-mvp
 ```

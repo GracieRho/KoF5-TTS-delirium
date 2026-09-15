@@ -14,6 +14,8 @@
 
 현재 제품 경로도 합성 시험에 한정된다. 병원 웹은 검증된 등록자와 **기본 0행** 기관 승인 게이트가 있을 때에만 최소 환자 등록을 허용하며, 실제 승인·EHR·입원·동의·환자 목소리 등록 업무는 없다([병원 경계](../../supabase/README.md)). 별도 합성 병원 사실 경로는 결속된 기기·현재 입원·승인된 안전 범주·질문을 한 DB 조회로 대조하고, 모호한 결과에는 사실을 내지 않는다([병원 사실 경계](../../supabase/migrations/20260915183905_patient_hospital_turn_context.sql)). iPad는 자기 음성의 기기 내 전사와 글 시험, 고정 합성 환자 UUID에 대한 익명 기기 결속을 지원하지만 실기기 병실 화자 판정, 환자 음성 등록, 실제 보호자 복제 음성은 검증되지 않았다([iPad 범위](../../apps/patient_ipad/README.md)). 보호자 웹의 가족 기억 등록·문자열 검색은 합성 계정에서 검사했으며 실제 가족 기억의 한국어 의미 검색 품질은 미측정이다([맥락 현황](03-context-and-guardian.md)).
 
+병원 화면의 [첫 합성 음성 시험 준비 조회](../../supabase/migrations/20260916110000_synthetic_voice_enrollment_ready.sql)는 담당 직원·현재 입원·기관 승인·환자 참여/음성 기능 동의와 assent·입원 중 거부 없음을 확인한다. **활성 프로필을 선행 조건으로 요구하지 않으며** 기존 프로필 상태는 정보로만 보여준다. 브라우저의 30초 이내 시험자 본인 음성 채집은 중단 시 마이크 트랙과 오디오 참조를 폐기하고 업로드·특징 추출·프로필 생성·실제 환자 사용을 하지 않는다([ADR-0008](../../architecture/decisions/0008-synthetic-first-voice-enrollment-readiness.md)).
+
 기기와 가족 기억을 매 턴 확인하는 [단일 `patient_family_turn_context` RPC](../../supabase/migrations/20260915172531_atomic_patient_family_turn_context.sql)는 호출 시점의 DB 스냅샷에서 `authorized`와 최대 3건의 일반 기억을 함께 반환한다. [FastAPI 합성 경로](../../src/kof5_tts/api.py)는 `authorized=false`나 RPC 실패 때 hosted 모델 호출을 중단한다. 호출 이후 철회가 일어나면 이미 시작한 공급자 처리를 취소하는 보장은 없다. 로컬 합성 Auth/Data API→FastAPI 모의 공급자 검사와 실제 iPad·원격 공급자·환자 시험은 서로 다른 검증 단계다.
 
 | Gate 07 | 판정 | 환자 대상 시험 전에 필요한 것 |
