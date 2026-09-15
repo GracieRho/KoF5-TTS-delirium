@@ -1003,6 +1003,18 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
     final pending = _replyStop;
     if (pending != null) return pending;
+    if ((_playbackOwnerGeneration ?? 0) < 0 && _playedReply) {
+      _hospitalGeneration++; // User stop intent wins over a late native finish.
+      _hospitalPollTimer?.cancel();
+      _hospitalPollTimer = null;
+      _scheduledHospitalTrial = false;
+      if (mounted) {
+        setState(() {
+          _hospitalBusy = false;
+          _hospitalStatus = '병원 음성 중단 확인 중 · 예약 자동 확인도 멈췄습니다.';
+        });
+      }
+    }
     final future = _performStopReply(successStatus);
     _replyStop = future;
     future.whenComplete(() {
@@ -1019,14 +1031,27 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _playedReply = false;
         _lastCandidatePlaybackLatency = null;
         _autoResumeOwnerGeneration = null;
-        if (mounted) setState(() => _cloudStatus = successStatus);
+        if (mounted) {
+          setState(() {
+            _cloudStatus = successStatus;
+            if ((owner ?? 0) < 0) {
+              _hospitalStatus =
+                  '병원 음성 재생과 예약 자동 확인을 중단했습니다. DB 전달 완료로 표시하지 않습니다.';
+            }
+          });
+        }
       }
       return true;
     } catch (_) {
       if (_playbackOwnerGeneration == owner) {
         _playedReply = true;
         if (mounted) {
-          setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.');
+          setState(() {
+            _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.';
+            if ((owner ?? 0) < 0) {
+              _hospitalStatus = '병원 음성 중단을 확인하지 못했습니다. DB 전달 완료로 표시하지 않습니다.';
+            }
+          });
         }
       }
       return false;

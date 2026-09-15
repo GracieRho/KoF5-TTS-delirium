@@ -14,7 +14,13 @@ import 'fake_recorder.dart';
 void main() {
   const messageId = '00000000-0000-4000-8000-000000000903';
   const approved = '오늘 오후 4시에 CT 촬영 예정입니다.';
-  for (final scenario in ['zero', 'due', 'withdrawn', 'uncertain']) {
+  for (final scenario in [
+    'zero',
+    'due',
+    'withdrawn',
+    'stop-finished-race',
+    'uncertain',
+  ]) {
     testWidgets('scheduled hospital delivery: $scenario', (tester) async {
       final original = RecordPlatform.instance;
       final fake = FakeRecorderPlatform()..permission.complete(true);
@@ -23,6 +29,7 @@ void main() {
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       const audio = MethodChannel('kof5/trial_audio');
       final finished = Completer<bool>();
+      final delayedStop = Completer<void>();
       final session = AnonymousDeviceSession(
         '00000000-0000-4000-8000-000000000901',
         'header.payload.signature',
@@ -56,6 +63,7 @@ void main() {
             return scenario == 'uncertain' ? true : finished.future;
           case 'stop':
             stopCalls++;
+            if (scenario == 'stop-finished-race') await delayedStop.future;
             return null;
         }
         throw MissingPluginException();
@@ -151,6 +159,42 @@ void main() {
             await _until(tester, () => stopCalls > 0);
             expect(ackCalls, 0);
             expect(find.textContaining('DB 전달 확인을 받았습니다.'), findsNothing);
+          } else if (scenario == 'stop-finished-race') {
+            await tester.ensureVisible(find.text('음성 응답 중단'));
+            await tester.tap(find.text('음성 응답 중단'));
+            await _until(tester, () => stopCalls == 1);
+            finished.complete(
+              true,
+            ); // Native completion races an unconfirmed stop.
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 30)),
+            );
+            await tester.pump();
+            expect(ackCalls, 0);
+            expect(
+              fake.starts,
+              1,
+              reason: 'stop intent cannot auto-resume the scheduled mic',
+            );
+            expect(find.textContaining('DB 전달 확인을 받았습니다.'), findsNothing);
+            delayedStop.complete();
+            await _until(
+              tester,
+              () => find
+                  .textContaining('병원 음성 재생과 예약 자동 확인을 중단했습니다.')
+                  .evaluate()
+                  .isNotEmpty,
+            );
+            expect(ackCalls, 0);
+            expect(fake.starts, 1);
+            await tester.pump(const Duration(seconds: 30));
+            await tester.pump();
+            expect(
+              (dueCalls, playCalls, ackCalls),
+              (1, 1, 0),
+              reason:
+                  'explicit stop cannot automatically replay pending due ID',
+            );
           } else {
             if (scenario == 'due') finished.complete(true);
             await _until(tester, () => ackCalls == 1);
@@ -192,6 +236,7 @@ void main() {
         );
       } finally {
         if (!finished.isCompleted) finished.complete(false);
+        if (!delayedStop.isCompleted) delayedStop.complete();
         messenger.setMockMethodCallHandler(audio, null);
         messenger.setMockMethodCallHandler(OnDeviceSpeech.channel, null);
         RecordPlatform.instance = original;
