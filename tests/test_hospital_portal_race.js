@@ -733,6 +733,18 @@ async function runSyntheticMessage() {
   await pendingCompose;
   assert.equal(elements['synthetic-message-section'].hidden, true, 'late draft POST cannot restore form after logout');
   assert.equal(elements['synthetic-message-text'].value, '', 'logout clears pending clinical wording');
+  activeUser = approver;
+  elements.email.value = 'synthetic-approver@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  approvedMessages[0].delivery_status = 'delivered';
+  approvedMessages[0].delivered_at = '2026-09-16T03:00:00Z';
+  await selectFixture();
+  assert.match(elements.messages.children[0].children[0].textContent, /iPad 재생 완료 보고/,
+    'fixture delivered label means device playback completion report');
+  assert.match(elements.messages.children[0].children[2].textContent,
+    /iPad 재생 완료 보고\/기록.*기기 native 재생 완료 보고.*실제 환자 청취나 임상 전달의 증거는 아닙니다/,
+    'staff detail cannot claim the patient heard the message from device completion');
   console.log('Hospital synthetic message draft and distinct approval UI: PASS');
 }
 

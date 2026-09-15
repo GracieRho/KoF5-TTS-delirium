@@ -453,9 +453,14 @@
           add($('facts'), factLabel[fact.category] || fact.category, fact.content,
             `검증 기록 ${hospitalTime(fact.verified_at)} · 유효 종료 ${fact.valid_until ? hospitalTime(fact.valid_until) : '기한 없음'}`);
         for (const message of currentMessages) {
-          const stateTime = message.delivery_status === 'delivered' ? `전달 기록 ${hospitalTime(message.delivered_at)}`
+          const syntheticPlayback = patient.patient_id === syntheticPatientId
+            && message.delivery_status === 'delivered';
+          const stateTime = syntheticPlayback
+            ? `iPad 재생 완료 보고/기록 ${hospitalTime(message.delivered_at)} · 기기 native 재생 완료 보고일 뿐 실제 환자 청취나 임상 전달의 증거는 아닙니다.`
+            : message.delivery_status === 'delivered' ? `전달 기록 ${hospitalTime(message.delivered_at)}`
             : message.delivery_status === 'cancelled' ? `취소 기록 ${hospitalTime(message.cancelled_at)}` : '전달 상태 대기';
-          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · 예약 ${hospitalTime(message.due_at)}`,
+          const stateLabel = syntheticPlayback ? 'iPad 재생 완료 보고' : delivery[message.delivery_status] || '상태 미확인';
+          add($('messages'), `${stateLabel} · 예약 ${hospitalTime(message.due_at)}`,
             message.approved_text,
             `승인 기록 ${hospitalTime(message.approved_at)} · 승인자 참조 ${message.approved_by_staff_ref} · ${stateTime}`);
         }
