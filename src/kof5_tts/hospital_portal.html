@@ -171,7 +171,8 @@
       registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, alertRequest: 0, voiceRequest: 0,
       patients: [], selected: null, pairingPatient: null, messagePatient: null, messageEncounterId: null,
       alertPatient: null, alertEncounterId: null, alertBusy: false,
-      voicePatient: null, voiceEncounterId: null, voiceReady: false, voiceCapture: null,
+      voicePatient: null, voiceEncounterId: null, voiceReady: false,
+      voiceCapture: null, voicePendingStream: null,
       staffUserId: null, messageBusy: false, messageUncertain: false,
       uncertainDraft: null, readyHospitals: [] };
     const $ = id => document.getElementById(id);
@@ -189,6 +190,7 @@
 
     function clearSession(message = '로그아웃했습니다.') {
       stopVoiceCapture(true);
+      stopPendingVoiceStream();
       ++state.generation;
       ++state.request;
       ++state.registrationRequest;
@@ -283,6 +285,7 @@
 
     async function showPatient(patient) {
       stopVoiceCapture(true);
+      stopPendingVoiceStream();
       const preserveForm = state.token && state.staffUserId
         && state.selected === patient.patient_id && state.messagePatient?.patient_id === patient.patient_id
         && state.messageEncounterId === patient.encounter_id && !!patient.encounter_id
@@ -466,6 +469,30 @@
     const voiceProfileLabel = { none: '기록 없음', pending: '합성 메타데이터 대기',
       active: '합성 메타데이터 활성', revoked: '합성 메타데이터 철회', deleted: '합성 메타데이터 삭제' };
 
+    function voiceForeground() {
+      return document.visibilityState === 'visible'
+        || (document.visibilityState == null && !document.hidden);
+    }
+
+    function stopPendingVoiceStream() {
+      const stream = state.voicePendingStream;
+      state.voicePendingStream = null;
+      if (stream) for (const track of stream.getTracks()) track.stop();
+    }
+
+    function suspendVoiceCapture() {
+      ++state.voiceRequest;
+      stopVoiceCapture(true);
+      stopPendingVoiceStream();
+      state.voiceReady = false;
+      state.voicePatient = null;
+      state.voiceEncounterId = null;
+      $('synthetic-voice-section').hidden = true;
+      $('synthetic-voice-start').disabled = true;
+      $('synthetic-voice-stop').disabled = true;
+      $('synthetic-voice-status').textContent = '화면이 숨겨져 마이크 시험을 중단했습니다. 다시 선택해 준비 상태를 확인하세요.';
+    }
+
     function stopVoiceCapture(silent = false, reason = '수동 중단') {
       const capture = state.voiceCapture;
       if (!capture) return;
@@ -546,7 +573,7 @@
       const patient = state.voicePatient;
       if (!patient || !state.voiceReady || state.voiceCapture || $('synthetic-voice-section').hidden
           || $('synthetic-voice-start').disabled || state.selected !== patient.patient_id
-          || state.voiceEncounterId !== patient.encounter_id) return;
+          || state.voiceEncounterId !== patient.encounter_id || !voiceForeground()) return;
       const generation = state.generation;
       const detailRequest = state.request;
       const request = ++state.voiceRequest;
@@ -562,7 +589,7 @@
       let stream = null;
       try {
         const rows = await voiceReadyRpc(token, generation);
-        if (!current()) return;
+        if (!current() || !voiceForeground()) return;
         if (!Array.isArray(rows) || rows.length !== 1 || rows[0].ready !== true
             || rows[0].patient_id !== syntheticPatientId) {
           state.voiceReady = false;
@@ -572,8 +599,21 @@
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder !== 'function')
           throw new Error('browser recording unavailable');
         stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        if (!current()) {
+        if (!current() || !voiceForeground()) {
           for (const track of stream.getTracks()) track.stop();
+          return;
+        }
+        state.voicePendingStream = stream;
+        const fresh = await voiceReadyRpc(token, generation);
+        if (!current() || !voiceForeground()) {
+          stopPendingVoiceStream();
+          return;
+        }
+        if (!Array.isArray(fresh) || fresh.length !== 1 || fresh[0].ready !== true
+            || fresh[0].patient_id !== syntheticPatientId) {
+          stopPendingVoiceStream();
+          state.voiceReady = false;
+          $('synthetic-voice-section').hidden = true;
           return;
         }
         const recorder = new MediaRecorder(stream);
@@ -586,6 +626,7 @@
         recorder.onstop = () => { if (state.voiceCapture === capture) stopVoiceCapture(false, '마이크 종료'); };
         recorder.start(1000);
         state.voiceCapture = capture;
+        state.voicePendingStream = null;
         capture.tick = setInterval(() => {
           if (!current() || state.voiceCapture !== capture) return;
           const seconds = (Date.now() - capture.startedAt) / 1000;
@@ -599,9 +640,15 @@
         $('synthetic-voice-duration').textContent = '0.0초 / 최대 30초';
         $('synthetic-voice-status').textContent = '시험자 본인 음성을 메모리에서만 녹음 중입니다. 중단 시 앱의 오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
       } catch (_) {
+        stopVoiceCapture(true);
+        stopPendingVoiceStream();
         if (stream) for (const track of stream.getTracks()) track.stop();
         if (current()) {
-          $('synthetic-voice-start').disabled = false;
+          if (stream) {
+            state.voiceReady = false;
+            $('synthetic-voice-section').hidden = true;
+          }
+          $('synthetic-voice-start').disabled = !state.voiceReady;
           $('synthetic-voice-stop').disabled = true;
           $('synthetic-voice-status').textContent = '마이크 권한·브라우저 녹음 기능을 확인하지 못했습니다. 오디오는 전송·저장하지 않았습니다.';
         }
@@ -962,6 +1009,7 @@
 
     function renderPatients(patients) {
       stopVoiceCapture(true);
+      stopPendingVoiceStream();
       ++state.request;
       ++state.queueRequest;
       ++state.pairingRequest;
@@ -1149,6 +1197,8 @@
     $('synthetic-alert-sweep').addEventListener('click', sweepSyntheticAlerts);
     $('synthetic-voice-start').addEventListener('click', startVoiceCapture);
     $('synthetic-voice-stop').addEventListener('click', () => stopVoiceCapture(false, '직원이 중단'));
+    document.addEventListener?.('visibilitychange', () => { if (!voiceForeground()) suspendVoiceCapture(); });
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', suspendVoiceCapture);
     $('synthetic-message-review-button').addEventListener('click', () => {
       if (!state.messageUncertain || $('synthetic-message-review-button').hidden
           || $('synthetic-message-section').hidden || !state.messagePatient

@@ -912,7 +912,10 @@ async function runSyntheticVoice() {
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
-  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const document = { hidden: false, visibilityState: 'visible', handlers: {},
+    getElementById: id => elements[id], createElement: tag => new Element(tag),
+    addEventListener(name, handler) { this.handlers[name] = handler; } };
+  const window = { handlers: {}, addEventListener(name, handler) { this.handlers[name] = handler; } };
   const fixture = { patient_id: '00000000-0000-4000-8000-000000000975',
     encounter_id: '00000000-0000-4000-8000-000000000976', staff_display_name: '가상 고정 환자', ehr_patient_ref: 'TEST-975' };
   const other = { patient_id: '00000000-0000-4000-8000-000000000977',
@@ -967,7 +970,7 @@ async function runSyntheticVoice() {
     if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
     throw new Error(`unexpected voice URL or audio upload ${url}`);
   }
-  vm.runInNewContext(script, { document, fetch, navigator, MediaRecorder: Recorder, Date: FakeDate, console,
+  vm.runInNewContext(script, { document, window, fetch, navigator, MediaRecorder: Recorder, Date: FakeDate, console,
     setInterval: callback => { const id = nextTimer++; intervals.set(id, callback); return id; },
     clearInterval: id => intervals.delete(id),
     setTimeout: callback => { const id = nextTimer++; deadlines.set(id, callback); return id; },
@@ -1014,6 +1017,49 @@ async function runSyntheticVoice() {
   assert.equal(intervals.size, 0);
   assert.equal(deadlines.size, 0);
 
+  await selectFixture();
+  permissionPending = pending();
+  const hiddenPermission = start();
+  await pause();
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  document.handlers.visibilitychange();
+  const hiddenStream = makeStream();
+  permissionPending.resolve(hiddenStream);
+  await hiddenPermission;
+  assert.equal(hiddenStream.track.stopped, true,
+    'permission granted after tab hidden cannot create a recorder');
+  assert.equal(recorders.length, 2);
+  assert.equal(elements['synthetic-voice-section'].hidden, true);
+  assert.equal(elements['synthetic-voice-start'].disabled, true);
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  permissionPending = null;
+
+  await selectFixture();
+  await start();
+  const hiddenActive = streams.at(-1);
+  assert.equal(hiddenActive.track.stopped, false);
+  window.handlers.pagehide();
+  assert.equal(hiddenActive.track.stopped, true, 'pagehide stops an active microphone track');
+  assert.equal(recorders.at(-1).ondataavailable, null);
+  assert.equal(elements['synthetic-voice-section'].hidden, true);
+
+  await selectFixture();
+  permissionPending = pending();
+  const revokedDuringPermission = start();
+  await pause();
+  ready = false;
+  const revokedStream = makeStream();
+  permissionPending.resolve(revokedStream);
+  await revokedDuringPermission;
+  assert.equal(revokedStream.track.stopped, true,
+    'fresh readiness denial after permission wait closes the returned stream');
+  assert.equal(recorders.length, 3, 'revoked consent cannot start a MediaRecorder');
+  assert.equal(elements['synthetic-voice-section'].hidden, true);
+  ready = true;
+  permissionPending = null;
+
   state = 'active';
   await selectFixture();
   assert.match(elements['synthetic-voice-profile'].textContent, /합성 메타데이터 활성.*실제 환자 목소리 등록·검증 결과가 아닙니다/);
@@ -1026,7 +1072,7 @@ async function runSyntheticVoice() {
   await pendingStart;
   assert.equal(lateStream.track.stopped, true, 'late mic permission response closes tracks after logout');
   assert.equal(elements['synthetic-voice-section'].hidden, true);
-  assert.equal(recorders.length, 2, 'late permission creates no recorder');
+  assert.equal(recorders.length, 3, 'late permission creates no recorder');
   permissionPending = null;
 
   elements.email.value = 'voice-staff@example.invalid';
@@ -1034,10 +1080,11 @@ async function runSyntheticVoice() {
   await login();
   await selectFixture();
   await start();
-  assert.equal(streams[3].track.stopped, false);
+  const deniedActive = streams.at(-1);
+  assert.equal(deniedActive.track.stopped, false);
   readinessStatus = 403;
   await selectFixture();
-  assert.equal(streams[3].track.stopped, true, 'current readiness 403 closes active mic before clearing session');
+  assert.equal(deniedActive.track.stopped, true, 'current readiness 403 closes active mic before clearing session');
   assert.equal(elements['patient-card'].hidden, true);
   assert.equal(elements['synthetic-voice-section'].hidden, true);
   console.log('Hospital synthetic tester-only 30-second in-memory mic and readiness boundary: PASS');
