@@ -114,6 +114,12 @@
         <hr class="divider">
         <h3>승인 메시지</h3>
         <div id="messages" class="facts"></div>
+        <section id="synthetic-transcript-section" class="pairing" aria-labelledby="synthetic-transcript-title" hidden>
+          <h3 id="synthetic-transcript-title">오늘의 합성 대화 전사</h3>
+          <p class="small">고정 합성 환자의 현재 입원에서 오늘(한국 날짜) 조회 가능한 글만 표시합니다. 주변 오디오나 임상 대화 기록이 아니며 환자 화자 확인을 뜻하지 않습니다.</p>
+          <div id="synthetic-transcripts" class="facts"></div>
+          <div id="synthetic-transcript-status" class="status" role="status" aria-live="polite"></div>
+        </section>
         <section id="synthetic-alert-section" class="pairing" aria-labelledby="synthetic-alert-title" hidden>
           <div class="section-title"><h3 id="synthetic-alert-title">합성 위험 발화 보조 경고</h3><button id="synthetic-alert-refresh" type="button">경고 새로고침</button></div>
           <p class="small">고정 합성 환자의 내부 검증 기록입니다. 경고 생성만으로 의료진 전달이나 확인을 뜻하지 않으며 기존 호출 버튼을 대체하지 않습니다.</p>
@@ -169,6 +175,7 @@
   <script>
     const state = { config: null, token: null, generation: 0, request: 0,
       registrationRequest: 0, queueRequest: 0, pairingRequest: 0, messageRequest: 0, alertRequest: 0, voiceRequest: 0,
+      transcriptRequest: 0,
       patients: [], selected: null, pairingPatient: null, messagePatient: null, messageEncounterId: null,
       alertPatient: null, alertEncounterId: null, alertBusy: false,
       voicePatient: null, voiceEncounterId: null, voiceReady: false,
@@ -199,6 +206,7 @@
       ++state.messageRequest;
       ++state.alertRequest;
       ++state.voiceRequest;
+      ++state.transcriptRequest;
       state.token = null;
       state.staffUserId = null;
       state.patients = [];
@@ -245,6 +253,9 @@
       $('synthetic-voice-status').textContent = '';
       $('synthetic-voice-start').disabled = true;
       $('synthetic-voice-stop').disabled = true;
+      $('synthetic-transcript-section').hidden = true;
+      $('synthetic-transcripts').replaceChildren();
+      $('synthetic-transcript-status').textContent = '';
       lockRegistration(false);
       $('registration-button').disabled = false;
       $('email').value = '';
@@ -283,6 +294,57 @@
       return response.json();
     }
 
+    async function loadTodayTranscript(patient, token, generation, request) {
+      const transcriptRequest = ++state.transcriptRequest;
+      const current = () => generation === state.generation && request === state.request
+        && transcriptRequest === state.transcriptRequest && token === state.token
+        && state.selected === patient.patient_id
+        && state.patients.some(row => row.patient_id === patient.patient_id
+          && row.encounter_id === patient.encounter_id);
+      if (patient.patient_id !== syntheticPatientId || !patient.encounter_id || !current()) return;
+      const id = encodeURIComponent(patient.patient_id);
+      const admission = encodeURIComponent(patient.encounter_id);
+      const path = `/rest/v1/synthetic_today_transcript?patient_id=eq.${id}&encounter_id=eq.${admission}&select=turn_id,patient_id,encounter_id,transcript,captured_at&order=captured_at.desc&limit=100`;
+      $('synthetic-transcript-section').hidden = false;
+      $('synthetic-transcripts').replaceChildren();
+      $('synthetic-transcript-status').textContent = '오늘의 합성 전사를 조회하고 있습니다.';
+      try {
+        const response = await fetch(state.config.url + path, { headers: {
+          apikey: state.config.publishable_key, Authorization: `Bearer ${token}`, 'Accept-Profile': 'api',
+        } });
+        if (!current()) return;
+        if ([401, 403].includes(response.status)) {
+          clearSession('합성 전사 직원 권한이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (!response.ok) throw new Error(String(response.status));
+        const rows = await response.json();
+        if (!current()) return;
+        if (!Array.isArray(rows)) throw new Error('unexpected transcript result');
+        const visible = rows.filter(row => row.patient_id === patient.patient_id
+          && row.encounter_id === patient.encounter_id && typeof row.transcript === 'string');
+        for (const row of visible) {
+          const card = document.createElement('article');
+          card.className = 'fact';
+          const text = document.createElement('p');
+          text.textContent = row.transcript;
+          const note = document.createElement('div');
+          note.className = 'meta';
+          note.textContent = `합성 전사 시각 ${hospitalTime(row.captured_at)}`;
+          card.append(text, note);
+          $('synthetic-transcripts').append(card);
+        }
+        $('synthetic-transcript-status').textContent = visible.length
+          ? `오늘 현재 입원의 조회 가능한 합성 전사 ${visible.length}건입니다. 환자 화자 검증 결과가 아닙니다.`
+          : '오늘 현재 입원에서 조회 가능한 합성 전사가 없습니다.';
+      } catch (_) {
+        if (current()) {
+          $('synthetic-transcripts').replaceChildren();
+          $('synthetic-transcript-status').textContent = '오늘의 합성 전사를 읽지 못했습니다. 직원 권한과 연결을 다시 확인하세요.';
+        }
+      }
+    }
+
     async function showPatient(patient) {
       stopVoiceCapture(true);
       stopPendingVoiceStream();
@@ -300,6 +362,7 @@
       ++state.messageRequest;
       ++state.alertRequest;
       ++state.voiceRequest;
+      ++state.transcriptRequest;
       state.pairingPatient = null;
       state.messagePatient = null;
       state.messageEncounterId = null;
@@ -327,6 +390,9 @@
       $('synthetic-voice-status').textContent = '';
       $('synthetic-voice-start').disabled = true;
       $('synthetic-voice-stop').disabled = true;
+      $('synthetic-transcript-section').hidden = true;
+      $('synthetic-transcripts').replaceChildren();
+      $('synthetic-transcript-status').textContent = '';
       $('pairing-user-id').value = '';
       $('pairing-form').hidden = false;
       $('pairing-status').textContent = '';
@@ -397,6 +463,8 @@
         if (!$('messages').children.length) $('messages').textContent = '현재 입원의 승인 메시지가 없습니다.';
         $('detail-status').textContent = `유효한 승인 사실 ${currentFacts.length}건 · 이번 입원 메시지 ${currentMessages.length}건 (전달 대기 ${currentMessages.filter(message => message.delivery_status === 'pending').length}건).`;
         $('detail-card').hidden = false;
+        if (patient.patient_id === syntheticPatientId && current())
+          loadTodayTranscript(patient, token, generation, request);
         if (patient.patient_id === syntheticPatientId && state.staffUserId && current())
           await loadAlertDashboard(patient);
         if (patient.patient_id === syntheticPatientId && state.staffUserId && current())

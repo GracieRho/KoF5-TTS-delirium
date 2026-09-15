@@ -35,6 +35,7 @@ async function run() {
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
   ].map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
   const patients = ['A', 'B'].map(patient_id => ({ patient_id, staff_display_name: `가상 환자 ${patient_id}`, ehr_patient_ref: `TEST-${patient_id}`, encounter_id: patient_id, ward_ref: '시험병동' }));
@@ -302,6 +303,7 @@ async function runPairing() {
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -430,6 +432,7 @@ async function runSyntheticMessage() {
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -747,6 +750,7 @@ async function runSyntheticAlert() {
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -910,6 +914,7 @@ async function runSyntheticVoice() {
     'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
     'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
     'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { hidden: false, visibilityState: 'visible', handlers: {},
@@ -1146,5 +1151,128 @@ async function runSyntheticVoice() {
   console.log('Hospital synthetic tester-only 30-second in-memory mic and readiness boundary: PASS');
 }
 
+async function runSyntheticTodayTranscript() {
+  const ids = [
+    'signin-card', 'signin-form', 'signin-button', 'signin-status', 'email', 'password',
+    'patient-card', 'patient-search', 'patients', 'list-status', 'logout', 'detail-card', 'detail-title',
+    'detail-summary', 'facts', 'messages', 'detail-status', 'readiness-status',
+    'queue-card', 'queue-refresh', 'queue-items', 'queue-status',
+    'registration-card', 'registration-form', 'registration-hospital', 'registration-number',
+    'registration-name', 'registration-birth', 'registration-button', 'registration-status',
+    'pairing-section', 'pairing-form', 'pairing-user-id', 'pairing-button', 'pairing-status',
+    'synthetic-message-section', 'synthetic-message-form', 'synthetic-message-text',
+    'synthetic-message-mode', 'synthetic-message-time-wrap', 'synthetic-message-time',
+    'synthetic-message-button', 'synthetic-message-review-button', 'synthetic-drafts', 'synthetic-message-status',
+    'synthetic-alert-section', 'synthetic-alert-refresh', 'synthetic-alert-sweep', 'synthetic-alert-items', 'synthetic-alert-status',
+    'synthetic-voice-section', 'synthetic-voice-profile', 'synthetic-voice-start', 'synthetic-voice-stop', 'synthetic-voice-duration', 'synthetic-voice-status',
+    'synthetic-transcript-section', 'synthetic-transcripts', 'synthetic-transcript-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { getElementById: id => elements[id], createElement: tag => new Element(tag) };
+  const fixture = { patient_id: '00000000-0000-4000-8000-000000000975',
+    encounter_id: '00000000-0000-4000-8000-000000000976',
+    staff_display_name: '합성 현재 입원', ehr_patient_ref: 'TEST-975' };
+  const other = { patient_id: '00000000-0000-4000-8000-000000000977',
+    encounter_id: '00000000-0000-4000-8000-000000000978',
+    staff_display_name: '다른 환자', ehr_patient_ref: 'TEST-977' };
+  const staff = '00000000-0000-4000-8000-000000000991';
+  const row = { turn_id: '00000000-0000-4000-8000-000000000951',
+    patient_id: fixture.patient_id, encounter_id: fixture.encounter_id,
+    transcript: '오늘의 합성 발화', captured_at: '2026-09-16T03:15:00Z' };
+  const oldAdmission = { ...row, encounter_id: other.encounter_id, transcript: '이전 입원 전사' };
+  const reads = [];
+  const deferred = [];
+  let transcriptStatus = 200;
+  let transcriptRows = [row, oldAdmission];
+  async function fetch(url, options = {}) {
+    if (url === '/portal/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'transcript-staff-token', user: { id: staff } });
+    if (url.includes('/hospital_patient_list')) return reply(200, [fixture, other]);
+    if (url.includes('/hospital_registration_ready')) return reply(200, []);
+    if (url.includes('/hospital_message_list?delivery_status=eq.pending')) return reply(200, []);
+    if (url.includes('/hospital_context_current?patient_id=eq.') || url.includes('/hospital_message_list?patient_id=eq.')) return reply(200, []);
+    if (url.includes('/rpc/synthetic_alert_staff_ready')) return reply(200, [{ ready: false, patient_id: null }]);
+    if (url.includes('/rpc/synthetic_voice_enrollment_ready')) return reply(200,
+      [{ ready: false, patient_id: fixture.patient_id, voice_profile_state: 'none' }]);
+    if (url.includes('/synthetic_device_pairing_ready')) return reply(200, []);
+    if (url.includes('/synthetic_today_transcript?')) {
+      reads.push({ url, options });
+      return deferred.shift()?.promise || reply(transcriptStatus, transcriptRows);
+    }
+    throw new Error(`unexpected today transcript endpoint ${url}`);
+  }
+  vm.runInNewContext(script, { document, fetch, console });
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  const selectFixture = () => elements.patients.children[0].handlers.click();
+  const selectOther = () => elements.patients.children[1].handlers.click();
+  elements.email.value = 'synthetic-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  await selectOther();
+  assert.equal(reads.length, 0, 'other patient never requests synthetic transcript');
+  assert.equal(elements['synthetic-transcript-section'].hidden, true);
+  await selectFixture();
+  await pause();
+  assert.equal(reads.length, 1);
+  assert.match(reads[0].url, /synthetic_today_transcript\?patient_id=eq\.00000000-0000-4000-8000-000000000975&encounter_id=eq\.00000000-0000-4000-8000-000000000976&select=turn_id,patient_id,encounter_id,transcript,captured_at&order=captured_at.desc&limit=100/);
+  assert.equal(reads[0].options.headers.Authorization, 'Bearer transcript-staff-token');
+  assert.equal(reads[0].options.headers['Accept-Profile'], 'api');
+  assert.equal(reads[0].options.headers.apikey, 'sb_publishable_test');
+  assert.equal(reads[0].options.method || 'GET', 'GET', 'transcript is read-only');
+  assert.equal(elements['synthetic-transcripts'].children.length, 1, 'wrong encounter row is not rendered');
+  assert.equal(elements['synthetic-transcripts'].children[0].children[0].textContent, '오늘의 합성 발화');
+  assert.match(elements['synthetic-transcripts'].children[0].children[1].textContent, /12:15.*한국 시간/);
+  assert.match(elements['synthetic-transcript-status'].textContent, /화자 검증 결과가 아닙니다/);
+
+  const lateRow = pending();
+  deferred.push(lateRow);
+  await selectFixture();
+  await pause();
+  assert.equal(elements['synthetic-transcripts'].children.length, 0, 'reselection clears old transcript during read');
+  await selectOther();
+  lateRow.resolve(reply(200, [row]));
+  await pause();
+  assert.equal(elements['synthetic-transcript-section'].hidden, true, 'late fixture transcript cannot appear on other patient');
+  assert.equal(elements['synthetic-transcripts'].children.length, 0);
+
+  const staleDenied = pending();
+  deferred.push(staleDenied);
+  await selectFixture();
+  await pause();
+  await selectOther();
+  staleDenied.resolve(reply(403, { detail: 'old assignment denied' }));
+  await pause();
+  assert.equal(elements['patient-card'].hidden, false, 'stale 403 cannot close a newer patient view');
+  assert.equal(elements['synthetic-transcript-section'].hidden, true);
+
+  transcriptRows = [];
+  await selectFixture();
+  await pause();
+  assert.equal(elements['synthetic-transcripts'].children.length, 0);
+  assert.match(elements['synthetic-transcript-status'].textContent, /조회 가능한 합성 전사가 없습니다/);
+  transcriptStatus = 403;
+  await selectFixture();
+  await pause();
+  assert.equal(elements['patient-card'].hidden, true, 'current assignment denial hides staff portal');
+  assert.equal(elements['synthetic-transcript-section'].hidden, true);
+  assert.equal(elements['synthetic-transcripts'].children.length, 0);
+  transcriptStatus = 200;
+  elements.email.value = 'synthetic-staff@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  const afterLogout = pending();
+  deferred.push(afterLogout);
+  await selectFixture();
+  await pause();
+  elements.logout.handlers.click();
+  afterLogout.resolve(reply(200, [row]));
+  await pause();
+  assert.equal(elements['synthetic-transcript-section'].hidden, true, 'late logout read cannot restore transcript');
+  assert.equal(elements['synthetic-transcripts'].children.length, 0);
+  console.log('Hospital fixed-synthetic today transcript read and staff race: PASS');
+}
+
 run().then(runPairing).then(runSyntheticMessage).then(runSyntheticAlert).then(runSyntheticVoice)
+  .then(runSyntheticTodayTranscript)
   .catch(error => { console.error(error); process.exitCode = 1; });
