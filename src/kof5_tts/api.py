@@ -54,6 +54,12 @@ def guardian_portal() -> FileResponse:
     return FileResponse(Path(__file__).with_name("guardian_portal.html"))
 
 
+@app.get("/hospital", include_in_schema=False)
+def hospital_portal() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("hospital_portal.html"))
+
+
+@app.get("/portal/config", include_in_schema=False)
 @app.get("/guardian/config", include_in_schema=False)
 def guardian_config() -> dict[str, str]:
     """Public browser configuration; never expose a Supabase secret key."""

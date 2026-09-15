@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>병원 환자 현황 · Familiar Voice</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; color: #233530; background: #f7f8f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; word-break: keep-all; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid #78ae9b; outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    header { padding: 21px clamp(20px, 5vw, 72px); background: #fff; border-bottom: 1px solid #e4e9e3; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { font-size: 18px; font-weight: 800; letter-spacing: -.035em; color: #194a40; }
+    .brand span { color: #7a9a8e; margin-right: 9px; }
+    .top-link { color: #3b6558; font-size: 14px; text-underline-offset: 3px; }
+    main { max-width: 1180px; margin: auto; padding: clamp(36px, 5vw, 70px) 20px 70px; }
+    .eyebrow { display: block; margin-bottom: 14px; font-size: 13px; font-weight: 800; letter-spacing: .08em; color: #4d7869; }
+    h1 { margin: 0 0 15px; font-size: clamp(36px, 4.5vw, 56px); line-height: 1.15; letter-spacing: -.055em; }
+    h2 { margin: 0 0 14px; font-size: 24px; letter-spacing: -.035em; }
+    h3 { margin: 0 0 8px; font-size: 17px; }
+    p { line-height: 1.58; }
+    .intro { max-width: 690px; margin: 0 0 36px; color: #607069; font-size: 18px; }
+    .grid { display: grid; grid-template-columns: minmax(270px, .8fr) minmax(360px, 1.2fr); gap: 22px; align-items: start; }
+    .card { background: #fff; border: 1px solid #e3e9e2; border-radius: 21px; padding: clamp(24px, 3vw, 34px); box-shadow: 0 14px 38px #24382e0b; }
+    .soft { background: #f1f5ef; border-color: #e2e9dd; box-shadow: none; }
+    .card > p { color: #67766f; }
+    label { display: block; margin: 20px 0 8px; font-weight: 700; font-size: 14px; }
+    input { width: 100%; min-height: 50px; padding: 13px 14px; border: 1px solid #c8d6cc; border-radius: 11px; color: #233530; background: #fff; }
+    button { min-height: 44px; padding: 9px 13px; border: 1px solid #c8d6cc; border-radius: 10px; background: #fff; color: #285748; font-weight: 700; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .primary { width: 100%; min-height: 51px; margin-top: 24px; border: 0; background: #194a40; color: #fff; }
+    .status { min-height: 42px; margin-top: 18px; color: #30594d; font-size: 14px; line-height: 1.5; }
+    .small { font-size: 14px; color: #65736c; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .patients, .facts { display: grid; gap: 10px; margin-top: 18px; }
+    .patients button { width: 100%; text-align: left; padding: 16px; background: #fafcf9; }
+    .patients button[aria-current="true"] { border-color: #194a40; background: #edf5ef; }
+    .patients strong, .patients span { display: block; }
+    .patients span { margin-top: 5px; color: #607069; font-size: 13px; }
+    .fact { padding: 16px 18px; border: 1px solid #e0e8df; border-radius: 12px; background: #fafcf9; }
+    .fact h3 { color: #3a6956; }
+    .fact p { margin: 0; white-space: pre-wrap; }
+    .divider { border: 0; border-top: 1px solid #e4e9e3; margin: 24px 0; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 520px) { header { padding: 18px 20px; } main { padding: 32px 15px 50px; } .card { padding: 24px 20px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span aria-hidden="true">✳</span>Familiar Voice</div>
+    <a class="top-link" href="/guardian">보호자 화면</a>
+  </header>
+  <main>
+    <span class="eyebrow">HOSPITAL WORKSPACE</span>
+    <h1>확인된 환자 정보만<br>한곳에서 봅니다.</h1>
+    <p class="intro">기관 자격과 담당 환자 배정을 확인한 직원만 현재 입원과 승인된 병원 정보를 조회합니다.</p>
+    <div class="grid">
+      <section class="card" id="signin-card" aria-labelledby="signin-title">
+        <h2 id="signin-title">병원 직원 로그인</h2>
+        <p>기관에서 자격을 검증한 Supabase 계정으로 로그인하세요.</p>
+        <form id="signin-form">
+          <label for="email">이메일</label><input id="email" type="email" autocomplete="username" required>
+          <label for="password">비밀번호</label><input id="password" type="password" autocomplete="current-password" required>
+          <button id="signin-button" class="primary" type="submit" disabled>로그인</button>
+        </form>
+        <div id="signin-status" class="status" role="status" aria-live="polite">로그인 연결을 확인하고 있습니다.</div>
+      </section>
+      <section class="card soft" id="boundary-card" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">병원에서 승인한 내용</h2>
+        <p>가족 기억은 보호자 화면에서 관리합니다. 병실·검사·예약 메시지는 현재 입원과 직원 승인 상태를 따로 확인합니다.</p>
+        <p class="small">실제 환자 사용은 기관 승인, 동의, 환자 거부 및 개인정보 처리 절차가 완료된 뒤에만 시작합니다.</p>
+      </section>
+      <section class="card" id="patient-card" aria-labelledby="patient-title" hidden>
+        <div class="section-title"><h2 id="patient-title">담당 환자</h2><button id="logout" type="button">로그아웃</button></div>
+        <p>현재 권한으로 조회할 수 있는 활성 환자입니다.</p>
+        <div id="patients" class="patients"></div>
+        <div id="list-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+      <section class="card" id="detail-card" aria-labelledby="detail-title" hidden>
+        <h2 id="detail-title">현재 입원 정보</h2>
+        <p id="detail-summary"></p>
+        <hr class="divider">
+        <h3>직원 승인 사실</h3>
+        <div id="facts" class="facts"></div>
+        <hr class="divider">
+        <h3>승인 메시지</h3>
+        <div id="messages" class="facts"></div>
+        <div id="detail-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const state = { config: null, token: null, generation: 0, request: 0, patients: [], selected: null };
+    const $ = id => document.getElementById(id);
+    const encounter = patient => patient.encounter_id ?
+      `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음';
+    const delivery = { pending: '전달 대기', delivered: '전달됨', cancelled: '취소됨' };
+
+    function clearSession(message = '로그아웃했습니다.') {
+      ++state.generation;
+      ++state.request;
+      state.token = null;
+      state.patients = [];
+      state.selected = null;
+      $('email').value = '';
+      $('password').value = '';
+      $('patients').replaceChildren();
+      $('facts').replaceChildren();
+      $('messages').replaceChildren();
+      $('patient-card').hidden = true;
+      $('detail-card').hidden = true;
+      $('signin-card').hidden = false;
+      $('signin-status').textContent = message;
+    }
+
+    async function supabase(path, token, generation) {
+      const response = await fetch(state.config.url + path, {
+        headers: { apikey: state.config.publishable_key, Authorization: `Bearer ${token}`, 'Accept-Profile': 'api' },
+      });
+      if (!response.ok) {
+        if (generation === state.generation && token === state.token && [401, 403].includes(response.status))
+          clearSession('세션 또는 직원 권한이 유효하지 않아 정보를 숨겼습니다.');
+        throw new Error(String(response.status));
+      }
+      return response.json();
+    }
+
+    async function showPatient(patient) {
+      const generation = state.generation;
+      const request = ++state.request;
+      const token = state.token;
+      state.selected = patient.patient_id;
+      const current = () => generation === state.generation && request === state.request
+        && token === state.token && state.selected === patient.patient_id;
+      for (const button of $('patients').querySelectorAll('button'))
+        button.setAttribute('aria-current', String(button.dataset.patientId === patient.patient_id));
+      $('detail-card').hidden = true;
+      $('facts').replaceChildren();
+      $('messages').replaceChildren();
+      $('detail-status').textContent = '현재 입원과 승인 상태를 확인하고 있습니다.';
+      $('detail-title').textContent = patient.staff_display_name;
+      $('detail-summary').textContent = `${patient.ehr_patient_ref} · ${encounter(patient)}`;
+      if (!patient.encounter_id) {
+        $('facts').textContent = '현재 입원이 없어 병원 사실을 조회하지 않습니다.';
+        $('messages').textContent = '현재 입원이 없어 승인 메시지를 조회하지 않습니다.';
+        $('detail-status').textContent = '현재 입원이 없어 병원 사실·메시지를 조회하지 않습니다.';
+        $('detail-card').hidden = false;
+        return;
+      }
+      try {
+        const id = encodeURIComponent(patient.patient_id);
+        const [facts, messages] = await Promise.all([
+          supabase(`/rest/v1/hospital_context_current?patient_id=eq.${id}&select=category,content,encounter_id`, token, generation),
+          supabase(`/rest/v1/hospital_message_list?patient_id=eq.${id}&select=approved_text,due_at,delivery_status,encounter_id`, token, generation),
+        ]);
+        if (!current()) return;
+        const add = (container, title, content) => {
+          const card = document.createElement('article');
+          card.className = 'fact';
+          const heading = document.createElement('h3');
+          heading.textContent = title;
+          const body = document.createElement('p');
+          body.textContent = content;
+          card.append(heading, body);
+          container.append(card);
+        };
+        for (const fact of facts.filter(item => !item.encounter_id || item.encounter_id === patient.encounter_id))
+          add($('facts'), fact.category, fact.content);
+        for (const message of messages.filter(item => item.encounter_id === patient.encounter_id))
+          add($('messages'), `${delivery[message.delivery_status] || '상태 미확인'} · ${new Date(message.due_at).toLocaleString('ko-KR')}`, message.approved_text);
+        if (!$('facts').children.length) $('facts').textContent = '현재 유효한 승인 사실이 없습니다.';
+        if (!$('messages').children.length) $('messages').textContent = '현재 입원의 승인 메시지가 없습니다.';
+        $('detail-status').textContent = '병원 승인 정보만 표시했습니다.';
+        $('detail-card').hidden = false;
+      } catch (_) {
+        if (current()) $('detail-status').textContent = '병원 정보를 읽지 못했습니다. 권한과 연결을 다시 확인하세요.';
+      }
+    }
+
+    $('signin-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const generation = ++state.generation;
+      $('signin-button').disabled = true;
+      $('signin-status').textContent = '로그인하고 직원 권한을 확인하고 있습니다.';
+      try {
+        const sessionResponse = await fetch(state.config.url + '/auth/v1/token?grant_type=password', {
+          method: 'POST', headers: { apikey: state.config.publishable_key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }),
+        });
+        if (!sessionResponse.ok) throw new Error(String(sessionResponse.status));
+        const session = await sessionResponse.json();
+        if (generation !== state.generation) return;
+        state.token = session.access_token;
+        $('password').value = '';
+        const patients = await supabase('/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref', state.token, generation);
+        if (generation !== state.generation) return;
+        state.patients = patients;
+        $('patients').replaceChildren();
+        for (const patient of patients) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.patientId = patient.patient_id;
+          const title = document.createElement('strong');
+          title.textContent = patient.staff_display_name;
+          const caption = document.createElement('span');
+          caption.textContent = `${patient.ehr_patient_ref} · ${encounter(patient)}`;
+          button.append(title, caption);
+          button.addEventListener('click', () => showPatient(patient));
+          $('patients').append(button);
+        }
+        $('list-status').textContent = patients.length ? `${patients.length}명의 활성 환자를 조회했습니다.` : '조회 권한이 있는 활성 환자가 없습니다.';
+        $('signin-card').hidden = true;
+        $('patient-card').hidden = false;
+      } catch (_) {
+        if (generation === state.generation) clearSession('로그인 또는 직원 권한 확인에 실패했습니다.');
+      } finally {
+        if (generation === state.generation || !state.token) $('signin-button').disabled = !state.config;
+      }
+    });
+    $('logout').addEventListener('click', () => clearSession());
+    fetch('/portal/config').then(response => {
+      if (!response.ok) throw new Error('unconfigured');
+      return response.json();
+    }).then(config => {
+      state.config = config;
+      $('signin-button').disabled = false;
+      $('signin-status').textContent = '로그인할 수 있습니다.';
+    }).catch(() => { $('signin-status').textContent = '전용 로그인 연결이 아직 준비되지 않았습니다.'; });
+  </script>
+</body>
+</html>

@@ -102,12 +102,16 @@ class SyntheticApiTests(unittest.TestCase):
         portal = self.client.get("/guardian")
         self.assertEqual(portal.status_code, 200)
         self.assertIn("보호자 로그인", portal.text)
+        hospital = self.client.get("/hospital")
+        self.assertEqual(hospital.status_code, 200)
+        self.assertIn("병원 직원 로그인", hospital.text)
         env = {
             "KOF5_SUPABASE_URL": "", "KOF5_SUPABASE_PUBLISHABLE_KEY": "",
             "KOF5_SUPABASE_PROJECT_REF": "", "VERCEL": "",
         }
         with patch.dict(os.environ, env):
             self.assertEqual(self.client.get("/guardian/config").status_code, 503)
+            self.assertEqual(self.client.get("/portal/config").status_code, 503)
         with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                                           "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
                                           "SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
@@ -115,6 +119,7 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(config.json(), {
                 "url": "http://127.0.0.1:54341", "publishable_key": "sb_publishable_local",
             })
+            self.assertEqual(self.client.get("/portal/config").json(), config.json())
             self.assertNotIn("sb_secret_never_return", config.text)
         with patch.dict(os.environ, {**env, "VERCEL": "1", "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                                           "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local"}):
