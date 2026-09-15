@@ -24,8 +24,8 @@ class CloudCredentials:
     voice_owner_consent_verified: bool = field(repr=False)
 
     def __post_init__(self) -> None:
-        if not all((self.deepgram_key, self.openai_key, self.elevenlabs_key, self.voice_id)):
-            raise ValueError("all hosted API credentials and a voice ID are required")
+        if not all((self.openai_key, self.elevenlabs_key, self.voice_id)):
+            raise ValueError("reply and voice API credentials are required")
         if not self.voice_owner_consent_verified:
             raise ValueError("voice owner's cloning consent must be verified")
 
@@ -53,6 +53,8 @@ def validate_short_wav(wav: bytes) -> float:
 def transcribe_wav(client: httpx.Client, wav: bytes, key: str) -> str:
     """Deepgram Nova-3 batch STT; streaming is a later, measured step."""
     validate_short_wav(wav)
+    if not key:
+        raise ValueError("hosted STT requires its own provider key")
     response = client.post(
         "https://api.deepgram.com/v1/listen",
         params={"model": "nova-3", "language": "ko", "mip_opt_out": "true"},

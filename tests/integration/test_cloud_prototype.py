@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from kof5_tts.cloud_prototype import (  # noqa: E402
     CloudCredentials, delete_test_voice, enroll_test_voice, find_test_voice,
-    run_synthetic_pipeline, run_synthetic_text_pipeline,
+    run_synthetic_pipeline, run_synthetic_text_pipeline, transcribe_wav,
 )
 from tests.synthetic_wav import SYNTHETIC_WAV, make_synthetic_wav  # noqa: E402
 
@@ -244,6 +244,8 @@ class CloudPrototypeTests(unittest.TestCase):
     def test_missing_consent_and_invalid_audio_never_reach_providers(self) -> None:
         with self.assertRaises(ValueError):
             CloudCredentials("d", "o", "e", "v", False)
+        self.assertEqual(CloudCredentials("", "o", "e", "v", True).deepgram_key, "",
+                         "on-device text path does not need a hosted STT key")
         def unexpected(request: httpx.Request) -> httpx.Response:
             raise AssertionError("invalid input must not call a provider")
         with httpx.Client(transport=httpx.MockTransport(unexpected)) as client:
@@ -251,6 +253,8 @@ class CloudPrototypeTests(unittest.TestCase):
                 run_synthetic_pipeline(
                     client, b"not wav", "known fact", CloudCredentials("d", "o", "e", "v", True),
                 )
+            with self.assertRaisesRegex(ValueError, "hosted STT"):
+                transcribe_wav(client, make_synthetic_wav(1), "")
 
     def test_truncated_and_long_wav_never_reach_stt(self) -> None:
         def unexpected(request: httpx.Request) -> httpx.Response:
