@@ -81,6 +81,8 @@ iPad의 합성 기기 연결 모드는 익명 JWT를 메모리에만 두고 병�
 
 별도 `POST /internal/synthetic/paired/00000000-0000-4000-8000-000000000975/text`는 기존 내부 합성 토큰과 **기기 Supabase Auth JWT**를 함께 요구합니다. FastAPI는 전용 Supabase의 publishable 키와 같은 JWT로 단일 RPC로 기기 권한과 가족 기억 최대 세 건을 같은 DB 스냅샷에서 매 턴 확인한 뒤 합성 공급자 파이프라인에 전달합니다. 기억이 없으면 LLM에 빈 사실을 보내지 않고 확인된 정보가 없다고 답합니다. 실제 로컬 Auth/Data API→FastAPI와 모의 공급자 연결은 통과했지만, 실제 공급자 호출·iPad·환자 자료에는 사용하지 않았습니다.
 
+합성 병원 메시지는 고정 합성 환자·현재 입원·세 동의·활성 음성 프로필이 모두 준비된 경우에만 담당 직원이 초안을 쓰고 **다른 담당 직원**이 승인해 예약 큐에 넣습니다. 기기는 익명 JWT로 기한이 된 메시지 ID 최대 세 개를 찾고, 개별 RPC에서 권한과 승인 원문을 다시 확인합니다. `POST /internal/synthetic/paired/{patient_id}/message/{message_id}/audio`는 원문을 언어 모델로 다시 쓰지 않고 시험 TTS에 그대로 보냅니다. iPad는 RPC 원문과 API 원문이 완전히 일치할 때만 수동 재생하며, 재생 중단·철회 시 폐기합니다. 이 경로는 DB 메시지를 `pending`에서 `delivered`로 바꾸거나 의료진 확인을 기록하지 않습니다. 실제 환자·실기기·실제 공급자와 임상 원문 승인·전달은 아직 검증하지 않았습니다.
+
 루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
 
 별도 `cloud_prototype.py`에는 Phase 0용 배치 WAV→STT→LLM→MP3 호출을 합성 데이터 기준으로 구현했습니다. Deepgram Nova-3, OpenAI Responses, ElevenLabs IVC는 현재 **비교 후보**이고, 공급업체 선정과 실제 서비스 검증은 남아 있습니다. [Deepgram MIP 제외](https://developers.deepgram.com/docs/the-deepgram-model-improvement-partnership-program)와 [OpenAI `store=false`](https://developers.openai.com/api/docs/guides/your-data)를 요청에 적용하지만, [ElevenLabs 복제 음성 샘플은 Zero Retention 적용 대상이 아니므로](https://elevenlabs.io/docs/eleven-api/resources/zero-retention-mode) 실제 보호자 샘플 등록은 동의·보존·삭제 계약을 확인하기 전까지 진행하지 않습니다. CLI는 첫 hosted TTS 바이트와 MP3 완료 시각을 구분하며 실제 iPad 첫 청취 오디오 목표는 아직 측정하지 못했습니다. 테스트는 네트워크 없이 모의 응답만 사용합니다.
