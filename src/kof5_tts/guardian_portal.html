@@ -31,6 +31,7 @@
     .primary { min-height: 51px; width: 100%; margin-top: 24px; border: 0; border-radius: 11px; background: #194a40; color: #fff; font-weight: 800; }
     .primary:disabled { opacity: .55; cursor: not-allowed; }
     .secondary { min-height: 40px; padding: 8px 13px; border: 1px solid #c8d6cc; border-radius: 9px; color: #285748; background: #fff; font-weight: 700; }
+    #signup-button { width: 100%; margin-top: 12px; }
     .small { font-size: 14px; color: #65736c; }
     .hint { padding: 14px 16px; border-left: 3px solid #8ea890; border-radius: 7px; background: #eef4ed; font-size: 14px; line-height: 1.55; }
     .status { min-height: 42px; margin-top: 20px; color: #30594d; font-size: 14px; line-height: 1.5; }
@@ -73,8 +74,10 @@
           <input id="password" type="password" autocomplete="current-password" required>
           <button id="signin-button" class="primary" type="submit" disabled>로그인</button>
         </form>
+        <button id="signup-button" class="secondary" type="button" disabled>보호자 계정 만들기</button>
+        <div id="signup-status" class="status" role="status" aria-live="polite"></div>
         <div id="signin-status" class="status" role="status" aria-live="polite">로그인 연결을 확인하고 있습니다.</div>
-        <p class="small">새 환자 연결과 보호자 계정 확인은 병원 담당자에게 요청하세요.</p>
+        <p class="small">가입 후 확인 이메일이 오면 인증하고 이 화면에서 로그인하세요. 이메일 확인이 꺼진 시험 환경에서는 바로 로그인할 수 있습니다. 환자 연결은 병원 담당자의 별도 검증 전까지 열리지 않습니다.</p>
       </section>
       <section class="card soft" aria-labelledby="boundary-title">
         <h2 id="boundary-title">입력 전에 확인해요</h2>
@@ -135,7 +138,7 @@
     </div>
   </main>
   <script>
-    const state = { config: null, token: null, userId: null, links: [], generation: 0, factRequest: 0, saveRequest: 0, draftRevision: 0, editingFactId: null };
+    const state = { config: null, token: null, userId: null, links: [], generation: 0, authRequest: 0, factRequest: 0, saveRequest: 0, draftRevision: 0, editingFactId: null };
     const $ = id => document.getElementById(id);
     const labels = { family: '가족', relationship: '가족과 관계', hometown: '고향', occupation: '예전 일', food: '좋아하는 음식', hobby: '취미', friend: '친구', pet: '반려동물', daily_routine: '평소 일과', travel: '함께한 여행', family_event: '가족 행사', favorite_story: '좋아하는 이야기', recent_event: '최근 일', comfort_topic: '안심되는 이야기', avoid_topic: '피해야 할 이야기' };
     const current = link => link.access_status === 'verified'
@@ -163,6 +166,7 @@
 
     function clearSession(message = '로그아웃했습니다.') {
       state.generation += 1;
+      state.authRequest += 1;
       state.factRequest += 1;
       state.saveRequest += 1;
       state.draftRevision += 1;
@@ -182,6 +186,9 @@
       $('memory-card').hidden = true;
       $('signin-card').hidden = false;
       $('signin-status').textContent = message;
+      $('signup-status').textContent = '';
+      $('signin-button').disabled = !state.config;
+      $('signup-button').disabled = !state.config;
     }
 
     function resetEdit() {
@@ -267,19 +274,23 @@
     $('signin-form').addEventListener('submit', async event => {
       event.preventDefault();
       let owner = state.generation;
+      const request = ++state.authRequest;
+      const currentAuth = () => owner === state.generation && request === state.authRequest;
       $('signin-button').disabled = true;
+      $('signup-button').disabled = true;
+      $('signup-status').textContent = '';
       $('signin-status').textContent = '로그인하고 연결을 확인하고 있습니다.';
       try {
         const session = await supabase('/auth/v1/token?grant_type=password', 'POST', {
           email: $('email').value.trim(), password: $('password').value,
         });
-        if (owner !== state.generation) return;
+        if (!currentAuth()) return;
         owner = ++state.generation;
         state.token = session.access_token;
         state.userId = session.user.id;
         $('password').value = '';
         const links = await supabase('/rest/v1/guardian_links?select=patient_id,relationship,access_status,effective_at,expires_at', 'GET', null, 'api');
-        if (owner !== state.generation) return;
+        if (!currentAuth()) return;
         state.links = links;
         renderLinks();
         $('signin-card').hidden = true;
@@ -287,11 +298,40 @@
         document.body.classList.add('signed-in');
         await loadFacts();
       } catch (_) {
-        if (owner !== state.generation) return;
+        if (!currentAuth()) return;
         clearSession();
         $('signin-status').textContent = '로그인 또는 연결 확인에 실패했습니다. 계정 정보를 다시 확인하세요.';
       } finally {
-        if (owner === state.generation || !state.token) $('signin-button').disabled = !state.config;
+        if (currentAuth()) {
+          $('signin-button').disabled = !state.config;
+          $('signup-button').disabled = !state.config;
+        }
+      }
+    });
+
+    $('signup-button').addEventListener('click', async () => {
+      if (!state.config || !$('signin-form').reportValidity()) return;
+      const generation = state.generation;
+      const request = ++state.authRequest;
+      const currentAuth = () => generation === state.generation && request === state.authRequest;
+      $('signin-button').disabled = true;
+      $('signup-button').disabled = true;
+      $('signup-status').textContent = '가입 요청을 보내고 있습니다.';
+      try {
+        await supabase('/auth/v1/signup', 'POST', {
+          email: $('email').value.trim(), password: $('password').value,
+        });
+        if (!currentAuth()) return;
+        // Even if local Auth auto-confirms and returns a session, it cannot grant a patient link.
+        $('password').value = '';
+        $('signup-status').textContent = '가입 요청을 받았습니다. 확인 이메일이 오면 인증한 뒤 로그인하세요. 환자 연결은 병원에서 따로 검증합니다.';
+      } catch (_) {
+        if (currentAuth()) $('signup-status').textContent = '가입 요청을 완료하지 못했습니다. 입력과 연결 상태를 확인하세요.';
+      } finally {
+        if (currentAuth()) {
+          $('signin-button').disabled = false;
+          $('signup-button').disabled = false;
+        }
       }
     });
 
@@ -361,6 +401,7 @@
     }).then(config => {
       state.config = config;
       $('signin-button').disabled = false;
+      $('signup-button').disabled = false;
       $('signin-status').textContent = '로그인할 수 있습니다.';
     }).catch(() => {
       $('signin-status').textContent = '전용 로그인 연결이 아직 준비되지 않았습니다.';

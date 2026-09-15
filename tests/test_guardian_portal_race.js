@@ -21,6 +21,7 @@ class Element {
   constructor(id = '') { this.id = id; this.value = ''; this.textContent = ''; this.children = []; this.handlers = {}; this.hidden = false; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   focus() {}
+  reportValidity() { return true; }
   replaceChildren() { this.children = []; this.textContent = ''; if (this.id === 'patient') this.value = ''; }
   append(...children) { this.children.push(...children); if (this.id === 'patient' && !this.value) this.value = children[0].value; }
 }
@@ -28,6 +29,7 @@ class Element {
 async function run() {
   const elements = Object.fromEntries([
     'signin-form', 'signin-button', 'signin-status', 'signin-card', 'email', 'password',
+    'signup-button', 'signup-status',
     'portal-card', 'portal-status', 'memory-card', 'memory-form', 'memory-status',
     'links', 'patient', 'facts', 'avoid-facts', 'category', 'content', 'save-memory', 'cancel-edit', 'logout',
   ].map(id => [id, new Element(id)]));
@@ -42,11 +44,23 @@ async function run() {
   let bMemory = { fact_id: 'B-fact', category: 'travel', content: 'B memory' };
   let aReads = 0;
   let logins = 0;
+  let pausedLogin = null;
+  const signupOne = pending();
+  const signupTwo = pending();
+  const signupThree = pending();
+  const signups = [];
   const links = ['A', 'B'].map(patient_id => ({ patient_id, relationship: '가상 가족', access_status: 'verified', effective_at: '2020-01-01T00:00:00Z', expires_at: null }));
 
   async function fetch(url, options = {}) {
     if (url === '/guardian/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
-    if (url.includes('/auth/v1/token')) return reply(200, { access_token: `session-${++logins}`, user: { id: 'guardian' } });
+    if (url.includes('/auth/v1/signup')) {
+      signups.push({ body: JSON.parse(options.body), headers: options.headers });
+      return [signupOne, signupTwo, signupThree][signups.length - 1].promise;
+    }
+    if (url.includes('/auth/v1/token')) {
+      if (pausedLogin) { const slow = pausedLogin; pausedLogin = null; return slow.promise; }
+      return reply(200, { access_token: `session-${++logins}`, user: { id: 'guardian' } });
+    }
     if (url.includes('/guardian_links')) return reply(200, links);
     if (url.includes('/family_context') && options.method === 'POST') {
       posts.push(JSON.parse(options.body));
@@ -162,6 +176,55 @@ async function run() {
   assert.equal(elements['memory-card'].hidden, true);
   assert.deepEqual(elements['avoid-facts'].children, []);
   assert.equal(elements.content.value, '');
+
+  links.splice(0);
+  elements.email.value = 'new-guardian@example.invalid';
+  elements.password.value = 'synthetic-password';
+  const lateSignup = elements['signup-button'].handlers.click();
+  await pause();
+  assert.deepEqual(signups[0].body, { email: 'new-guardian@example.invalid', password: 'synthetic-password' });
+  assert.equal(signups[0].headers.Authorization, undefined, 'signup has no older session token');
+  elements.logout.handlers.click();
+  signupOne.resolve(reply(200, { user: { id: 'new-guardian' }, session: { access_token: 'unused' } }));
+  await lateSignup;
+  assert.equal(elements['portal-card'].hidden, true, 'late signup after logout cannot reopen portal');
+  assert.equal(elements['signup-status'].textContent, '', 'late signup cannot restore stale confirmation text');
+
+  elements.email.value = 'new-guardian@example.invalid';
+  elements.password.value = 'synthetic-password';
+  const slowLoginReply = pending();
+  pausedLogin = slowLoginReply;
+  const slowLogin = submit(elements['signin-form'].handlers.submit);
+  await pause();
+  const newerSignup = elements['signup-button'].handlers.click();
+  await pause();
+  slowLoginReply.resolve(reply(200, { access_token: 'old-login', user: { id: 'new-guardian' } }));
+  await slowLogin;
+  assert.equal(elements['portal-card'].hidden, true, 'signup supersedes a pending login');
+  signupTwo.resolve(reply(200, { user: { id: 'new-guardian' }, session: { access_token: 'unused' } }));
+  await newerSignup;
+  assert.equal(elements['portal-card'].hidden, true, 'signup response session does not log the user in');
+  assert.ok(elements['signup-status'].textContent.includes('확인 이메일'));
+  assert.equal(elements.password.value, '');
+  const readsBeforeLogin = aReads;
+  elements.password.value = 'synthetic-password';
+  await submit(elements['signin-form'].handlers.submit);
+  assert.equal(elements['portal-card'].hidden, false, 'explicit login can show connection status');
+  assert.equal(elements['memory-card'].hidden, true, 'account without verified links sees no memory');
+  assert.equal(elements.patient.hidden, true, 'account without verified links sees no patient selector');
+  assert.equal(aReads, readsBeforeLogin, 'unlinked account does not request family facts');
+
+  elements.logout.handlers.click();
+  elements.email.value = 'new-guardian@example.invalid';
+  elements.password.value = 'synthetic-password';
+  const staleSignup = elements['signup-button'].handlers.click();
+  await pause();
+  await submit(elements['signin-form'].handlers.submit);
+  assert.equal(elements['portal-card'].hidden, false);
+  signupThree.resolve(reply(200, { user: { id: 'new-guardian' }, session: { access_token: 'unused' } }));
+  await staleSignup;
+  assert.equal(elements['portal-card'].hidden, false, 'late signup cannot replace a newer login session');
+  assert.equal(elements['signin-card'].hidden, true);
   console.log('Guardian portal race and draft isolation: PASS');
 }
 
