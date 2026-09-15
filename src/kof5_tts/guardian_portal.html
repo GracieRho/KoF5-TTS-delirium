@@ -42,6 +42,10 @@
     .fact p { margin: 0; white-space: pre-wrap; color: #233530; }
     .fact button { margin-top: 12px; }
     .semantic-status { margin-top: 12px; font-size: 13px; color: #526c60; line-height: 1.5; }
+    .voice-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+    .voice-actions button { flex: 1 1 170px; }
+    .voice-samples { margin: 14px 0; padding-left: 23px; line-height: 1.8; font-size: 14px; }
+    .voice-samples li { margin-bottom: 3px; }
     .avoid-facts .fact { background: #fff9f4; border-color: #eedfd2; }
     .avoid-facts .fact h3 { color: #805c43; }
     .links { padding: 0; list-style: none; display: grid; gap: 9px; }
@@ -142,12 +146,28 @@
         </form>
         <div id="memory-status" class="status" role="status" aria-live="polite"></div>
       </section>
+      <section class="card" id="voice-card" aria-labelledby="voice-title" hidden>
+        <h2 id="voice-title">본인 음성 합성 시험</h2>
+        <p class="hint">고정 합성 환자 자료에 한정합니다. 실제 보호자·환자 음성을 녹음하지 마세요. 별도 보호자 복제 음성 동의와 현재 연결을 서버에서 확인한 뒤 테스터 본인의 목소리만 20~30초씩 세 번 녹음할 수 있습니다. 이 화면은 음성 검증이나 임상 사용 승인을 뜻하지 않습니다.</p>
+        <ol id="voice-samples" class="voice-samples" aria-live="polite"></ol>
+        <label for="voice-own-confirm"><input id="voice-own-confirm" type="checkbox" style="width:auto; min-height:auto; margin-right:8px">이 합성 시험은 테스터인 내 목소리만 사용합니다.</label>
+        <div class="voice-actions">
+          <button id="voice-start" class="secondary" type="button" disabled>다음 합성 샘플 녹음</button>
+          <button id="voice-stop" class="secondary" type="button" disabled>녹음 끝내기</button>
+          <button id="voice-enroll" class="secondary" type="button" disabled>세 샘플 합성 업로드</button>
+          <button id="voice-delete" class="secondary" type="button" disabled>합성 복제 삭제 요청</button>
+          <button id="voice-reconcile" class="secondary" type="button" disabled>원격 상태 대조</button>
+          <button id="voice-refresh" class="secondary" type="button">상태 다시 확인</button>
+        </div>
+        <div id="voice-status" class="status" role="status" aria-live="polite">별도 동의와 합성 시험 상태를 확인하기 전에는 녹음이 열리지 않습니다.</div>
+      </section>
     </div>
   </main>
   <script>
     const state = { config: null, token: null, userId: null, links: [], generation: 0,
       authRequest: 0, factRequest: 0, saveRequest: 0, draftRevision: 0,
-      editingFactId: null, semanticJobs: new Map() };
+      editingFactId: null, semanticJobs: new Map(), voiceRequest: 0, voiceStatus: null,
+      voiceCapture: null, voicePendingStream: null, voiceSamples: [], voiceUpload: null };
     const $ = id => document.getElementById(id);
     const syntheticPatientId = '00000000-0000-4000-8000-000000000975';
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -229,6 +249,357 @@
       if (clear) state.semanticJobs.clear();
     }
 
+    const voicePath = patientId => `/internal/synthetic/guardian/${patientId}/voice`;
+    const voiceForeground = () => !document.hidden && document.visibilityState !== 'hidden';
+    const voiceCurrent = (owner, foreground = true) => owner.generation === state.generation
+      && owner.token === state.token && owner.request === state.voiceRequest
+      && $('patient').value === owner.patientId && owner.patientId === syntheticPatientId
+      && state.links.some(link => link.patient_id === owner.patientId && current(link))
+      && !!state.token && (!foreground || voiceForeground());
+    const voiceReady = status => status?.authorized === true && status.ready === true
+      && status.upload_enabled === true && uuid.test(status.consent_id || '')
+      && status.status === 'none';
+
+    function voiceButtons() {
+      const ready = voiceReady(state.voiceStatus) && $('voice-own-confirm').checked && voiceForeground()
+        && $('voice-card').hidden === false && !state.voiceUpload;
+      $('voice-start').disabled = !ready || !!state.voiceCapture || state.voiceSamples.length === 3;
+      $('voice-stop').disabled = !state.voiceCapture;
+      $('voice-enroll').disabled = !ready || !!state.voiceCapture || state.voiceSamples.length !== 3;
+      const status = state.voiceStatus;
+      $('voice-delete').disabled = !voiceForeground() || !status?.authorized
+        || !uuid.test(status.clone_id || '') || !['created', 'verification_pending', 'pending', 'deletion_pending'].includes(status.status)
+        || !!state.voiceUpload || !!state.voiceCapture;
+      $('voice-reconcile').disabled = !voiceForeground() || !status?.authorized
+        || !uuid.test(status.clone_id || '') || status.status !== 'pending'
+        || !!state.voiceUpload || !!state.voiceCapture;
+      $('voice-refresh').disabled = !voiceForeground() || !!state.voiceUpload || !!state.voiceCapture;
+    }
+
+    function showVoiceSamples() {
+      $('voice-samples').replaceChildren();
+      for (const [index, sample] of state.voiceSamples.entries()) {
+        const item = document.createElement('li');
+        item.textContent = `${index + 1}번째 테스터 본인 음성 샘플 · ${(sample.durationMs / 1000).toFixed(1)}초 · 로컬 참조만 유지`;
+        $('voice-samples').append(item);
+      }
+      voiceButtons();
+    }
+
+    function releaseVoiceCapture(capture, keep = false) {
+      if (!capture) return;
+      if (capture.timer) clearInterval(capture.timer);
+      capture.processor.onaudioprocess = null;
+      capture.processor.disconnect();
+      capture.source.disconnect();
+      for (const track of capture.stream.getTracks()) track.stop();
+      capture.context.close().catch(() => {});
+      if (!keep) capture.buffers.length = 0;
+      if (state.voiceCapture === capture) state.voiceCapture = null;
+    }
+
+    function suspendVoice(message = '') {
+      state.voiceRequest += 1;
+      if (state.voiceUpload) state.voiceUpload.abort();
+      state.voiceUpload = null;
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      state.voiceSamples.length = 0;
+      state.voiceStatus = null;
+      $('voice-own-confirm').checked = false;
+      $('voice-card').hidden = true;
+      $('voice-status').textContent = message || '오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
+      showVoiceSamples();
+    }
+
+    async function guardianVoiceRequest(owner, path, method = 'GET', body = null, signal = null) {
+      const response = await fetch(path, { method, headers: {
+        Authorization: `Bearer ${owner.token}`, 'X-Synthetic-Material': 'confirmed',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      }, body: body ? JSON.stringify(body) : undefined, signal });
+      if (!voiceCurrent(owner, false)) throw new Error('stale voice request');
+      if ([401, 403].includes(response.status)) {
+        clearSession('보호자 연결 또는 별도 음성 동의 권한을 확인하지 못해 시험을 닫았습니다.');
+        throw new Error('voice authorization lost');
+      }
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    }
+
+    async function loadVoiceStatus() {
+      if (state.voiceUpload || state.voiceCapture) return false;
+      const patientId = $('patient').value;
+      if (patientId !== syntheticPatientId || !state.token || !voiceForeground()
+          || !state.links.some(link => link.patient_id === patientId && current(link))) {
+        suspendVoice();
+        return false;
+      }
+      const owner = { generation: state.generation, token: state.token,
+        patientId, request: ++state.voiceRequest };
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      $('voice-card').hidden = false;
+      $('voice-status').textContent = '별도 동의와 현재 합성 시험 상태를 확인하고 있습니다.';
+      voiceButtons();
+      try {
+        const status = await guardianVoiceRequest(owner, `${voicePath(patientId)}/status`);
+        if (!voiceCurrent(owner)) return false;
+        state.voiceStatus = status;
+        if (!status?.authorized || !status.ready) {
+          state.voiceSamples.length = 0;
+          releaseVoiceCapture(state.voiceCapture);
+          showVoiceSamples();
+        }
+        $('voice-status').textContent = !status?.authorized
+          ? '현재 검증된 보호자 연결이 확인되지 않아 음성 시험을 닫았습니다.'
+          : status.status === 'deleted'
+          ? '원격 부재 확인 뒤 합성 복제 삭제가 확인됐습니다.'
+          : status.status === 'deletion_pending'
+          ? '삭제 요청 결과가 아직 불명확합니다. 원격 상태 대조를 사용하세요.'
+          : status.status === 'verification_pending'
+          ? '합성 복제 확인 대기 중입니다. 생성이나 사용 준비가 확인되지 않았습니다.'
+          : status.status === 'pending'
+          ? '합성 업로드 결과 확인 대기 중입니다. 같은 샘플을 다시 올리지 마세요.'
+          : status.status === 'created'
+          ? '합성 복제의 원격 생성 확인 상태입니다. 실제 보호자 음성이나 임상 사용 승인은 아닙니다.'
+          : status.status === 'failed'
+          ? '합성 복제 생성이 실패했습니다. 원격 상태를 확인하세요.'
+          : !status.ready
+          ? '별도 보호자 복제 음성 동의가 유효하지 않아 녹음·업로드를 닫았습니다.'
+          : !status.upload_enabled
+          ? '합성 업로드는 서버에서 기본 비활성입니다. 녹음도 열지 않았습니다.'
+          : '현재 합성 시험 조건을 서버에서 확인했습니다. 테스터 본인 음성만 20~30초씩 세 번 녹음하세요.';
+        voiceButtons();
+        return true;
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          state.voiceStatus = null;
+          state.voiceSamples.length = 0;
+          releaseVoiceCapture(state.voiceCapture);
+          showVoiceSamples();
+          $('voice-status').textContent = '합성 음성 상태를 확인하지 못했습니다. 녹음·업로드를 닫고 다시 확인하세요.';
+        }
+        return false;
+      }
+    }
+
+    function pcm16Wav(buffers, sourceRate) {
+      const frames = buffers.reduce((sum, buffer) => sum + buffer.length, 0);
+      const source = new Float32Array(frames);
+      let offset = 0;
+      for (const buffer of buffers) { source.set(buffer, offset); offset += buffer.length; }
+      const targetRate = 16000;
+      const count = Math.floor(frames * targetRate / sourceRate);
+      const wav = new Uint8Array(44 + count * 2);
+      const view = new DataView(wav.buffer);
+      for (const [at, text] of [[0, 'RIFF'], [8, 'WAVE'], [12, 'fmt '], [36, 'data']])
+        for (let index = 0; index < 4; index++) view.setUint8(at + index, text.charCodeAt(index));
+      view.setUint32(4, wav.length - 8, true);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, targetRate, true);
+      view.setUint32(28, targetRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      view.setUint32(40, count * 2, true);
+      for (let index = 0; index < count; index++) {
+        const position = index * sourceRate / targetRate;
+        const base = Math.floor(position);
+        const fraction = position - base;
+        const value = Math.max(-1, Math.min(1, source[base] * (1 - fraction)
+          + source[Math.min(base + 1, frames - 1)] * fraction));
+        view.setInt16(44 + index * 2, value < 0 ? value * 32768 : value * 32767, true);
+      }
+      source.fill(0);
+      return wav;
+    }
+
+    function wavBase64(wav) {
+      let binary = '';
+      for (let index = 0; index < wav.length; index += 8192)
+        binary += String.fromCharCode(...wav.subarray(index, index + 8192));
+      return btoa(binary);
+    }
+
+    function stopVoiceClip(save) {
+      const capture = state.voiceCapture;
+      if (!capture) return;
+      const durationMs = Date.now() - capture.startedAt;
+      const allowed = save && voiceCurrent(capture.owner) && voiceReady(state.voiceStatus)
+        && durationMs >= 20000 && durationMs <= 30000 && capture.buffers.length > 0;
+      let sample = null;
+      if (allowed) {
+        try {
+          const wav = pcm16Wav(capture.buffers, capture.context.sampleRate);
+          const audioDurationMs = (wav.length - 44) / 32;
+          if (wav.length <= 2000000 && audioDurationMs >= 20000
+              && audioDurationMs <= 30000) sample = { durationMs: audioDurationMs, wav };
+        } catch (_) {}
+      }
+      releaseVoiceCapture(capture);
+      if (sample && state.voiceSamples.length < 3) {
+        state.voiceSamples.push(sample);
+        $('voice-status').textContent = '합성 샘플을 로컬 참조에만 유지했습니다. 세 개를 채운 뒤 별도 업로드를 선택하세요.';
+      } else {
+        $('voice-status').textContent = '20~30초 조건을 채우지 못했거나 상태가 바뀌어 이 녹음의 오디오 참조를 해제했습니다.';
+      }
+      showVoiceSamples();
+    }
+
+    async function startVoiceClip() {
+      if (!voiceReady(state.voiceStatus) || !$('voice-own-confirm').checked
+          || !voiceForeground() || state.voiceCapture || state.voiceUpload
+          || state.voiceSamples.length >= 3
+          || $('patient').value !== syntheticPatientId) return;
+      const consentId = state.voiceStatus.consent_id;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      let stream = null;
+      let capture = null;
+      $('voice-start').disabled = true;
+      $('voice-status').textContent = '마이크 권한을 기다리고 있습니다. 화면을 떠나면 시험을 닫습니다.';
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
+        if (!voiceCurrent(owner)) return;
+        state.voicePendingStream = stream;
+        const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`);
+        if (!voiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+          if (voiceCurrent(owner, false)) {
+            state.voiceStatus = fresh;
+            state.voiceSamples.length = 0;
+            $('voice-status').textContent = '마이크 허가 중 별도 음성 동의나 연결 상태가 달라져 녹음을 닫았습니다.';
+            showVoiceSamples();
+          }
+          return;
+        }
+        state.voiceStatus = fresh;
+        const Audio = window.AudioContext || window.webkitAudioContext;
+        if (!Audio) throw new Error('PCM capture unavailable');
+        const context = new Audio();
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        capture = { stream, context, source, processor, buffers: [],
+          startedAt: Date.now(), owner, timer: null };
+        processor.onaudioprocess = event => {
+          event.outputBuffer.getChannelData(0).fill(0);
+          if (!voiceCurrent(owner) || state.voiceCapture !== capture) return;
+          capture.buffers.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        };
+        source.connect(processor);
+        processor.connect(context.destination);
+        await context.resume();
+        if (!voiceCurrent(owner)) return;
+        state.voiceCapture = capture;
+        if (state.voicePendingStream === stream) state.voicePendingStream = null;
+        capture.timer = setInterval(() => {
+          if (state.voiceCapture !== capture) return;
+          if (!voiceCurrent(owner)) { releaseVoiceCapture(capture); voiceButtons(); return; }
+          const seconds = (Date.now() - capture.startedAt) / 1000;
+          $('voice-status').textContent = `${state.voiceSamples.length + 1}번째 테스터 본인 음성 · ${seconds.toFixed(1)}초 / 20~30초`;
+          if (seconds >= 30) stopVoiceClip(true);
+        }, 100);
+        voiceButtons();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) $('voice-status').textContent = '마이크 또는 합성 상태를 확인하지 못했습니다. 녹음을 시작하지 않았습니다.';
+      } finally {
+        if (capture && state.voiceCapture !== capture) releaseVoiceCapture(capture);
+        else if (stream && state.voiceCapture?.stream !== stream) {
+          for (const track of stream.getTracks()) track.stop();
+        }
+        if (state.voicePendingStream === stream) state.voicePendingStream = null;
+        if (voiceCurrent(owner, false)) voiceButtons();
+      }
+    }
+
+    async function enrollVoice() {
+      if (!voiceReady(state.voiceStatus) || !$('voice-own-confirm').checked
+          || !voiceForeground() || state.voiceCapture || state.voiceSamples.length !== 3
+          || state.voiceUpload || typeof crypto === 'undefined'
+          || typeof crypto.randomUUID !== 'function') return;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      const consentId = state.voiceStatus.consent_id;
+      const controller = new AbortController();
+      state.voiceUpload = controller;
+      voiceButtons();
+      $('voice-status').textContent = '별도 동의와 현재 연결을 다시 확인한 뒤 합성 샘플을 보냅니다.';
+      let attempted = false;
+      try {
+        const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`, 'GET', null, controller.signal);
+        if (!voiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+          if (voiceCurrent(owner, false)) suspendVoice('별도 음성 동의가 바뀌어 오디오 참조를 해제하고 전송하지 않았습니다.');
+          return;
+        }
+        const body = { consent_id: consentId, request_key: crypto.randomUUID(),
+          own_voice_confirmed: true,
+          samples_wav_base64: state.voiceSamples.map(sample => wavBase64(sample.wav)) };
+        state.voiceSamples.length = 0;
+        showVoiceSamples();
+        attempted = true;
+        const result = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/enroll`,
+          'POST', body, controller.signal);
+        if (!voiceCurrent(owner, false)) return;
+        state.voiceStatus = null;
+        $('voice-status').textContent = ['pending', 'verification_pending'].includes(result?.status)
+          ? '합성 업로드 요청은 접수됐지만 원격 생성 확인은 대기 중입니다. 중복 업로드하지 말고 상태를 대조하세요.'
+          : '합성 업로드 응답을 받았습니다. 별도 상태 조회 전에는 사용 준비로 표시하지 않습니다.';
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        await loadVoiceStatus();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          state.voiceStatus = null;
+          $('voice-status').textContent = attempted
+            ? '합성 업로드 결과가 불명확합니다. 같은 오디오를 재전송하지 말고 상태 조회·원격 대조를 하세요.'
+            : '합성 업로드 전에 현재 동의를 확인하지 못했습니다. 다시 상태를 확인하세요.';
+          voiceButtons();
+        }
+      } finally {
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        if (state.token && $('patient').value === syntheticPatientId) voiceButtons();
+      }
+    }
+
+    async function mutateVoice(action) {
+      const cloneId = state.voiceStatus?.clone_id;
+      if (!uuid.test(cloneId || '') || !voiceForeground() || state.voiceUpload
+          || state.voiceCapture || $('patient').value !== syntheticPatientId
+          || !state.voiceStatus?.authorized) return;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      const controller = new AbortController();
+      state.voiceUpload = controller;
+      voiceButtons();
+      $('voice-status').textContent = action === 'delete'
+        ? '합성 복제 삭제를 요청하고 원격 부재 확인을 기다립니다.'
+        : '같은 합성 복제의 원격 상태만 대조합니다. 오디오를 재전송하지 않습니다.';
+      try {
+        const result = await guardianVoiceRequest(owner,
+          `${voicePath(owner.patientId)}/${cloneId}/${action}`, 'POST', null, controller.signal);
+        if (!voiceCurrent(owner, false)) return;
+        $('voice-status').textContent = result?.clone_id === cloneId && result.status === 'deleted'
+          ? '원격 부재가 확인되어 합성 복제 삭제를 확인했습니다.'
+          : '요청 응답을 받았지만 원격 상태는 아직 불명확합니다. 삭제·생성을 확정하지 않았습니다.';
+        state.voiceStatus = null;
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        await loadVoiceStatus();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          $('voice-status').textContent = '원격 상태 확인 결과가 불명확합니다. 삭제 완료로 표시하지 않았습니다.';
+          voiceButtons();
+        }
+      } finally {
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        if (state.token && $('patient').value === syntheticPatientId) voiceButtons();
+      }
+    }
+
     function ownsIndexJob(job) {
       return state.semanticJobs.get(job.factId) === job && !job.cancelled
         && job.generation === state.generation && job.token === state.token
@@ -286,6 +657,7 @@
 
     function clearSession(message = '로그아웃했습니다.') {
       abortSemanticJobs();
+      suspendVoice();
       state.generation += 1;
       state.authRequest += 1;
       state.factRequest += 1;
@@ -305,6 +677,7 @@
       $('patient').replaceChildren();
       $('portal-card').hidden = true;
       $('memory-card').hidden = true;
+      $('voice-card').hidden = true;
       $('signin-card').hidden = false;
       $('signin-status').textContent = message;
       $('signup-status').textContent = '';
@@ -454,6 +827,7 @@
         $('portal-card').hidden = false;
         document.body.classList.add('signed-in');
         await loadFacts();
+        await loadVoiceStatus();
       } catch (_) {
         if (!currentAuth()) return;
         clearSession();
@@ -494,15 +868,36 @@
 
     $('patient').addEventListener('change', async () => {
       abortSemanticJobs();
+      suspendVoice();
       state.saveRequest += 1;
       state.draftRevision += 1;
       $('content').value = '';
       resetEdit();
       $('memory-status').textContent = '';
       await loadFacts();
+      await loadVoiceStatus();
     });
     $('logout').addEventListener('click', () => clearSession());
-    if (typeof window !== 'undefined') window.addEventListener('pagehide', () => abortSemanticJobs(false));
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', () => { abortSemanticJobs(false); suspendVoice(); });
+      window.addEventListener('pageshow', () => {
+        if (state.token && $('patient').value === syntheticPatientId && voiceForeground())
+          loadVoiceStatus();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!voiceForeground()) suspendVoice();
+        else if (state.token && $('patient').value === syntheticPatientId
+            && $('voice-card').hidden) loadVoiceStatus();
+        else voiceButtons();
+      });
+    }
+    $('voice-own-confirm').addEventListener('change', voiceButtons);
+    $('voice-start').addEventListener('click', startVoiceClip);
+    $('voice-stop').addEventListener('click', () => stopVoiceClip(true));
+    $('voice-enroll').addEventListener('click', enrollVoice);
+    $('voice-delete').addEventListener('click', () => mutateVoice('delete'));
+    $('voice-reconcile').addEventListener('click', () => mutateVoice('reconcile'));
+    $('voice-refresh').addEventListener('click', loadVoiceStatus);
     $('cancel-edit').addEventListener('click', () => {
       state.saveRequest += 1;
       state.draftRevision += 1;

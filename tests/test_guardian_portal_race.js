@@ -18,7 +18,7 @@ const reply = (status, data) => ({
 });
 
 class Element {
-  constructor(id = '') { this.id = id; this.value = ''; this.textContent = ''; this.children = []; this.handlers = {}; this.hidden = false; }
+  constructor(id = '') { this.id = id; this.value = ''; this.textContent = ''; this.children = []; this.handlers = {}; this.hidden = false; this.checked = false; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
   focus() {}
   reportValidity() { return true; }
@@ -33,6 +33,8 @@ async function run() {
     'portal-card', 'portal-status', 'memory-card', 'memory-form', 'memory-status',
     'links', 'patient', 'facts', 'avoid-facts', 'starter-question', 'starter-hint',
     'category', 'content', 'save-memory', 'cancel-edit', 'logout',
+    'voice-card', 'voice-samples', 'voice-own-confirm', 'voice-start', 'voice-stop',
+    'voice-enroll', 'voice-delete', 'voice-reconcile', 'voice-refresh', 'voice-status',
   ].map(id => [id, new Element(id)]));
   const body = { classList: { add() {}, remove() {} } };
   const document = { body, getElementById: id => elements[id], createElement: tag => new Element(tag) };
@@ -250,10 +252,13 @@ async function runSyntheticIndex() {
     'signup-button', 'signup-status', 'portal-card', 'portal-status', 'memory-card',
     'memory-form', 'memory-status', 'links', 'patient', 'facts', 'avoid-facts',
     'starter-question', 'starter-hint', 'category', 'content', 'save-memory', 'cancel-edit', 'logout',
+    'voice-card', 'voice-samples', 'voice-own-confirm', 'voice-start', 'voice-stop',
+    'voice-enroll', 'voice-delete', 'voice-reconcile', 'voice-refresh', 'voice-status',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
   const document = { body: { classList: { add() {}, remove() {} } },
-    getElementById: id => elements[id], createElement: tag => new Element(tag) };
+    getElementById: id => elements[id], createElement: tag => new Element(tag),
+    addEventListener() {} };
   const window = { handlers: {}, addEventListener(name, handler) { this.handlers[name] = handler; } };
   const fixture = '00000000-0000-4000-8000-000000000975';
   const other = '00000000-0000-4000-8000-000000000977';
@@ -301,6 +306,9 @@ async function runSyntheticIndex() {
       indexes.push({ url, options });
       return indexReplies.shift()?.promise || reply(200, { status: 'ready', fact_id: url.split('/')[6] });
     }
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/status`)
+      return reply(200, { authorized: true, ready: false, consent_id: null,
+        upload_enabled: false, clone_id: null, status: 'none' });
     throw new Error(`unexpected guardian endpoint or non-fixture embedding ${url}`);
   }
   vm.runInNewContext(script, { document, window, fetch, AbortController, console });
@@ -429,4 +437,258 @@ async function runSyntheticIndex() {
   console.log('Guardian fixed-synthetic fact save versus semantic indexing and race: PASS');
 }
 
-run().then(runSyntheticIndex).catch(error => { console.error(error); process.exitCode = 1; });
+async function runSyntheticVoice() {
+  const ids = [
+    'signin-form', 'signin-button', 'signin-status', 'signin-card', 'email', 'password',
+    'signup-button', 'signup-status', 'portal-card', 'portal-status', 'memory-card',
+    'memory-form', 'memory-status', 'links', 'patient', 'facts', 'avoid-facts',
+    'starter-question', 'starter-hint', 'category', 'content', 'save-memory', 'cancel-edit', 'logout',
+    'voice-card', 'voice-samples', 'voice-own-confirm', 'voice-start', 'voice-stop',
+    'voice-enroll', 'voice-delete', 'voice-reconcile', 'voice-refresh', 'voice-status',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, new Element(id)]));
+  const document = { body: { classList: { add() {}, remove() {} } },
+    hidden: false, visibilityState: 'visible', handlers: {},
+    getElementById: id => elements[id], createElement: tag => new Element(tag),
+    addEventListener(name, handler) { this.handlers[name] = handler; } };
+  const window = { handlers: {}, addEventListener(name, handler) { this.handlers[name] = handler; } };
+  const fixture = '00000000-0000-4000-8000-000000000975';
+  const other = '00000000-0000-4000-8000-000000000977';
+  const consent = '00000000-0000-4000-8000-000000000955';
+  const clone = '00000000-0000-4000-8000-000000000956';
+  const links = [fixture, other].map(patient_id => ({
+    patient_id, relationship: '가상 가족', access_status: 'verified',
+    effective_at: '2020-01-01T00:00:00Z', expires_at: null,
+  }));
+  let now = Date.parse('2026-09-16T00:00:00Z');
+  class ClockDate extends Date { static now() { return now; } }
+  const timers = new Map();
+  let nextTimer = 0;
+  const tracks = [];
+  const permissions = [];
+  const processors = [];
+  const statusReplies = [];
+  const enrollReplies = [];
+  const deleteReplies = [];
+  const enrollCalls = [];
+  const deleteCalls = [];
+  let serverStatus = { authorized: true, ready: false, consent_id: null,
+    upload_enabled: false, clone_id: null, status: 'none' };
+  const stream = () => {
+    const track = { stopped: false, stop() { this.stopped = true; } };
+    tracks.push(track);
+    return { getTracks: () => [track] };
+  };
+  const audioContexts = [];
+  class AudioContext {
+    constructor() {
+      this.sampleRate = 16000;
+      this.destination = {};
+      this.closed = false;
+      audioContexts.push(this);
+    }
+    createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+    createScriptProcessor() {
+      const processor = { onaudioprocess: null, connect() {}, disconnect() {} };
+      processors.push(processor);
+      return processor;
+    }
+    resume() { return Promise.resolve(); }
+    close() { this.closed = true; return Promise.resolve(); }
+  }
+  window.AudioContext = AudioContext;
+  const navigator = { mediaDevices: { getUserMedia() {
+    const next = permissions.shift();
+    return next ? next.promise : Promise.resolve(stream());
+  } } };
+  async function fetch(url, options = {}) {
+    if (url === '/guardian/config') return reply(200, { url: 'http://127.0.0.1:54341', publishable_key: 'sb_publishable_test' });
+    if (url.includes('/auth/v1/token')) return reply(200, { access_token: 'guardian-voice-jwt',
+      user: { id: '00000000-0000-4000-8000-000000000991' } });
+    if (url.includes('/guardian_links')) return reply(200, links);
+    if (url.includes('/family_context')) return reply(200, []);
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/status`)
+      return statusReplies.shift()?.promise || reply(200, { ...serverStatus });
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/enroll`) {
+      enrollCalls.push({ url, options, body: JSON.parse(options.body) });
+      return enrollReplies.shift()?.promise || reply(200, { status: 'verification_pending', clone_id: clone });
+    }
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/${clone}/delete`) {
+      deleteCalls.push({ url, options });
+      return deleteReplies.shift()?.promise || reply(200, { status: 'deletion_pending', clone_id: clone });
+    }
+    if (url === `/internal/synthetic/guardian/${fixture}/voice/${clone}/reconcile`)
+      return reply(200, { status: 'deletion_pending', clone_id: clone });
+    throw new Error(`unexpected synthetic voice URL ${url}`);
+  }
+  const context = { document, window, navigator, fetch, AbortController,
+    Date: ClockDate, crypto: { randomUUID: () => '00000000-0000-4000-8000-000000000957' },
+    btoa: binary => Buffer.from(binary, 'binary').toString('base64'),
+    setInterval: handler => { const id = ++nextTimer; timers.set(id, handler); return id; },
+    clearInterval: id => timers.delete(id), console };
+  vm.runInNewContext(script, context);
+  await pause();
+  const login = () => elements['signin-form'].handlers.submit({ preventDefault() {} });
+  elements.email.value = 'tester@example.invalid';
+  elements.password.value = 'synthetic';
+  await login();
+  assert.equal(elements.patient.value, fixture);
+  assert.equal(elements['voice-card'].hidden, false);
+  assert.equal(elements['voice-start'].disabled, true, 'no separate consent/flag keeps mic closed');
+  assert.equal(tracks.length, 0);
+  serverStatus = { authorized: true, ready: true, consent_id: consent,
+    upload_enabled: true, clone_id: null, status: 'none' };
+  await elements['voice-refresh'].handlers.click();
+  assert.equal(elements['voice-start'].disabled, true, 'tester own-voice confirmation is explicit');
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(elements['voice-start'].disabled, false);
+
+  const slowPermission = pending();
+  permissions.push(slowPermission);
+  const lateStart = elements['voice-start'].handlers.click();
+  await pause();
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  document.handlers.visibilitychange();
+  const lateStream = stream();
+  slowPermission.resolve(lateStream);
+  await lateStart;
+  assert.equal(tracks.at(-1).stopped, true, 'hidden pending permission closes returned track');
+  assert.equal(processors.length, 0, 'hidden permission never starts PCM capture');
+  assert.equal(elements['voice-enroll'].disabled, true);
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  document.handlers.visibilitychange();
+  await pause();
+  assert.equal(elements['voice-card'].hidden, false, 'foreground return requires fresh status to reopen panel');
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+
+  const revokedStatus = pending();
+  statusReplies.push(revokedStatus);
+  const revokeStart = elements['voice-start'].handlers.click();
+  await pause();
+  serverStatus = { ...serverStatus, ready: false, consent_id: null };
+  revokedStatus.resolve(reply(200, { ...serverStatus }));
+  await revokeStart;
+  assert.equal(tracks.at(-1).stopped, true, 'permission wait followed by consent withdrawal closes track');
+  assert.equal(processors.length, 0);
+  assert.equal(elements['voice-start'].disabled, true);
+  serverStatus = { ...serverStatus, ready: true, consent_id: consent };
+  await elements['voice-refresh'].handlers.click();
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+
+  const stalePermission = pending();
+  permissions.push(stalePermission);
+  const startA = elements['voice-start'].handlers.click();
+  await pause();
+  await elements['voice-refresh'].handlers.click();
+  const startB = elements['voice-start'].handlers.click();
+  await startB;
+  const bTrack = tracks.at(-1);
+  stalePermission.resolve(Promise.reject(new Error('old permission denied')));
+  await startA;
+  assert.equal(bTrack.stopped, false, 'old permission failure cannot close newer capture');
+  elements['voice-stop'].handlers.click();
+  assert.equal(bTrack.stopped, true);
+  assert.equal(elements['voice-samples'].children.length, 0, 'short discard does not create a sample');
+
+  const staleReady = pending();
+  statusReplies.push(staleReady);
+  const startC = elements['voice-start'].handlers.click();
+  await pause();
+  const cTrack = tracks.at(-1);
+  await elements['voice-refresh'].handlers.click();
+  assert.equal(cTrack.stopped, true, 'refresh invalidates old pending permission stream');
+  const startD = elements['voice-start'].handlers.click();
+  await startD;
+  const dTrack = tracks.at(-1);
+  staleReady.resolve(reply(403, { detail: 'old consent denied' }));
+  await startC;
+  assert.equal(dTrack.stopped, false, 'stale consent 403 cannot close new capture');
+  assert.equal(elements['portal-card'].hidden, false, 'stale consent 403 cannot log out newer session');
+  elements['voice-stop'].handlers.click();
+  assert.equal(elements['voice-samples'].children.length, 0);
+
+  const produce = async () => {
+    await elements['voice-start'].handlers.click();
+    const processor = processors.at(-1);
+    assert.ok(processor?.onaudioprocess, 'PCM capture starts only after fresh readiness');
+    processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(16000 * 20).fill(.1) },
+      outputBuffer: { getChannelData: () => new Float32Array(16000 * 20) } });
+    now += 20000;
+    elements['voice-stop'].handlers.click();
+    assert.equal(tracks.at(-1).stopped, true);
+  };
+  await produce();
+  assert.equal(elements['voice-samples'].children.length, 1);
+  await elements['voice-start'].handlers.click();
+  const hiddenActive = tracks.at(-1);
+  document.hidden = true;
+  document.visibilityState = 'hidden';
+  document.handlers.visibilitychange();
+  assert.equal(hiddenActive.stopped, true, 'hidden active capture stops mic immediately');
+  assert.equal(elements['voice-samples'].children.length, 0, 'hidden document releases prior local samples');
+  document.hidden = false;
+  document.visibilityState = 'visible';
+  document.handlers.visibilitychange();
+  await pause();
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+  await produce();
+  await produce();
+  await produce();
+  assert.equal(elements['voice-enroll'].disabled, false);
+  const enrollPending = pending();
+  enrollReplies.push(enrollPending);
+  const enrollment = elements['voice-enroll'].handlers.click();
+  await pause();
+  assert.equal(enrollCalls.length, 1);
+  const tracksDuringUpload = tracks.length;
+  assert.equal(elements['voice-refresh'].disabled, true, 'refresh cannot invalidate an in-flight upload outcome');
+  await elements['voice-refresh'].handlers.click();
+  await elements['voice-start'].handlers.click();
+  assert.equal(tracks.length, tracksDuringUpload, 'in-flight upload cannot open a second mic capture');
+  assert.equal(enrollCalls[0].body.consent_id, consent);
+  assert.equal(enrollCalls[0].body.own_voice_confirmed, true);
+  assert.equal(enrollCalls[0].body.samples_wav_base64.length, 3);
+  assert.equal(enrollCalls[0].options.headers.Authorization, 'Bearer guardian-voice-jwt');
+  assert.equal(enrollCalls[0].options.headers['X-Synthetic-Material'], 'confirmed');
+  for (const encoded of enrollCalls[0].body.samples_wav_base64) {
+    const wav = Buffer.from(encoded, 'base64');
+    assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
+    assert.equal(wav.readUInt16LE(20), 1, 'PCM format');
+    assert.equal(wav.readUInt16LE(22), 1, 'mono');
+    assert.equal(wav.readUInt32LE(24), 16000);
+    assert.equal(wav.readUInt16LE(34), 16);
+    assert.equal(wav.readUInt32LE(40), 16000 * 20 * 2);
+  }
+  serverStatus = { authorized: true, ready: false, consent_id: null,
+    upload_enabled: true, clone_id: clone, status: 'verification_pending' };
+  enrollPending.resolve(reply(200, { status: 'verification_pending', clone_id: clone }));
+  await enrollment;
+  assert.match(elements['voice-status'].textContent, /확인 대기/);
+  assert.equal(elements['voice-start'].disabled, true, 'pending clone cannot reopen capture');
+  assert.equal(elements['voice-samples'].children.length, 0, 'uploaded samples have no retained UI reference');
+  const deletion = elements['voice-delete'].handlers.click();
+  await deletion;
+  assert.equal(deleteCalls.length, 1);
+  assert.ok(!/삭제가 확인됐습니다/.test(elements['voice-status'].textContent),
+    'DELETE 200 with deletion_pending cannot claim remote absence');
+  assert.equal(elements['voice-reconcile'].disabled, true, 'provider reconcile route is only for pending creation');
+  assert.equal(elements['voice-delete'].disabled, false, 'deletion_pending can safely retry absence check');
+  window.handlers.pagehide();
+  assert.equal(elements['voice-card'].hidden, true);
+  assert.equal(elements['voice-samples'].children.length, 0);
+  window.handlers.pageshow();
+  await pause();
+  assert.equal(elements['voice-card'].hidden, false, 'BFCache return can recheck gate without restoring audio');
+  assert.equal(elements['voice-samples'].children.length, 0);
+  console.log('Guardian synthetic own-voice gate, PCM16 WAV, lifecycle and uncertain remote status: PASS');
+}
+
+run().then(runSyntheticIndex).then(runSyntheticVoice)
+  .catch(error => { console.error(error); process.exitCode = 1; });
