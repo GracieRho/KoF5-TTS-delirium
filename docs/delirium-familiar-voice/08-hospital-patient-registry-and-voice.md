@@ -27,12 +27,12 @@
 | `consent_record` | `consent_id` PK, `patient_id` FK, `guardian_id` nullable, `scope`, `signer_role`, `signer_ref`, `assent_status`, `status`, `effective_at`, `expires_at` nullable, `withdrawn_at` nullable, `recorded_by_staff_id` | 최소 네 범위 `patient_participation`, `patient_voice_feature`, `guardian_voice_clone`, `ambient_processing`을 구분. 대리인 동의와 환자 이해/거부를 별도 상태로 기록 |
 | `patient_voice_profile` | `profile_id` PK, `patient_id` FK, `encounter_id` FK, `consent_id` FK, `status`, `enrollment_duration_ms`, `embedding_model`, `embedding_version`, `encrypted_embedding_ref`, `quality_status`, `enrolled_by_staff_id`, `enrolled_at`, `revoked_at` nullable, `deleted_at` nullable | 환자 목소리 특징의 등록·갱신·폐기. 원본 WAV나 임베딩 벡터를 일반 환자 행에 넣지 않음. 활성 프로필은 환자/입원 단위로 하나 |
 | `patient_voice_sample` | `sample_id` PK, `profile_id` FK, `temporary_encrypted_object_ref` nullable, `codec`, `duration_ms`, `captured_at`, `purge_due_at`, `purged_at` nullable | 약 30초 원본의 **일시 처리 메타데이터**. 특징 추출·품질 확인 후 원본 객체를 삭제하고 참조를 비움. 별도 원본 보관은 목적·기간·동의가 승인된 경우에만 허용 |
-| `hospital_context_fact` | `fact_id` PK, `patient_id` FK, `encounter_id` FK nullable, `category`, `content`, `source_staff_id`, `approved_by_staff_id`, `verified_at`, `valid_until` nullable, `status` | 병실·검사·면회 등 **직원 승인 사실**. 보호자 기억과 물리/논리 권한을 분리하고, 만료된 사실은 응답에서 제외 |
+| `hospital_context_fact` | `fact_id` PK, `patient_id` FK, `encounter_id` FK nullable, `category`, `content`, `source_staff_id`, `approved_by_staff_id`, `verified_at`, `valid_until` nullable, `status` | 병실·검사·면회 등 **직원 승인 사실**. 입원 참조가 없으면 병원 이름(`hospital`)만 허용하고, 현재 입원이 없거나 사실이 만료되면 응답에서 제외 |
 | `hospital_message` | `message_id` PK, `patient_id` FK, `encounter_id` FK, `approved_text`, `approved_by_staff_id`, `due_at`, `delivery_status`, `delivered_at` nullable | 직원 승인 원문을 그대로 TTS에 전달. 생성·전달·직원 확인은 별도 상태; 위험 발화 보조 알림과 혼동하지 않음 |
 
 FHIR는 교환 형식의 기준이며 위 테이블은 **이 제품이 필요한 데이터 최소화에 대한 설계 추론**이다. 병원 EHR에서 이름·생년월일·병실을 안전하게 조회할 수 있다면 앱 DB의 중복 보관을 줄인다. 보호자/환자 앱과 LLM 프롬프트에는 MRN, 연락처, 원본 음성, 임베딩을 보내지 않는다.
 
-직원 승인 병원 사실과 예약 메시지는 [ADR-0005](../../architecture/decisions/0005-hospital-approved-facts-message-fidelity.md)에 따라 가족 기억에서 분리하며, 승인된 메시지 원문은 변경하지 않는다. 로컬 DB의 저장·읽기 경계만 합성 자료로 검증했고, 실제 출처 확인·임상 문구 승인·전달은 아직 구현되지 않았다.
+직원 승인 병원 사실과 예약 메시지는 [ADR-0005](../../architecture/decisions/0005-hospital-approved-facts-message-fidelity.md)에 따라 가족 기억에서 분리하며, 승인된 메시지 원문은 변경하지 않는다. 퇴원하면 병원 사실·메시지를 조회하지 않고, 재입원 시 이전 입원의 사실·메시지를 제외한다. 로컬 DB의 저장·읽기 경계만 합성 자료로 검증했고, 실제 출처 확인·임상 문구 승인·전달은 아직 구현되지 않았다.
 
 `hospital_id`와 `*_staff_id`는 각각 병원 조직과 직원 인증/EHR의 외부 참조다. 로컬 마이그레이션은 Auth 사용자와 직원 자격·환자 배정을 별도 테이블로 연결한다. 실제 병원 연동에서 기관 소속·역할·담당 입원 범위를 확인할 수 없다면 해당 직원의 등록·목소리 처리 API를 막는다.
 

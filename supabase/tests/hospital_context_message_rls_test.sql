@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(19);
+SELECT plan(25);
 
 -- Only synthetic Auth users, patients, staff approval and message text; all rolled back.
 INSERT INTO auth.users (id) VALUES
@@ -156,6 +156,23 @@ $sql$, 'approved context requires approver and verification time');
 SELECT lives_ok($sql$
     DO $do$ BEGIN
         BEGIN
+            INSERT INTO kof5.hospital_context_fact (
+                patient_id, category, content, source_staff_ref,
+                approved_by_staff_ref, verified_at, status
+            ) VALUES (
+                '00000000-0000-4000-8000-000000000901',
+                'room', '입원 없는 병실', 'TEST-STAFF',
+                'TEST-APPROVER', now() - interval '1 hour', 'approved'
+            );
+            RAISE EXCEPTION 'room without encounter was accepted';
+        EXCEPTION WHEN check_violation THEN NULL;
+        END;
+    END $do$
+$sql$, 'room facts require a specific encounter');
+
+SELECT lives_ok($sql$
+    DO $do$ BEGIN
+        BEGIN
             INSERT INTO kof5.hospital_message (
                 patient_id, encounter_id, approved_text, approved_by_staff_ref,
                 approved_at, due_at, delivery_status
@@ -213,6 +230,46 @@ SELECT is((SELECT count(*)::integer FROM api.hospital_context_current), 0,
     'verified guardian cannot read hospital facts');
 SELECT is((SELECT count(*)::integer FROM api.hospital_message_list), 0,
     'verified guardian cannot read hospital messages');
+RESET ROLE;
+
+INSERT INTO kof5.hospital_context_fact (
+    patient_id, category, content, source_staff_ref,
+    approved_by_staff_ref, verified_at, status
+) VALUES (
+    '00000000-0000-4000-8000-000000000901', 'hospital',
+    '가상 의료기관 H1', 'TEST-STAFF', 'TEST-APPROVER',
+    now() - interval '1 hour', 'approved'
+);
+
+UPDATE kof5.hospital_encounter
+SET status = 'finished', discharged_at = now()
+WHERE encounter_id = '00000000-0000-4000-8000-000000001001';
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000802', true);
+SELECT is((SELECT count(*)::integer FROM api.hospital_context_current), 0,
+    'discharged patient has no current hospital facts');
+SELECT is((SELECT count(*)::integer FROM api.hospital_message_list), 0,
+    'discharged patient has no current hospital messages');
+RESET ROLE;
+
+INSERT INTO kof5.hospital_encounter (
+    encounter_id, patient_id, ehr_encounter_ref, status, admitted_at
+) VALUES (
+    '00000000-0000-4000-8000-000000001005',
+    '00000000-0000-4000-8000-000000000901',
+    'TEST-CE5', 'in_progress', now()
+);
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000802', true);
+SELECT is((SELECT count(*)::integer FROM api.hospital_context_current), 1,
+    'readmission excludes prior encounter facts');
+SELECT is((SELECT content FROM api.hospital_context_current LIMIT 1),
+    '가상 의료기관 H1',
+    'readmission keeps only approved patient-level hospital name');
+SELECT is((SELECT count(*)::integer FROM api.hospital_message_list), 0,
+    'readmission excludes prior encounter messages');
 RESET ROLE;
 
 SELECT * FROM finish();

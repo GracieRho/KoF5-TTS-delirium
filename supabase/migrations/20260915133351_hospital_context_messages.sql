@@ -15,6 +15,7 @@ CREATE TABLE kof5.hospital_context_fact (
     revoked_at timestamptz,
     FOREIGN KEY (encounter_id, patient_id)
         REFERENCES kof5.hospital_encounter (encounter_id, patient_id),
+    CHECK (encounter_id IS NOT NULL OR category = 'hospital'),
     CHECK (status <> 'approved' OR (
         approved_by_staff_ref IS NOT NULL AND length(trim(approved_by_staff_ref)) > 0
         AND verified_at IS NOT NULL
@@ -93,10 +94,12 @@ CREATE VIEW api.hospital_context_current WITH (security_invoker = true) AS
            f.verified_at, f.valid_until
     FROM kof5.hospital_context_fact f
     JOIN kof5.hospital_patient p ON p.patient_id = f.patient_id
-    LEFT JOIN kof5.hospital_encounter e ON e.encounter_id = f.encounter_id
+    JOIN kof5.hospital_encounter e
+      ON e.patient_id = p.patient_id AND e.status = 'in_progress'
     WHERE p.active AND f.status = 'approved' AND f.verified_at <= now()
       AND (f.valid_until IS NULL OR f.valid_until > now())
-      AND (f.encounter_id IS NULL OR e.status = 'in_progress');
+      AND (f.encounter_id = e.encounter_id
+           OR (f.encounter_id IS NULL AND f.category = 'hospital'));
 
 CREATE VIEW api.hospital_message_list WITH (security_invoker = true) AS
     SELECT m.message_id, m.patient_id, m.encounter_id, m.approved_text,
