@@ -7,6 +7,7 @@ import 'package:record/record.dart';
 
 import 'on_device_speech.dart';
 import 'device_anonymous_auth.dart';
+import 'synthetic_hospital_message.dart';
 import 'speech_candidate.dart';
 import 'synthetic_activation.dart';
 import 'synthetic_cloud_trial.dart';
@@ -22,6 +23,9 @@ class PatientMicDemo extends StatefulWidget {
     this.pairedTextTrial = sendPairedOwnVoiceText,
     this.deviceSignIn = signInAnonymousDevice,
     this.devicePair = confirmSyntheticDevicePair,
+    this.dueHospitalMessageIds = listSyntheticDueHospitalMessageIds,
+    this.confirmHospitalMessage = confirmSyntheticDueHospitalMessage,
+    this.hospitalMessageAudio = synthesizeSyntheticHospitalMessage,
   });
 
   final Future<SyntheticCloudReply> Function(HttpClient, Uri, String, Uint8List)
@@ -53,6 +57,29 @@ class PatientMicDemo extends StatefulWidget {
     AnonymousDeviceSession,
   )
   devicePair;
+  final Future<List<String>> Function(
+    HttpClient,
+    Uri,
+    String,
+    AnonymousDeviceSession,
+  )
+  dueHospitalMessageIds;
+  final Future<DueHospitalMessage> Function(
+    HttpClient,
+    Uri,
+    String,
+    AnonymousDeviceSession,
+    String,
+  )
+  confirmHospitalMessage;
+  final Future<Uint8List> Function(
+    HttpClient,
+    Uri,
+    String,
+    AnonymousDeviceSession,
+    DueHospitalMessage,
+  )
+  hospitalMessageAudio;
 
   @override
   State<PatientMicDemo> createState() => _PatientMicDemoState();
@@ -74,10 +101,15 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Timer? _sessionExpiry;
   HttpClient? _cloudClient;
   HttpClient? _deviceClient;
+  HttpClient? _hospitalClient;
   AnonymousDeviceSession? _deviceSession;
   DevicePairContext? _devicePairContext;
   var _deviceGeneration = 0;
   var _deviceBusy = false;
+  var _hospitalBusy = false;
+  DueHospitalMessage? _dueHospitalMessage;
+  var _hospitalStatus = '병원 승인 메시지를 확인하지 않았습니다.';
+  var _hospitalGeneration = 0;
   var _pairedOnlyTrial = false;
   var _deviceStatus = '전용 Supabase 익명 기기 로그인과 병원 연결을 확인하지 않았습니다.';
   Uint8List? _heldCandidate;
@@ -183,6 +215,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   void _clearDeviceAuth() {
     _deviceGeneration++;
+    _hospitalGeneration++;
+    _hospitalClient?.close(force: true);
+    _hospitalClient = null;
+    _dueHospitalMessage = null;
+    _hospitalBusy = false;
+    _hospitalStatus = '기기 권한을 지워 병원 메시지를 폐기했습니다.';
     _deviceClient?.close(force: true);
     _deviceClient = null;
     _deviceSession = null;
@@ -198,6 +236,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _signInDevice() async {
     if (!_ownVoiceTrial ||
         _deviceBusy ||
+        _hospitalBusy ||
         _sending ||
         _playedReply ||
         !_foreground) {
@@ -246,6 +285,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     final session = _deviceSession;
     if (session == null ||
         _deviceBusy ||
+        _hospitalBusy ||
         _sending ||
         _playedReply ||
         !_foreground) {
@@ -296,6 +336,177 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
+  bool _hospitalReady(AnonymousDeviceSession session, int generation) =>
+      mounted &&
+      _foreground &&
+      _ownVoiceTrial &&
+      !_dissentStopped &&
+      _pairedReady &&
+      identical(_deviceSession, session) &&
+      session.usable(DateTime.now()) &&
+      generation == _hospitalGeneration &&
+      !_listening &&
+      !_stopping &&
+      !_stopUnconfirmed &&
+      !_speechStopUnconfirmed &&
+      _speechStop == null &&
+      !_sending;
+
+  Future<void> _refreshHospitalMessage() async {
+    final session = _deviceSession;
+    if (session == null ||
+        !_pairedReady ||
+        !_ownVoiceTrial ||
+        !_foreground ||
+        _hospitalBusy ||
+        _sending ||
+        _playedReply ||
+        _stopping ||
+        _stopUnconfirmed ||
+        _speechStopUnconfirmed) {
+      return;
+    }
+    final generation = ++_hospitalGeneration;
+    setState(() {
+      _hospitalBusy = true;
+      _dueHospitalMessage = null;
+      _hospitalStatus = '현재 입원의 전달 대기 승인 메시지를 확인하고 있습니다.';
+    });
+    HttpClient? client;
+    try {
+      await _stop(keepDeviceAuth: true);
+      if (!_hospitalReady(session, generation)) {
+        throw const FormatException('기기 권한이나 마이크 중단을 확인하지 못했습니다.');
+      }
+      client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+      _hospitalClient = client;
+      final project = Uri.parse(_supabaseUrl.text.trim());
+      final key = _publishableKey.text.trim();
+      final ids = await widget
+          .dueHospitalMessageIds(client, project, key, session)
+          .timeout(const Duration(seconds: 20));
+      if (!_hospitalReady(session, generation)) return;
+      if (ids.isEmpty) {
+        setState(() => _hospitalStatus = '현재 입원에 기기 전달 대기 중인 승인 메시지가 없습니다.');
+        return;
+      }
+      final message = await widget
+          .confirmHospitalMessage(client, project, key, session, ids.first)
+          .timeout(const Duration(seconds: 20));
+      if (!_hospitalReady(session, generation) ||
+          message.id != ids.first ||
+          message.approvedText.trim().isEmpty ||
+          message.approvedText.length > 200) {
+        return;
+      }
+      setState(() {
+        _dueHospitalMessage = message;
+        _hospitalStatus = '직원 승인 원문을 확인했습니다. 재생과 DB 전달 확인은 아직 하지 않았습니다.';
+      });
+    } catch (_) {
+      if (mounted && generation == _hospitalGeneration) {
+        setState(() => _hospitalStatus = '병원 메시지 권한·승인·현재 입원을 확인하지 못했습니다.');
+      }
+    } finally {
+      client?.close(force: true);
+      if (_hospitalClient == client) _hospitalClient = null;
+      if (mounted && generation == _hospitalGeneration) {
+        setState(() => _hospitalBusy = false);
+      }
+    }
+  }
+
+  Future<void> _playHospitalMessage() async {
+    final session = _deviceSession;
+    final message = _dueHospitalMessage;
+    if (session == null ||
+        message == null ||
+        !_pairedReady ||
+        !_ownVoiceTrial ||
+        !_foreground ||
+        _hospitalBusy ||
+        _sending ||
+        _playedReply ||
+        _stopping ||
+        _stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _token.text.length < 32) {
+      return;
+    }
+    final generation = ++_hospitalGeneration;
+    setState(() {
+      _hospitalBusy = true;
+      _hospitalStatus = '승인 원문과 재생 권한을 다시 확인하고 있습니다.';
+    });
+    HttpClient? client;
+    try {
+      await _stop(keepDeviceAuth: true);
+      if (!_hospitalReady(session, generation)) {
+        throw const FormatException('기기 권한이나 마이크 중단을 확인하지 못했습니다.');
+      }
+      client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+      _hospitalClient = client;
+      final project = Uri.parse(_supabaseUrl.text.trim());
+      final current = await widget
+          .confirmHospitalMessage(
+            client,
+            project,
+            _publishableKey.text.trim(),
+            session,
+            message.id,
+          )
+          .timeout(const Duration(seconds: 20));
+      if (!_hospitalReady(session, generation) ||
+          current.id != message.id ||
+          current.approvedText != message.approvedText) {
+        throw const FormatException('병원 승인 원문 또는 권한이 바뀌었습니다.');
+      }
+      final endpoint = Uri.parse(_endpoint.text.trim()).replace(
+        path:
+            '/internal/synthetic/paired/$syntheticPatientId/message/${message.id}/audio',
+      );
+      final mp3 = await widget
+          .hospitalMessageAudio(client, endpoint, _token.text, session, current)
+          .timeout(const Duration(seconds: 70));
+      if (!_hospitalReady(session, generation)) return;
+      setState(() {
+        _playedReply = true;
+        _hospitalStatus = '승인 원문 음성을 이 iPad에서 재생하고 있습니다.';
+      });
+      await _player.play(mp3).timeout(const Duration(seconds: 10));
+      final finished = await _player.waitFinished().timeout(
+        const Duration(seconds: 90),
+      );
+      if (!finished ||
+          !_foreground ||
+          generation != _hospitalGeneration ||
+          !identical(_deviceSession, session) ||
+          !_ownVoiceTrial) {
+        throw const FormatException('iPad 재생 완료를 확인하지 못했습니다.');
+      }
+      setState(() {
+        _playedReply = false;
+        _hospitalStatus = '이 iPad에서 재생 완료를 확인했습니다. DB 전달 상태는 변경하지 않았습니다.';
+      });
+    } catch (_) {
+      if (_playedReply && generation == _hospitalGeneration) {
+        await _stopReply(successStatus: '병원 음성 시험을 중단했습니다.');
+      }
+      if (mounted && generation == _hospitalGeneration) {
+        setState(
+          () =>
+              _hospitalStatus = '병원 원문 확인 또는 음성 재생에 실패했습니다. 전달 완료로 표시하지 않습니다.',
+        );
+      }
+    } finally {
+      client?.close(force: true);
+      if (_hospitalClient == client) _hospitalClient = null;
+      if (mounted && generation == _hospitalGeneration) {
+        setState(() => _hospitalBusy = false);
+      }
+    }
+  }
+
   Future<bool> _cancelLocalSpeech() {
     final pending = _speechStop;
     if (pending != null) return pending;
@@ -336,6 +547,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     final startGeneration = _trialGeneration;
     if (_starting ||
         _stopping ||
+        _hospitalBusy ||
         _listening ||
         (_sending && !duringReply) ||
         _stopUnconfirmed ||
@@ -707,6 +919,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _heldCandidate == null ||
         _autoTextTrial ||
         _sending ||
+        _hospitalBusy ||
         _stopping ||
         !_foreground) {
       return;
@@ -734,6 +947,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         !_ownVoiceTrial ||
         _proactivePaused ||
         _sending ||
+        _hospitalBusy ||
         _speechStopUnconfirmed ||
         _speechStop != null ||
         !_foreground) {
@@ -1419,6 +1633,70 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                               Semantics(
                                 liveRegion: true,
                                 child: Text(_deviceStatus),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                '병원 승인 메시지 · 합성 시험',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                '현재 입원에서 전달 시각이 된 직원 승인 원문만 확인합니다. '
+                                'iPad 재생 완료와 DB 전달 상태는 별도로 다룹니다.',
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed:
+                                        _pairedReady &&
+                                            _ownVoiceTrial &&
+                                            !_hospitalBusy &&
+                                            !_deviceBusy &&
+                                            !_sending &&
+                                            !_playedReply &&
+                                            !_stopping &&
+                                            !_stopUnconfirmed &&
+                                            !_speechStopUnconfirmed &&
+                                            _foreground
+                                        ? _refreshHospitalMessage
+                                        : null,
+                                    child: const Text('전달 대기 승인 메시지 확인'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed:
+                                        _dueHospitalMessage != null &&
+                                            _pairedReady &&
+                                            _ownVoiceTrial &&
+                                            !_hospitalBusy &&
+                                            !_sending &&
+                                            !_playedReply &&
+                                            !_stopping &&
+                                            !_stopUnconfirmed &&
+                                            !_speechStopUnconfirmed &&
+                                            _foreground &&
+                                            _token.text.length >= 32
+                                        ? _playHospitalMessage
+                                        : null,
+                                    child: const Text('승인 원문 음성 재생 시험'),
+                                  ),
+                                ],
+                              ),
+                              if (_dueHospitalMessage != null) ...[
+                                const SizedBox(height: 8),
+                                SelectableText(
+                                  '직원 승인 원문: ${_dueHospitalMessage!.approvedText}',
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Semantics(
+                                liveRegion: true,
+                                child: Text(_hospitalStatus),
                               ),
                               if (_pairedOnlyTrial && !_pairedReady)
                                 const Text('병원 연결이 확인될 때까지 페어링 글 경로를 차단합니다.'),
