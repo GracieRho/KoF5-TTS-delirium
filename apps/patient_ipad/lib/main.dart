@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
+import 'on_device_speech.dart';
 import 'speech_candidate.dart';
 import 'synthetic_cloud_trial.dart';
 import 'trial_audio_player.dart';
@@ -26,6 +27,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   final _recorder = AudioRecorder();
   final _detector = SpeechCandidateDetector();
   final _player = TrialAudioPlayer();
+  final _speech = const OnDeviceSpeech();
   final _endpoint = TextEditingController();
   final _token = TextEditingController();
   StreamSubscription<Uint8List>? _subscription;
@@ -48,6 +50,11 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _cloudStatus = '자가 음성 시험을 확인하면 발화 후보 한 건을 직접 보낼 수 있습니다.';
   var _cloudTranscript = '';
   var _cloudReply = '';
+  var _localEnabled = false;
+  var _recognizing = false;
+  var _localGeneration = 0;
+  var _localStatus = '한국어 기기 내 인식 지원 여부를 확인하지 않았습니다.';
+  var _localTranscript = '';
 
   @override
   void initState() {
@@ -66,6 +73,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   void _discardTrial() {
     _trialGeneration++;
+    _localGeneration++;
+    _localEnabled = false;
+    _recognizing = false;
+    unawaited(_speech.cancel().catchError((Object _) {}));
     _cloudClient?.close(force: true);
     _cloudClient = null;
     _token.clear();
@@ -82,6 +93,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
             : '시험 자료를 폐기했습니다.';
         _cloudTranscript = '';
         _cloudReply = '';
+        _localTranscript = '';
+        _localStatus = '기기 내 전사 후보를 폐기했습니다.';
       });
     }
     if (stoppingPlayback) {
@@ -193,6 +206,74 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         });
       }
     });
+    if (_localEnabled && !_recognizing && _ownVoiceTrial) {
+      unawaited(_recognizeCandidate(candidate));
+    }
+  }
+
+  Future<void> _enableLocalSpeech() async {
+    final generation = ++_localGeneration;
+    try {
+      final available = await _speech.available();
+      if (!mounted ||
+          !_foreground ||
+          !_ownVoiceTrial ||
+          generation != _localGeneration) {
+        return;
+      }
+      if (!available) {
+        setState(
+          () => _localStatus = '이 iPad는 한국어 기기 내 전사를 지원하지 않아 후보를 전사하지 않습니다.',
+        );
+        return;
+      }
+      final authorized = await _speech.authorize();
+      if (!mounted ||
+          !_foreground ||
+          !_ownVoiceTrial ||
+          generation != _localGeneration) {
+        return;
+      }
+      setState(() {
+        _localEnabled = authorized;
+        _localStatus = authorized
+            ? '한국어 기기 내 전사 준비됨 · 후보 오디오는 서버에 보내지 않습니다.'
+            : '음성 인식 권한이 없어 기기 내 전사를 사용하지 않습니다.';
+      });
+    } catch (_) {
+      if (mounted && generation == _localGeneration) {
+        setState(() => _localStatus = '기기 내 전사를 준비하지 못해 후보를 전사하지 않습니다.');
+      }
+    }
+  }
+
+  Future<void> _recognizeCandidate(Uint8List candidate) async {
+    final generation = ++_localGeneration;
+    _recognizing = true;
+    setState(() => _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.');
+    try {
+      final transcript = await _speech
+          .transcribe(candidate)
+          .timeout(const Duration(seconds: 12));
+      if (!mounted ||
+          !_foreground ||
+          !_ownVoiceTrial ||
+          generation != _localGeneration) {
+        return;
+      }
+      setState(() {
+        _localTranscript = transcript ?? '';
+        _localStatus = _localTranscript.isEmpty
+            ? '기기 내에서 말을 확인하지 못했습니다. 후보 오디오는 자동 전송하지 않습니다.'
+            : 'iPad 기기 내 전사 완료 · 글과 오디오 모두 자동 전송하지 않습니다.';
+      });
+    } catch (_) {
+      if (mounted && generation == _localGeneration) {
+        setState(() => _localStatus = '기기 내 전사에 실패했습니다. 후보 오디오는 자동 전송하지 않습니다.');
+      }
+    } finally {
+      if (generation == _localGeneration) _recognizing = false;
+    }
   }
 
   Future<void> _sendTrial() async {
@@ -273,6 +354,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _stop() async {
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
+    _localGeneration++;
+    _recognizing = false;
+    unawaited(_speech.cancel().catchError((Object _) {}));
     _listening = false;
     _detector.reset();
     _candidateExpiry?.cancel();
@@ -312,6 +396,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _trialGeneration++;
+    _localGeneration++;
+    unawaited(_speech.cancel().catchError((Object _) {}));
     _candidateExpiry?.cancel();
     _subscription?.cancel();
     _recorder.dispose();
@@ -526,9 +612,21 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                           _discardTrial();
                                         } else {
                                           setState(() => _ownVoiceTrial = true);
+                                          unawaited(_enableLocalSpeech());
                                         }
                                       },
                               ),
+                              if (_ownVoiceTrial) ...[
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(_localStatus),
+                                ),
+                                if (_localTranscript.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text('기기 내 전사: $_localTranscript'),
+                                ],
+                              ],
                               const SizedBox(height: 12),
                               TextField(
                                 controller: _endpoint,
