@@ -2,6 +2,8 @@
 
 MVP에서는 앱을 세 개 모두 native로 만들 필요 없다.
 
+아래 클라이언트 기술은 검증 전 후보이며 확정된 구현 선택이 아니다.
+
 ---
 
 ## 33.1 Patient
@@ -54,6 +56,8 @@ Next.js Responsive Web
 ---
 
 # 34. 추천 기술 스택
+
+아래 목록은 비교할 후보 스택이다. 제공업체, 프레임워크와 배포 환경은 한국어 품질·지연·데이터 처리·운영 조건을 확인한 뒤 결정한다.
 
 ```text
 Patient Client
@@ -267,7 +271,7 @@ hospital_scheduled
 
 ## Rule 7
 
-환자가 통증, 낙상, 호흡곤란, 위험 상황을 말하면 정상 conversational response보다 **의료진 호출 pathway**를 우선한다.
+환자가 통증, 낙상, 호흡곤란, 위험 상황을 말하면 정상 conversational response보다 **기존 의료진 호출 수단 안내와 보조 알림 후보**를 우선한다.
 
 예:
 
@@ -279,7 +283,7 @@ hospital_scheduled
 
 → staff alert candidate
 
-MVP에서는 자동 응급 판단 대신 **high-risk keyword/LLM classifier → staff notification** 수준으로 구현한다.
+초기 환자 시험에서 이 알림은 기존 nurse-call을 대체하지 않는다. 알림 생성·전달·의료진 확인을 구분하고, 확인되지 않은 상태에서 의료진에게 알렸다고 말하지 않는다. 상세 조건은 [안전·윤리 게이트](07-pre-patient-trial-safety-ethics-gate.md)의 Gate 4를 따른다.
 
 ---
 

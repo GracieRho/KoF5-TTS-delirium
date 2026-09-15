@@ -25,34 +25,34 @@ GENERATED_FILENAMES = ("catalog.json", "project-map.md", "project-map.mmd")
 CONFIG_SUFFIXES = {".json", ".toml", ".yaml", ".yml"}
 PIPELINE_STAGES = (
     {
-        "id": "acquisition",
-        "label": "AI Hub 다운로드",
-        "input": "승인된 dataset/file key",
-        "output": "data/raw/aihub",
+        "id": "voice_enrollment",
+        "label": "보호자 음성 등록",
+        "input": "동의된 보호자 음성",
+        "output": "Hosted voice_id",
     },
     {
-        "id": "preprocessing",
-        "label": "전처리",
-        "input": "data/raw/aihub + data/raw/wav",
-        "output": "data/interim/flac + data/processed",
+        "id": "speech_detection",
+        "label": "환자 발화 감지",
+        "input": "태블릿 마이크·임시 버퍼",
+        "output": "발화 후보",
     },
     {
-        "id": "training",
-        "label": "파인튜닝",
-        "input": "data/processed",
-        "output": "checkpoints/finetuned",
+        "id": "transcription",
+        "label": "Hosted STT",
+        "input": "발화 후보",
+        "output": "대화 발화문",
     },
     {
-        "id": "optimization",
-        "label": "프루닝·양자화",
-        "input": "checkpoints/finetuned",
-        "output": "checkpoints/optimized",
+        "id": "conversation",
+        "label": "맥락·안전·짧은 응답",
+        "input": "발화문 + 보호자·병원 정보",
+        "output": "검증된 응답",
     },
     {
-        "id": "inference",
-        "label": "추론·평가",
-        "input": "checkpoints/finetuned 또는 optimized",
-        "output": "runs + 평가 문서",
+        "id": "synthesis",
+        "label": "Hosted 음성 복제 TTS",
+        "input": "검증된 응답 + voice_id",
+        "output": "태블릿 재생",
     },
 )
 
@@ -199,18 +199,17 @@ def markdown_table(headers: list[str], rows: Iterable[list[str]]) -> str:
 def render_mermaid(catalog: dict[str, Any]) -> str:
     lines = [
         "flowchart LR",
-        '  aihub["승인된 AI Hub 데이터"] --> download["aihubshell 다운로드"]',
-        '  download --> raw["AI Hub 원본 WAV"]',
-        '  local["별도 원본 WAV"] --> preprocess["전처리"]',
-        '  raw --> preprocess',
-        '  preprocess --> flac["중간 FLAC"]',
-        '  preprocess --> processed["학습 데이터·manifest"]',
-        '  processed --> finetune["파인튜닝"]',
-        '  finetune --> tuned["파인튜닝 체크포인트"]',
-        '  tuned --> optimize["프루닝·양자화"]',
-        '  optimize --> device["온디바이스 후보"]',
-        '  tuned --> evaluate["품질·성능 평가"]',
-        '  device --> evaluate',
+        '  mic["태블릿 마이크"] --> vad["임시 버퍼·기기 내 VAD 후보"]',
+        '  vad --> stt["발화 후보·Hosted STT"]',
+        '  stt --> activation["활성화·대화 상태"]',
+        '  family["보호자 기억"] --> context["분리된 맥락·안전 정책"]',
+        '  hospital["병원 승인 정보"] --> context',
+        '  activation --> context',
+        '  context --> llm["Hosted LLM"]',
+        '  llm --> response["검증된 짧은 응답"]',
+        '  guardian["동의된 보호자 음성"] --> voice["Hosted 음성 복제 TTS"]',
+        '  response --> voice',
+        '  voice --> tablet["태블릿 재생"]',
     ]
     modules = catalog["python"]["modules"]
     layers: dict[str, int] = defaultdict(int)
@@ -248,7 +247,7 @@ def render_markdown(catalog: dict[str, Any], mermaid: str) -> str:
     script_rows = [[f"`{item}`"] for item in scripts]
     return f"""# 자동 생성 프로젝트 구조도
 
-이 파일은 `scripts/generate_architecture.py`가 코드와 설정 구조에서 생성합니다. 직접 수정하지 않습니다.
+이 파일은 `scripts/generate_architecture.py`가 코드·설정 목록과 정해진 MVP 목표 흐름에서 생성합니다. 구조도는 구현 완료를 뜻하지 않습니다. 직접 수정하지 않습니다.
 
 ```mermaid
 {mermaid.rstrip()}

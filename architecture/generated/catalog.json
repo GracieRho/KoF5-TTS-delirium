@@ -9,34 +9,34 @@
   },
   "pipeline": [
     {
-      "id": "acquisition",
-      "label": "AI Hub 다운로드",
-      "input": "승인된 dataset/file key",
-      "output": "data/raw/aihub"
+      "id": "voice_enrollment",
+      "label": "보호자 음성 등록",
+      "input": "동의된 보호자 음성",
+      "output": "Hosted voice_id"
     },
     {
-      "id": "preprocessing",
-      "label": "전처리",
-      "input": "data/raw/aihub + data/raw/wav",
-      "output": "data/interim/flac + data/processed"
+      "id": "speech_detection",
+      "label": "환자 발화 감지",
+      "input": "태블릿 마이크·임시 버퍼",
+      "output": "발화 후보"
     },
     {
-      "id": "training",
-      "label": "파인튜닝",
-      "input": "data/processed",
-      "output": "checkpoints/finetuned"
+      "id": "transcription",
+      "label": "Hosted STT",
+      "input": "발화 후보",
+      "output": "대화 발화문"
     },
     {
-      "id": "optimization",
-      "label": "프루닝·양자화",
-      "input": "checkpoints/finetuned",
-      "output": "checkpoints/optimized"
+      "id": "conversation",
+      "label": "맥락·안전·짧은 응답",
+      "input": "발화문 + 보호자·병원 정보",
+      "output": "검증된 응답"
     },
     {
-      "id": "inference",
-      "label": "추론·평가",
-      "input": "checkpoints/finetuned 또는 optimized",
-      "output": "runs + 평가 문서"
+      "id": "synthesis",
+      "label": "Hosted 음성 복제 TTS",
+      "input": "검증된 응답 + voice_id",
+      "output": "태블릿 재생"
     }
   ],
   "python": {

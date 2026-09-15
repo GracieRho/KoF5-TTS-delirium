@@ -73,7 +73,9 @@ class ArchitectureGeneratorTests(unittest.TestCase):
     def test_generated_mermaid_is_valid_ast_independent_text(self) -> None:
         mermaid = MODULE.render_mermaid(MODULE.build_catalog())
         self.assertTrue(mermaid.startswith("flowchart LR\n"))
-        self.assertIn("원본 WAV", mermaid)
+        self.assertIn("Hosted STT", mermaid)
+        self.assertIn("Hosted 음성 복제 TTS", mermaid)
+        self.assertNotIn("온디바이스 후보", mermaid)
         ast.parse(SCRIPT.read_text(encoding="utf-8"))
 
 

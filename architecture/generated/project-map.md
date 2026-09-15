@@ -1,21 +1,20 @@
 # 자동 생성 프로젝트 구조도
 
-이 파일은 `scripts/generate_architecture.py`가 코드와 설정 구조에서 생성합니다. 직접 수정하지 않습니다.
+이 파일은 `scripts/generate_architecture.py`가 코드·설정 목록과 정해진 MVP 목표 흐름에서 생성합니다. 구조도는 구현 완료를 뜻하지 않습니다. 직접 수정하지 않습니다.
 
 ```mermaid
 flowchart LR
-  aihub["승인된 AI Hub 데이터"] --> download["aihubshell 다운로드"]
-  download --> raw["AI Hub 원본 WAV"]
-  local["별도 원본 WAV"] --> preprocess["전처리"]
-  raw --> preprocess
-  preprocess --> flac["중간 FLAC"]
-  preprocess --> processed["학습 데이터·manifest"]
-  processed --> finetune["파인튜닝"]
-  finetune --> tuned["파인튜닝 체크포인트"]
-  tuned --> optimize["프루닝·양자화"]
-  optimize --> device["온디바이스 후보"]
-  tuned --> evaluate["품질·성능 평가"]
-  device --> evaluate
+  mic["태블릿 마이크"] --> vad["임시 버퍼·기기 내 VAD 후보"]
+  vad --> stt["발화 후보·Hosted STT"]
+  stt --> activation["활성화·대화 상태"]
+  family["보호자 기억"] --> context["분리된 맥락·안전 정책"]
+  hospital["병원 승인 정보"] --> context
+  activation --> context
+  context --> llm["Hosted LLM"]
+  llm --> response["검증된 짧은 응답"]
+  guardian["동의된 보호자 음성"] --> voice["Hosted 음성 복제 TTS"]
+  response --> voice
+  voice --> tablet["태블릿 재생"]
 
   subgraph code["코드 레이어"]
     layer_preprocessing["preprocessing (3)"]

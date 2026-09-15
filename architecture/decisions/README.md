@@ -18,3 +18,5 @@ NNNN-short-title.md
 - `폐기됨`: 더 이상 적용하지 않음
 
 새 기록은 [0000-template.md](0000-template.md)를 복사해 작성합니다. 기존 기록은 삭제하거나 내용을 바꾸지 않고, 변경된 결정은 새 ADR에서 연결합니다.
+
+현재 적용하는 결정: [ADR-0001 가족 음성 대화 MVP의 클라우드 중심 전환](0001-cloud-first-familiar-voice-mvp.md).

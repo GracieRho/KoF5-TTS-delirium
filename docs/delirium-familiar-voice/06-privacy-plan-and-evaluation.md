@@ -22,6 +22,8 @@ Always recording
 
 # 55. 개발 Phase
 
+아래 Phase는 기능 구현 순서다. 합성 데이터·팀 내부 검증과 실제 환자 대상 시험은 구분한다. 실제 환자 데이터 처리와 시험은 [안전·윤리 게이트](07-pre-patient-trial-safety-ethics-gate.md)의 네 조건 및 기관 검토가 완료된 뒤에만 시작한다. 권한·동의·데이터 처리·장애 대응은 환자 시험을 위한 선행 조건이며 Phase 5까지 미뤄도 된다는 뜻이 아니다.
+
 ## Phase 0 — Core Prototype
 
 목표:
@@ -93,12 +95,12 @@ Always recording
 
 ---
 
-## Phase 5 — Pilot Polish
+## Phase 5 — Pilot Readiness
 
 추가:
 
-- auth/role
-- consent
+- auth/role 검증
+- 승인된 consent·철회 흐름 구현
 - audit
 - deletion
 - observability

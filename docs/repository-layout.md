@@ -1,6 +1,8 @@
 # 저장소 구조와 팀 작업 흐름
 
-## 권장 구조
+아래 데이터·체크포인트 경로는 기존 연구·전처리 도구의 책임 경계입니다. 현재 [클라우드 중심 MVP](Delirium_Familiar_Voice_MVP_PRD.md)는 학습·경량화 경로를 필수 단계로 사용하지 않습니다. 제품 코드의 새 폴더는 실제 구현 시 역할이 정해진 뒤 추가합니다.
+
+## 기존 연구용 구조
 
 ```text
 .
@@ -37,13 +39,13 @@
 └── architecture/                # 구조와 기술 결정 기록
 ```
 
-## 데이터 전달 흐름
+## 기존 전처리·학습 데이터 흐름
 
 1. AI Hub 원본은 `data/raw/aihub/<dataset-key>/`, 별도 원본 WAV는 `data/raw/wav/`에 두고 수정하지 않습니다.
 2. WAV→24 kHz mono 16-bit FLAC 변환 결과는 `data/interim/flac/`에 저장합니다.
 3. 파인튜닝에 추가 분할·정규화가 필요하면 결과를 `data/processed/audio/`에 저장합니다.
 4. 오디오 경로, 텍스트, 화자 등 학습 입력 목록은 `data/processed/manifests/`에 저장합니다.
-5. 파인튜닝 설정은 `configs/finetuning/`, 결과 체크포인트는 `checkpoints/finetuned/`에 둡니다.
+5. 별도 연구에서 파인튜닝을 재개할 경우에만 설정은 `configs/finetuning/`, 결과는 `checkpoints/finetuned/`에 둡니다.
 
 `data/`, `checkpoints/`, `runs/`의 실제 파일은 기본적으로 Git에서 제외됩니다. 체크포인트 중 기준선이나 배포 후보처럼 재현·비교에 유의미하고 팀 검토를 마친 결과만 예외적으로 추적합니다. 상세 선정 기준은 [`checkpoints/README.md`](../checkpoints/README.md)를 따릅니다. 환자 관련 원본이나 메타데이터는 비식별화·접근통제 절차가 확정되기 전까지 공유 저장소에 올리지 않습니다.
 
@@ -55,11 +57,13 @@
 - `runs/`는 실행 중 출력, `checkpoints/`는 모델 가중치, `docs/`는 사람이 읽는 결과 요약을 보관합니다.
 - 코드나 설정 구조를 바꾼 뒤에는 `python3 scripts/generate_architecture.py`를 실행해 자동 아키텍처 문서를 갱신합니다.
 
-## 팀 작업 경계
+## MVP 제품 작업 경계
 
-- 전처리 담당: `src/kof5_tts/preprocessing/`, `scripts/download_aihub.py`, `scripts/run_preprocessing_pipeline.py`, `data/raw/` → `data/interim/`
-- 파인튜닝 담당: `src/kof5_tts/training/`, `configs/finetuning/`, `data/processed/` → `checkpoints/finetuned/`
-- 경량화 담당: `src/kof5_tts/optimization/`, `configs/optimization/`, `checkpoints/finetuned/` → `checkpoints/optimized/`
-- 평가 담당: `src/kof5_tts/evaluation/`, 평가 설정과 `docs/`의 결과 요약
+- 환자 음성 인터랙션: 임시 버퍼, 발화 활성화, 대화 상태, 재생과 중단
+- 대화·정보 경계: 보호자 기억, 병원 승인 정보, 짧은 응답과 메시지 원문 보존
+- 보호자·병원 입력: 동의된 음성 등록, 정보 수정, 병원 메시지와 일정
+- 안전·평가: 정체성 고지, 환자 거부, 주변 음성 처리, 보조 알림과 기능 지표
+
+기존 AI Hub 전처리 담당은 `src/kof5_tts/preprocessing/`과 `scripts/download_aihub.py`, `scripts/run_preprocessing_pipeline.py`를 유지합니다. 이는 현재 제품 MVP와 별도의 연구 도구입니다.
 
 역할은 파일 소유권이 아니라 충돌을 줄이기 위한 기본 경계이며, 공통 인터페이스 변경은 ADR이나 문서에서 먼저 합의합니다.
