@@ -19,14 +19,15 @@ flowchart LR
   subgraph code["코드 레이어"]
     layer_preprocessing["preprocessing (3)"]
     layer_root["root (1)"]
+    layer_training["training (3)"]
   end
 ```
 
 ## 현재 카탈로그
 
-- Python 모듈: **4**
-- 설정 파일: **0**
-- 프로젝트 실행 스크립트: **3**
+- Python 모듈: **7**
+- 설정 파일: **3**
+- 프로젝트 실행 스크립트: **5**
 
 ### Python 모듈
 
@@ -36,10 +37,17 @@ flowchart LR
 | `kof5_tts.preprocessing` | preprocessing | `src/kof5_tts/preprocessing/__init__.py` | `kof5_tts.preprocessing.audio` |
 | `kof5_tts.preprocessing.aihub` | preprocessing | `src/kof5_tts/preprocessing/aihub.py` | — |
 | `kof5_tts.preprocessing.audio` | preprocessing | `src/kof5_tts/preprocessing/audio.py` | — |
+| `kof5_tts.training` | training | `src/kof5_tts/training/__init__.py` | — |
+| `kof5_tts.training.param_groups` | training | `src/kof5_tts/training/param_groups.py` | — |
+| `kof5_tts.training.vocab` | training | `src/kof5_tts/training/vocab.py` | — |
 
 ### 설정 파일
 
-아직 확정된 설정 파일이 없습니다.
+| Group | Path |
+| --- | --- |
+| finetuning | `configs/finetuning/stage1_text_only.yaml` |
+| finetuning | `configs/finetuning/stage2_text_shallow_dit.yaml` |
+| finetuning | `configs/finetuning/stage3_full.yaml` |
 
 ### 실행 스크립트
 
@@ -47,6 +55,8 @@ flowchart LR
 | --- |
 | `scripts/convert_wav_to_flac.py` |
 | `scripts/download_aihub.py` |
+| `scripts/extend_vocab.py` |
+| `scripts/finetune_f5.py` |
 | `scripts/run_preprocessing_pipeline.py` |
 
 ## 분석 한계

@@ -66,13 +66,46 @@
         "path": "src/kof5_tts/preprocessing/audio.py",
         "layer": "preprocessing",
         "imports": []
+      },
+      {
+        "module": "kof5_tts.training",
+        "path": "src/kof5_tts/training/__init__.py",
+        "layer": "training",
+        "imports": []
+      },
+      {
+        "module": "kof5_tts.training.param_groups",
+        "path": "src/kof5_tts/training/param_groups.py",
+        "layer": "training",
+        "imports": []
+      },
+      {
+        "module": "kof5_tts.training.vocab",
+        "path": "src/kof5_tts/training/vocab.py",
+        "layer": "training",
+        "imports": []
       }
     ]
   },
-  "configs": [],
+  "configs": [
+    {
+      "path": "configs/finetuning/stage1_text_only.yaml",
+      "group": "finetuning"
+    },
+    {
+      "path": "configs/finetuning/stage2_text_shallow_dit.yaml",
+      "group": "finetuning"
+    },
+    {
+      "path": "configs/finetuning/stage3_full.yaml",
+      "group": "finetuning"
+    }
+  ],
   "scripts": [
     "scripts/convert_wav_to_flac.py",
     "scripts/download_aihub.py",
+    "scripts/extend_vocab.py",
+    "scripts/finetune_f5.py",
     "scripts/run_preprocessing_pipeline.py"
   ],
   "limitations": [
