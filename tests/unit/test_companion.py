@@ -144,6 +144,15 @@ class ConversationSessionTests(unittest.TestCase):
         self.assertEqual(session.hear("싫어하는 음식은 뭐야?", "UNCERTAIN", now), "turn")
         self.assertFalse(session.proactive_paused)
 
+    def test_medical_decisions_are_blocked_before_hosted_reply(self) -> None:
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        for request in ("이 약 먹어도 돼?", "나 지금 퇴원해도 괜찮아?", "수술 받아야 하나?"):
+            self.assertEqual(
+                policy_reply(request, "turn", now),
+                "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요.",
+            )
+        self.assertEqual(policy_reply("수민아", "turn", now), "응, 왜?")
+
     def test_silence_timeout_starts_after_speech_finishes(self) -> None:
         now = datetime(2026, 9, 15, tzinfo=timezone.utc)
         session = ConversationSession()

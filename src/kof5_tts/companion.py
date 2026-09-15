@@ -93,7 +93,10 @@ def policy_reply(transcript: str, event: str, now: datetime) -> str | None:
     _require_aware(now)
     if event in {"auxiliary_alert_candidate", "barge_in_risk_candidate"}:
         return "의료진의 도움이 필요한 상황일 수 있어요. 기존 호출 버튼을 이용해주세요."
-    if any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹", "약 먹어야")):
+    if any(word in transcript for word in ("진단", "처방", "무슨 약", "약을 먹", "약 먹어야")) or re.search(
+        r"(?:약|퇴원|수술|검사|치료).{0,24}(?:먹어도|해도|받아도|받아야|해야|괜찮아|필요해|좋아)",
+        transcript,
+    ):
         return "의료 판단은 제가 할 수 없어요. 의료진에게 확인해주세요."
     if any(word in transcript for word in ("너 진짜", "너 수민이야", "실제 수민", "전화한 거", "AI야")):
         return "나는 실제 가족과 통화하는 사람이 아니라 AI 음성 대화 도우미야."
