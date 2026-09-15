@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>가족의 기억 · Familiar Voice</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; color: #233530; background: #f7f8f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; word-break: keep-all; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 3px solid #78ae9b; outline-offset: 3px; }
+    header { padding: 21px clamp(20px, 5vw, 72px); background: #fff; border-bottom: 1px solid #e4e9e3; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { font-size: 18px; font-weight: 800; letter-spacing: -.035em; color: #194a40; }
+    .brand span { color: #7a9a8e; margin-right: 9px; }
+    .top-link { color: #3b6558; font-size: 14px; text-underline-offset: 3px; }
+    main { max-width: 1160px; margin: auto; padding: clamp(36px, 5vw, 70px) 20px 70px; }
+    .eyebrow { display: inline-block; margin-bottom: 14px; font-size: 13px; font-weight: 800; letter-spacing: .08em; color: #4d7869; }
+    h1 { margin: 0 0 15px; font-size: clamp(36px, 4.5vw, 56px); line-height: 1.15; letter-spacing: -.055em; }
+    h2 { margin: 0 0 10px; font-size: 24px; letter-spacing: -.035em; }
+    p { line-height: 1.58; }
+    .intro { max-width: 650px; margin: 0 0 36px; color: #607069; font-size: 18px; }
+    .grid { display: grid; grid-template-columns: minmax(280px, .9fr) minmax(380px, 1.1fr); gap: 22px; align-items: start; }
+    .card { background: #fff; border: 1px solid #e3e9e2; border-radius: 21px; padding: clamp(24px, 3vw, 34px); box-shadow: 0 14px 38px #24382e0b; }
+    .soft { background: #f1f5ef; border-color: #e2e9dd; box-shadow: none; }
+    .card p:first-of-type { margin-top: 0; color: #67766f; }
+    label { display: block; margin: 20px 0 8px; font-weight: 700; font-size: 14px; }
+    input, select, textarea { width: 100%; min-height: 50px; padding: 13px 14px; border: 1px solid #c8d6cc; border-radius: 11px; color: #233530; background: #fff; }
+    textarea { min-height: 122px; resize: vertical; line-height: 1.5; }
+    .primary { min-height: 51px; width: 100%; margin-top: 24px; border: 0; border-radius: 11px; background: #194a40; color: #fff; font-weight: 800; }
+    .primary:disabled { opacity: .55; cursor: not-allowed; }
+    .secondary { min-height: 40px; padding: 8px 13px; border: 1px solid #c8d6cc; border-radius: 9px; color: #285748; background: #fff; font-weight: 700; }
+    #signup-button { width: 100%; margin-top: 12px; }
+    .small { font-size: 14px; color: #65736c; }
+    .hint { padding: 14px 16px; border-left: 3px solid #8ea890; border-radius: 7px; background: #eef4ed; font-size: 14px; line-height: 1.55; }
+    .status { min-height: 42px; margin-top: 20px; color: #30594d; font-size: 14px; line-height: 1.5; }
+    .section-title { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .facts { display: grid; gap: 12px; margin-top: 18px; }
+    .fact { padding: 16px 18px; border: 1px solid #e0e8df; border-radius: 12px; background: #fafcf9; }
+    .fact h3 { margin: 0 0 8px; font-size: 15px; color: #3a6956; }
+    .fact p { margin: 0; white-space: pre-wrap; color: #233530; }
+    .fact button { margin-top: 12px; }
+    .semantic-status { margin-top: 12px; font-size: 13px; color: #526c60; line-height: 1.5; }
+    .follow-up-question { margin-top: 12px; white-space: pre-wrap; }
+    .voice-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+    .voice-actions button { flex: 1 1 170px; }
+    .voice-samples { margin: 14px 0; padding-left: 23px; line-height: 1.8; font-size: 14px; }
+    .voice-samples li { margin-bottom: 3px; }
+    .avoid-facts .fact { background: #fff9f4; border-color: #eedfd2; }
+    .avoid-facts .fact h3 { color: #805c43; }
+    .links { padding: 0; list-style: none; display: grid; gap: 9px; }
+    .links li { padding: 11px 13px; border-radius: 9px; background: #e8efe7; font-size: 14px; }
+    .links li.pending { background: #f7f2e8; color: #796342; }
+    body.signed-in #portal-card { order: 1; }
+    body.signed-in #memory-card { order: 2; }
+    body.signed-in .soft { order: 3; grid-column: 1 / -1; }
+    [hidden] { display: none !important; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 520px) { header { padding: 18px 20px; } main { padding: 32px 15px 50px; } .card { padding: 24px 20px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span aria-hidden="true">✳</span>Familiar Voice</div>
+    <a class="top-link" href="/demo">내부 합성 대화 보기</a>
+  </header>
+  <main>
+    <span class="eyebrow">FAMILY MEMORY</span>
+    <h1>익숙한 이야기를<br>안전하게 남겨요.</h1>
+    <p class="intro">가족이 확인한 기억만 입력합니다. 병실·검사·약물 정보는 병원에서 따로 확인합니다.</p>
+    <div class="grid">
+      <section class="card" id="signin-card" aria-labelledby="signin-title">
+        <h2 id="signin-title">보호자 로그인</h2>
+        <p>병원에서 환자 연결을 확인한 계정으로 로그인하세요.</p>
+        <form id="signin-form">
+          <label for="email">이메일</label>
+          <input id="email" type="email" autocomplete="username" required>
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+          <button id="signin-button" class="primary" type="submit" disabled>로그인</button>
+        </form>
+        <button id="signup-button" class="secondary" type="button" disabled>보호자 계정 만들기</button>
+        <div id="signup-status" class="status" role="status" aria-live="polite"></div>
+        <div id="signin-status" class="status" role="status" aria-live="polite">로그인 연결을 확인하고 있습니다.</div>
+        <p class="small">가입 후 확인 이메일이 오면 인증하고 이 화면에서 로그인하세요. 이메일 확인이 꺼진 시험 환경에서는 바로 로그인할 수 있습니다. 환자 연결은 병원 담당자의 별도 검증 전까지 열리지 않습니다.</p>
+      </section>
+      <section class="card soft" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">입력 전에 확인해요</h2>
+        <p>이 화면은 보호자와 병원이 검증한 환자 연결을 기준으로 가족 기억만 다룹니다.</p>
+        <div class="hint">환자 번호·생년월일·병실은 보이지 않습니다. 의료 정보나 확인되지 않은 퇴원 날짜도 기억에 적지 마세요.</div>
+        <p class="small">실제 환자 사용은 기관 승인과 동의·환자 거부·개인정보 처리 절차가 끝난 뒤에만 시작합니다.</p>
+      </section>
+      <section class="card" id="portal-card" aria-labelledby="portal-title" hidden>
+        <div class="section-title">
+          <h2 id="portal-title">연결 확인</h2>
+          <button class="secondary" id="logout" type="button">로그아웃</button>
+        </div>
+        <p>현재 유효한 보호자 연결의 가족 기억만 볼 수 있습니다.</p>
+        <ul id="links" class="links"></ul>
+        <label for="patient">기억을 남길 연결</label>
+        <select id="patient"></select>
+        <div id="portal-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+      <section class="card" id="memory-card" aria-labelledby="memory-title" hidden>
+        <h2 id="memory-title">가족의 기억</h2>
+        <p>짧고 정확하게, 본인이 확인한 이야기만 남겨주세요.</p>
+        <div id="facts" class="facts" aria-live="polite"></div>
+        <h3 id="avoid-title">피해야 할 이야기</h3>
+        <p class="small">대화에 쓰지 않을 주제를 따로 남겨주세요.</p>
+        <div id="avoid-facts" class="facts avoid-facts" aria-labelledby="avoid-title" aria-live="polite"></div>
+        <p class="hint">현재 화면은 합성 자료로만 시험합니다. 실제 환자·가족 정보는 기관 승인과 환자 동의·거부 절차가 확정될 때까지 입력하지 마세요.</p>
+        <form id="memory-form">
+          <label for="starter-question">어디서부터 이야기할까요? (선택)</label>
+          <select id="starter-question">
+            <option value="">시작 질문을 골라보세요</option>
+          </select>
+          <p id="starter-hint" class="small">하나의 질문을 골라도, 확인한 이야기만 자유롭게 적을 수 있습니다.</p>
+          <label for="category">기억 종류</label>
+          <select id="category">
+            <optgroup label="가족과 일상">
+              <option value="family">가족</option>
+              <option value="relationship">가족과 관계</option>
+              <option value="hometown">고향</option>
+              <option value="occupation">예전 일</option>
+              <option value="food">좋아하는 음식</option>
+              <option value="hobby">취미</option>
+              <option value="friend">친구</option>
+              <option value="pet">반려동물</option>
+              <option value="daily_routine">평소 일과</option>
+            </optgroup>
+            <optgroup label="함께한 이야기">
+              <option value="travel">함께한 여행</option>
+              <option value="family_event">가족 행사</option>
+              <option value="favorite_story">좋아하는 이야기</option>
+              <option value="recent_event">최근 일</option>
+              <option value="comfort_topic">안심되는 이야기</option>
+            </optgroup>
+            <optgroup label="대화에서 제외">
+              <option value="avoid_topic">피해야 할 이야기</option>
+            </optgroup>
+          </select>
+          <label for="content">확인한 이야기</label>
+          <textarea id="content" maxlength="1000" required placeholder="예: 함께 제주도에 갔을 때 성산일출봉을 좋아하셨어요."></textarea>
+          <button id="save-memory" class="primary" type="submit">기억 저장</button>
+          <button id="cancel-edit" class="secondary" type="button" hidden>수정 취소</button>
+        </form>
+        <div id="memory-status" class="status" role="status" aria-live="polite"></div>
+      </section>
+      <section class="card" id="voice-card" aria-labelledby="voice-title" hidden>
+        <h2 id="voice-title">본인 음성 합성 시험</h2>
+        <p class="hint">고정 합성 환자 자료에 한정합니다. 실제 보호자·환자 음성을 녹음하지 마세요. 별도 보호자 복제 음성 동의와 현재 연결을 서버에서 확인한 뒤 테스터 본인의 목소리만 20~30초씩 세 번 녹음할 수 있습니다. 이 화면은 음성 검증이나 임상 사용 승인을 뜻하지 않습니다.</p>
+        <ol id="voice-samples" class="voice-samples" aria-live="polite"></ol>
+        <label for="voice-own-confirm"><input id="voice-own-confirm" type="checkbox" style="width:auto; min-height:auto; margin-right:8px">이 합성 시험은 테스터인 내 목소리만 사용합니다.</label>
+        <div class="voice-actions">
+          <button id="voice-start" class="secondary" type="button" disabled>다음 합성 샘플 녹음</button>
+          <button id="voice-stop" class="secondary" type="button" disabled>녹음 끝내기</button>
+          <button id="voice-enroll" class="secondary" type="button" disabled>세 샘플 합성 업로드</button>
+          <button id="voice-delete" class="secondary" type="button" disabled>합성 복제 삭제 요청</button>
+          <button id="voice-reconcile" class="secondary" type="button" disabled>원격 상태 대조</button>
+          <button id="voice-refresh" class="secondary" type="button">상태 다시 확인</button>
+        </div>
+        <div id="voice-status" class="status" role="status" aria-live="polite">별도 동의와 합성 시험 상태를 확인하기 전에는 녹음이 열리지 않습니다.</div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const state = { config: null, token: null, userId: null, links: [], generation: 0,
+      authRequest: 0, factRequest: 0, saveRequest: 0, draftRevision: 0,
+      editingFactId: null, semanticJobs: new Map(), followUpJobs: new Map(),
+      voiceRequest: 0, voiceStatus: null,
+      voiceCapture: null, voicePendingStream: null, voiceSamples: [], voiceUpload: null };
+    const $ = id => document.getElementById(id);
+    const syntheticPatientId = '00000000-0000-4000-8000-000000000975';
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const labels = { family: '가족', relationship: '가족과 관계', hometown: '고향', occupation: '예전 일', food: '좋아하는 음식', hobby: '취미', friend: '친구', pet: '반려동물', daily_routine: '평소 일과', travel: '함께한 여행', family_event: '가족 행사', favorite_story: '좋아하는 이야기', recent_event: '최근 일', comfort_topic: '안심되는 이야기', avoid_topic: '피해야 할 이야기' };
+    const prompts = [
+      ['relationship', '환자분과 어떤 관계인가요?'],
+      ['relationship', '평소 환자분을 어떻게 부르나요?'],
+      ['relationship', '환자분은 보호자를 어떻게 부르나요?'],
+      ['family', '배우자에 대해 알려주실 수 있나요?'],
+      ['family', '자녀에 대해 알려주실 수 있나요?'],
+      ['family', '손자녀와 함께한 이야기가 있나요?'],
+      ['hometown', '고향은 어디였나요?'],
+      ['hometown', '오래 살았던 곳은 어디인가요?'],
+      ['occupation', '예전에 어떤 일을 하셨나요?'],
+      ['occupation', '가장 좋아했던 일은 무엇인가요?'],
+      ['food', '좋아하는 음식은 무엇인가요?'],
+      ['food', '싫어하는 음식은 무엇인가요?'],
+      ['hobby', '좋아하는 음악이나 가수는 누구인가요?'],
+      ['hobby', '좋아하는 TV 프로그램은 무엇인가요?'],
+      ['travel', '함께 갔던 여행은 어디였나요?'],
+      ['travel', '가장 기억에 남는 여행은 무엇인가요?'],
+      ['family_event', '가족의 기억에 남는 행사가 있나요?'],
+      ['friend', '친한 친구와 어떤 이야기를 나누셨나요?'],
+      ['pet', '함께 지낸 반려동물이 있나요?'],
+      ['daily_routine', '평소 하루 일과는 어땠나요?'],
+      ['favorite_story', '자주 하시던 말이나 이야기가 있나요?'],
+      ['comfort_topic', '환자분을 안심시키는 이야기는 무엇인가요?'],
+      ['avoid_topic', '대화에서 피해야 할 이야기가 있나요?'],
+    ];
+    for (const [index, [, question]] of prompts.entries()) {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = question;
+      $('starter-question').append(option);
+    }
+    const current = link => link.access_status === 'verified'
+      && Date.parse(link.effective_at) <= Date.now()
+      && (!link.expires_at || Date.parse(link.expires_at) > Date.now());
+
+    async function supabase(path, method = 'GET', data = null, schema = null, returnRow = false) {
+      const headers = { apikey: state.config.publishable_key };
+      const token = state.token;
+      const generation = state.generation;
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (schema) headers[method === 'GET' ? 'Accept-Profile' : 'Content-Profile'] = schema;
+      if (data) headers['Content-Type'] = 'application/json';
+      if (method === 'PATCH') headers.Prefer = 'return=representation';
+      if (method === 'POST' && returnRow) headers.Prefer = 'return=representation';
+      const response = await fetch(state.config.url + path, { method, headers, body: data ? JSON.stringify(data) : undefined });
+      if (!response.ok) {
+        if (token && generation === state.generation && token === state.token
+            && (response.status === 401 || response.status === 403))
+          clearSession('세션 또는 환자 연결이 유효하지 않아 정보를 숨겼습니다.');
+        throw new Error(String(response.status));
+      }
+      const text = await response.text();
+      return text ? JSON.parse(text) : null;
+    }
+
+    function showSemanticState(job) {
+      if (job.indicator) job.indicator.textContent = job.status === 'ready'
+        ? '기억 저장됨 · 의미 색인 준비됨 (검색 품질은 아직 검증되지 않았습니다.)'
+        : job.status === 'pending' ? '기억 저장됨 · 의미 색인 진행 중'
+        : job.status === 'failed' ? '기억 저장됨 · 의미 색인 미완료. 같은 기억을 다시 시도할 수 있습니다.'
+        : '기억 저장됨 · 의미 색인 상태 미확인';
+      if (job.retryButton) job.retryButton.hidden = job.status === 'ready' || job.status === 'pending';
+    }
+
+    function abortSemanticJobs(clear = true) {
+      for (const job of state.semanticJobs.values()) {
+        if (job.controller) job.controller.abort();
+        job.controller = null;
+        job.cancelled = true;
+        if (!clear && job.status === 'pending') {
+          job.status = 'failed';
+          showSemanticState(job);
+        }
+      }
+      if (clear) state.semanticJobs.clear();
+    }
+
+    function cancelFollowUp(factId) {
+      const job = state.followUpJobs.get(factId);
+      if (!job) return;
+      job.cancelled = true;
+      if (job.controller) job.controller.abort();
+      if (job.question) { job.question.textContent = ''; job.question.hidden = true; }
+      if (job.indicator) job.indicator.textContent = '';
+      if (job.button) job.button.disabled = false;
+      state.followUpJobs.delete(factId);
+    }
+
+    function abortFollowUps() {
+      for (const factId of [...state.followUpJobs.keys()]) cancelFollowUp(factId);
+    }
+
+    async function requestFollowUp(patientId, factId, indicator, question, button) {
+      if (patientId !== syntheticPatientId || !uuid.test(factId || '')
+          || !state.token || $('patient').value !== patientId || $('memory-card').hidden
+          || state.editingFactId === factId
+          || !state.links.some(link => link.patient_id === patientId && current(link))) return;
+      cancelFollowUp(factId);
+      const job = { patientId, factId, generation: state.generation, token: state.token,
+        controller: new AbortController(), cancelled: false, indicator, question, button };
+      state.followUpJobs.set(factId, job);
+      const ownsJob = () => state.followUpJobs.get(factId) === job && !job.cancelled
+        && job.generation === state.generation && job.token === state.token
+        && $('patient').value === patientId && !$('memory-card').hidden
+        && state.editingFactId !== factId;
+      const linked = () => state.links.some(link => link.patient_id === patientId && current(link));
+      const currentJob = () => ownsJob() && linked();
+      question.textContent = '';
+      question.hidden = true;
+      button.disabled = true;
+      indicator.textContent = '합성 후속 질문을 요청하고 있습니다. 기존 기억 입력은 유지합니다.';
+      try {
+        const response = await fetch(`/internal/synthetic/guardian/${patientId}/fact/${factId}/follow-up`, {
+          method: 'POST', headers: { Authorization: `Bearer ${job.token}`,
+            'X-Synthetic-Material': 'confirmed' }, signal: job.controller.signal,
+        });
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (!currentJob()) return;
+        if ([401, 403].includes(response.status)) {
+          clearSession('보호자 연결 또는 후속 질문 권한이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (!response.ok) throw new Error(String(response.status));
+        const result = await response.json();
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (!currentJob()) return;
+        const candidate = typeof result?.question === 'string' ? result.question.trim() : '';
+        if (result?.fact_id !== factId || candidate.length < 5 || candidate.length > 100
+            || /[\r\n]/.test(candidate) || !candidate.endsWith('?'))
+          throw new Error('unconfirmed follow-up');
+        question.textContent = candidate;
+        question.hidden = false;
+        indicator.textContent = '생성 질문은 부정확할 수 있습니다. 새 기억을 입력하기 전 보호자가 직접 확인하세요. 질문은 저장되지 않았습니다.';
+      } catch (_) {
+        if (ownsJob() && !linked()) {
+          clearSession('보호자 연결이 종료되어 후속 질문과 가족 기억을 숨겼습니다.');
+          return;
+        }
+        if (currentJob()) {
+          question.textContent = '';
+          question.hidden = true;
+          indicator.textContent = '후속 질문을 확인하지 못했습니다. 현재 작성 중인 기억은 유지됩니다. 다시 요청할 수 있습니다.';
+        }
+      } finally {
+        if (currentJob()) {
+          job.controller = null;
+          button.disabled = false;
+        }
+      }
+    }
+
+    const voicePath = patientId => `/internal/synthetic/guardian/${patientId}/voice`;
+    const voiceForeground = () => !document.hidden && document.visibilityState !== 'hidden';
+    const voiceCurrent = (owner, foreground = true) => owner.generation === state.generation
+      && owner.token === state.token && owner.request === state.voiceRequest
+      && $('patient').value === owner.patientId && owner.patientId === syntheticPatientId
+      && state.links.some(link => link.patient_id === owner.patientId && current(link))
+      && !!state.token && (!foreground || voiceForeground());
+    const ownVoiceCurrent = owner => voiceCurrent(owner) && $('voice-own-confirm').checked;
+    const voiceReady = status => status?.authorized === true && status.ready === true
+      && status.upload_enabled === true && uuid.test(status.consent_id || '')
+      && status.status === 'none';
+
+    function voiceButtons() {
+      const ready = voiceReady(state.voiceStatus) && $('voice-own-confirm').checked && voiceForeground()
+        && $('voice-card').hidden === false && !state.voiceUpload;
+      $('voice-start').disabled = !ready || !!state.voiceCapture || state.voiceSamples.length === 3;
+      $('voice-stop').disabled = !state.voiceCapture;
+      $('voice-enroll').disabled = !ready || !!state.voiceCapture || state.voiceSamples.length !== 3;
+      const status = state.voiceStatus;
+      $('voice-delete').disabled = !voiceForeground() || !status?.authorized
+        || !uuid.test(status.clone_id || '') || !['created', 'verification_pending', 'pending', 'deletion_pending'].includes(status.status)
+        || !!state.voiceUpload || !!state.voiceCapture;
+      $('voice-reconcile').disabled = !voiceForeground() || !status?.authorized
+        || !uuid.test(status.clone_id || '') || status.status !== 'pending'
+        || !!state.voiceUpload || !!state.voiceCapture;
+      $('voice-refresh').disabled = !voiceForeground() || !!state.voiceUpload || !!state.voiceCapture;
+    }
+
+    function showVoiceSamples() {
+      $('voice-samples').replaceChildren();
+      for (const [index, sample] of state.voiceSamples.entries()) {
+        const item = document.createElement('li');
+        item.textContent = `${index + 1}번째 테스터 본인 음성 샘플 · ${(sample.durationMs / 1000).toFixed(1)}초 · 로컬 참조만 유지`;
+        $('voice-samples').append(item);
+      }
+      voiceButtons();
+    }
+
+    function releaseVoiceCapture(capture, keep = false) {
+      if (!capture) return;
+      if (capture.timer) clearInterval(capture.timer);
+      capture.processor.onaudioprocess = null;
+      capture.processor.disconnect();
+      capture.source.disconnect();
+      for (const track of capture.stream.getTracks()) track.stop();
+      capture.context.close().catch(() => {});
+      if (!keep) capture.buffers.length = 0;
+      if (state.voiceCapture === capture) state.voiceCapture = null;
+    }
+
+    function suspendVoice(message = '') {
+      state.voiceRequest += 1;
+      if (state.voiceUpload) state.voiceUpload.abort();
+      state.voiceUpload = null;
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      state.voiceSamples.length = 0;
+      state.voiceStatus = null;
+      $('voice-own-confirm').checked = false;
+      $('voice-card').hidden = true;
+      $('voice-status').textContent = message || '오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
+      showVoiceSamples();
+    }
+
+    function discardVoiceAudio() {
+      state.voiceRequest += 1;
+      const uncertainRequest = !!state.voiceUpload;
+      if (state.voiceUpload) state.voiceUpload.abort();
+      state.voiceUpload = null;
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      state.voiceSamples.length = 0;
+      if (uncertainRequest || state.voiceStatus?.status === 'none') state.voiceStatus = null;
+      $('voice-status').textContent = uncertainRequest
+        ? '원격 요청 결과가 아직 불명확합니다. 상태를 다시 확인하기 전 생성·삭제를 확정하지 않습니다. 오디오 참조는 해제했습니다.'
+        : state.voiceStatus?.status === 'deletion_pending'
+        ? '합성 복제 삭제 확인 대기 중입니다. 오디오 참조를 해제했습니다.'
+        : state.voiceStatus?.status === 'pending'
+        ? '합성 업로드 확인 대기 중입니다. 오디오 참조를 해제했습니다.'
+        : '본인 음성 확인을 해제해 녹음을 닫고 오디오 참조를 해제했습니다.';
+      showVoiceSamples();
+    }
+
+    async function guardianVoiceRequest(owner, path, method = 'GET', body = null, signal = null) {
+      const response = await fetch(path, { method, headers: {
+        Authorization: `Bearer ${owner.token}`, 'X-Synthetic-Material': 'confirmed',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      }, body: body ? JSON.stringify(body) : undefined, signal });
+      if (!voiceCurrent(owner, false)) throw new Error('stale voice request');
+      if ([401, 403].includes(response.status)) {
+        clearSession('보호자 연결 또는 별도 음성 동의 권한을 확인하지 못해 시험을 닫았습니다.');
+        throw new Error('voice authorization lost');
+      }
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    }
+
+    async function loadVoiceStatus() {
+      if (state.voiceUpload || state.voiceCapture) return false;
+      const patientId = $('patient').value;
+      if (patientId !== syntheticPatientId || !state.token || !voiceForeground()
+          || !state.links.some(link => link.patient_id === patientId && current(link))) {
+        suspendVoice();
+        return false;
+      }
+      const owner = { generation: state.generation, token: state.token,
+        patientId, request: ++state.voiceRequest };
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      $('voice-card').hidden = false;
+      $('voice-status').textContent = '별도 동의와 현재 합성 시험 상태를 확인하고 있습니다.';
+      voiceButtons();
+      try {
+        const status = await guardianVoiceRequest(owner, `${voicePath(patientId)}/status`);
+        if (!voiceCurrent(owner)) return false;
+        state.voiceStatus = status;
+        if (!status?.authorized || !status.ready) {
+          state.voiceSamples.length = 0;
+          releaseVoiceCapture(state.voiceCapture);
+          showVoiceSamples();
+        }
+        $('voice-status').textContent = !status?.authorized
+          ? '현재 검증된 보호자 연결이 확인되지 않아 음성 시험을 닫았습니다.'
+          : status.status === 'deleted'
+          ? '원격 부재 확인 뒤 합성 복제 삭제가 확인됐습니다.'
+          : status.status === 'deletion_pending'
+          ? '삭제 요청 결과가 아직 불명확합니다. 원격 상태 대조를 사용하세요.'
+          : status.status === 'verification_pending'
+          ? '합성 복제 확인 대기 중입니다. 생성이나 사용 준비가 확인되지 않았습니다.'
+          : status.status === 'pending'
+          ? '합성 업로드 결과 확인 대기 중입니다. 같은 샘플을 다시 올리지 마세요.'
+          : status.status === 'created'
+          ? '합성 복제의 원격 생성 확인 상태입니다. 실제 보호자 음성이나 임상 사용 승인은 아닙니다.'
+          : status.status === 'failed'
+          ? '합성 복제 생성이 실패했습니다. 원격 상태를 확인하세요.'
+          : !status.ready
+          ? '별도 보호자 복제 음성 동의가 유효하지 않아 녹음·업로드를 닫았습니다.'
+          : !status.upload_enabled
+          ? '합성 업로드는 서버에서 기본 비활성입니다. 녹음도 열지 않았습니다.'
+          : '현재 합성 시험 조건을 서버에서 확인했습니다. 테스터 본인 음성만 20~30초씩 세 번 녹음하세요.';
+        voiceButtons();
+        return true;
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          state.voiceStatus = null;
+          state.voiceSamples.length = 0;
+          releaseVoiceCapture(state.voiceCapture);
+          showVoiceSamples();
+          $('voice-status').textContent = '합성 음성 상태를 확인하지 못했습니다. 녹음·업로드를 닫고 다시 확인하세요.';
+        }
+        return false;
+      }
+    }
+
+    function pcm16Wav(buffers, sourceRate) {
+      const frames = buffers.reduce((sum, buffer) => sum + buffer.length, 0);
+      const source = new Float32Array(frames);
+      let offset = 0;
+      for (const buffer of buffers) { source.set(buffer, offset); offset += buffer.length; }
+      const targetRate = 16000;
+      const count = Math.floor(frames * targetRate / sourceRate);
+      const wav = new Uint8Array(44 + count * 2);
+      const view = new DataView(wav.buffer);
+      for (const [at, text] of [[0, 'RIFF'], [8, 'WAVE'], [12, 'fmt '], [36, 'data']])
+        for (let index = 0; index < 4; index++) view.setUint8(at + index, text.charCodeAt(index));
+      view.setUint32(4, wav.length - 8, true);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, targetRate, true);
+      view.setUint32(28, targetRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      view.setUint32(40, count * 2, true);
+      for (let index = 0; index < count; index++) {
+        const position = index * sourceRate / targetRate;
+        const base = Math.floor(position);
+        const fraction = position - base;
+        const value = Math.max(-1, Math.min(1, source[base] * (1 - fraction)
+          + source[Math.min(base + 1, frames - 1)] * fraction));
+        view.setInt16(44 + index * 2, value < 0 ? value * 32768 : value * 32767, true);
+      }
+      source.fill(0);
+      return wav;
+    }
+
+    function wavBase64(wav) {
+      let binary = '';
+      for (let index = 0; index < wav.length; index += 8192)
+        binary += String.fromCharCode(...wav.subarray(index, index + 8192));
+      return btoa(binary);
+    }
+
+    function stopVoiceClip(save) {
+      const capture = state.voiceCapture;
+      if (!capture) return;
+      const durationMs = Date.now() - capture.startedAt;
+      const allowed = save && ownVoiceCurrent(capture.owner) && voiceReady(state.voiceStatus)
+        && durationMs >= 20000 && durationMs <= 30000 && capture.buffers.length > 0;
+      let sample = null;
+      if (allowed) {
+        try {
+          const wav = pcm16Wav(capture.buffers, capture.context.sampleRate);
+          const audioDurationMs = (wav.length - 44) / 32;
+          if (wav.length <= 2000000 && audioDurationMs >= 20000
+              && audioDurationMs <= 30000) sample = { durationMs: audioDurationMs, wav };
+        } catch (_) {}
+      }
+      releaseVoiceCapture(capture);
+      if (sample && state.voiceSamples.length < 3) {
+        state.voiceSamples.push(sample);
+        $('voice-status').textContent = '합성 샘플을 로컬 참조에만 유지했습니다. 세 개를 채운 뒤 별도 업로드를 선택하세요.';
+      } else {
+        $('voice-status').textContent = '20~30초 조건을 채우지 못했거나 상태가 바뀌어 이 녹음의 오디오 참조를 해제했습니다.';
+      }
+      showVoiceSamples();
+    }
+
+    async function startVoiceClip() {
+      if (!voiceReady(state.voiceStatus) || !$('voice-own-confirm').checked
+          || !voiceForeground() || state.voiceCapture || state.voiceUpload
+          || state.voiceSamples.length >= 3
+          || $('patient').value !== syntheticPatientId) return;
+      const consentId = state.voiceStatus.consent_id;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      let stream = null;
+      let capture = null;
+      $('voice-start').disabled = true;
+      $('voice-status').textContent = '마이크 권한을 기다리고 있습니다. 화면을 떠나면 시험을 닫습니다.';
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
+        if (!ownVoiceCurrent(owner)) return;
+        state.voicePendingStream = stream;
+        const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`);
+        if (!ownVoiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+          if (voiceCurrent(owner, false)) {
+            state.voiceStatus = fresh;
+            state.voiceSamples.length = 0;
+            $('voice-status').textContent = '마이크 허가 중 별도 음성 동의나 연결 상태가 달라져 녹음을 닫았습니다.';
+            showVoiceSamples();
+          }
+          return;
+        }
+        state.voiceStatus = fresh;
+        const Audio = window.AudioContext || window.webkitAudioContext;
+        if (!Audio) throw new Error('PCM capture unavailable');
+        const context = new Audio();
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        capture = { stream, context, source, processor, buffers: [],
+          startedAt: Date.now(), owner, timer: null };
+        processor.onaudioprocess = event => {
+          event.outputBuffer.getChannelData(0).fill(0);
+          if (!ownVoiceCurrent(owner) || state.voiceCapture !== capture) return;
+          capture.buffers.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        };
+        source.connect(processor);
+        processor.connect(context.destination);
+        await context.resume();
+        if (!ownVoiceCurrent(owner)) return;
+        state.voiceCapture = capture;
+        if (state.voicePendingStream === stream) state.voicePendingStream = null;
+        capture.timer = setInterval(() => {
+          if (state.voiceCapture !== capture) return;
+          if (!ownVoiceCurrent(owner)) { releaseVoiceCapture(capture); voiceButtons(); return; }
+          const seconds = (Date.now() - capture.startedAt) / 1000;
+          $('voice-status').textContent = `${state.voiceSamples.length + 1}번째 테스터 본인 음성 · ${seconds.toFixed(1)}초 / 20~30초`;
+          if (seconds >= 30) stopVoiceClip(true);
+        }, 100);
+        voiceButtons();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) $('voice-status').textContent = '마이크 또는 합성 상태를 확인하지 못했습니다. 녹음을 시작하지 않았습니다.';
+      } finally {
+        if (capture && state.voiceCapture !== capture) releaseVoiceCapture(capture);
+        else if (stream && state.voiceCapture?.stream !== stream) {
+          for (const track of stream.getTracks()) track.stop();
+        }
+        if (state.voicePendingStream === stream) state.voicePendingStream = null;
+        if (voiceCurrent(owner, false)) voiceButtons();
+      }
+    }
+
+    async function enrollVoice() {
+      if (!voiceReady(state.voiceStatus) || !$('voice-own-confirm').checked
+          || !voiceForeground() || state.voiceCapture || state.voiceSamples.length !== 3
+          || state.voiceUpload || typeof crypto === 'undefined'
+          || typeof crypto.randomUUID !== 'function') return;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      const consentId = state.voiceStatus.consent_id;
+      const controller = new AbortController();
+      state.voiceUpload = controller;
+      voiceButtons();
+      $('voice-status').textContent = '별도 동의와 현재 연결을 다시 확인한 뒤 합성 샘플을 보냅니다.';
+      let attempted = false;
+      try {
+        const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`, 'GET', null, controller.signal);
+        if (!ownVoiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+          if (voiceCurrent(owner, false)) suspendVoice('별도 음성 동의가 바뀌어 오디오 참조를 해제하고 전송하지 않았습니다.');
+          return;
+        }
+        const body = { consent_id: consentId, request_key: crypto.randomUUID(),
+          own_voice_confirmed: true,
+          samples_wav_base64: state.voiceSamples.map(sample => wavBase64(sample.wav)) };
+        if (!ownVoiceCurrent(owner)) return;
+        state.voiceSamples.length = 0;
+        showVoiceSamples();
+        attempted = true;
+        const result = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/enroll`,
+          'POST', body, controller.signal);
+        if (!ownVoiceCurrent(owner)) return;
+        state.voiceStatus = null;
+        $('voice-status').textContent = ['pending', 'verification_pending'].includes(result?.status)
+          ? '합성 업로드 요청은 접수됐지만 원격 생성 확인은 대기 중입니다. 중복 업로드하지 말고 상태를 대조하세요.'
+          : '합성 업로드 응답을 받았습니다. 별도 상태 조회 전에는 사용 준비로 표시하지 않습니다.';
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        await loadVoiceStatus();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          state.voiceStatus = null;
+          $('voice-status').textContent = attempted
+            ? '합성 업로드 결과가 불명확합니다. 같은 오디오를 재전송하지 말고 상태 조회·원격 대조를 하세요.'
+            : '합성 업로드 전에 현재 동의를 확인하지 못했습니다. 다시 상태를 확인하세요.';
+          voiceButtons();
+        }
+      } finally {
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        if (state.token && $('patient').value === syntheticPatientId) voiceButtons();
+      }
+    }
+
+    async function mutateVoice(action) {
+      const cloneId = state.voiceStatus?.clone_id;
+      if (!uuid.test(cloneId || '') || !voiceForeground() || state.voiceUpload
+          || state.voiceCapture || $('patient').value !== syntheticPatientId
+          || !state.voiceStatus?.authorized) return;
+      const owner = { generation: state.generation, token: state.token,
+        patientId: syntheticPatientId, request: ++state.voiceRequest };
+      const controller = new AbortController();
+      state.voiceUpload = controller;
+      voiceButtons();
+      $('voice-status').textContent = action === 'delete'
+        ? '합성 복제 삭제를 요청하고 원격 부재 확인을 기다립니다.'
+        : '같은 합성 복제의 원격 상태만 대조합니다. 오디오를 재전송하지 않습니다.';
+      try {
+        const result = await guardianVoiceRequest(owner,
+          `${voicePath(owner.patientId)}/${cloneId}/${action}`, 'POST', null, controller.signal);
+        if (!voiceCurrent(owner, false)) return;
+        $('voice-status').textContent = result?.clone_id === cloneId && result.status === 'deleted'
+          ? '원격 부재가 확인되어 합성 복제 삭제를 확인했습니다.'
+          : '요청 응답을 받았지만 원격 상태는 아직 불명확합니다. 삭제·생성을 확정하지 않았습니다.';
+        state.voiceStatus = null;
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        await loadVoiceStatus();
+      } catch (_) {
+        if (voiceCurrent(owner, false)) {
+          $('voice-status').textContent = '원격 상태 확인 결과가 불명확합니다. 삭제 완료로 표시하지 않았습니다.';
+          voiceButtons();
+        }
+      } finally {
+        if (state.voiceUpload === controller) state.voiceUpload = null;
+        if (state.token && $('patient').value === syntheticPatientId) voiceButtons();
+      }
+    }
+
+    function ownsIndexJob(job) {
+      return state.semanticJobs.get(job.factId) === job && !job.cancelled
+        && job.generation === state.generation && job.token === state.token
+        && $('patient').value === job.patientId;
+    }
+
+    function validIndexJob(job) {
+      return ownsIndexJob(job) && !$('memory-card').hidden
+        && state.links.some(link => link.patient_id === job.patientId && current(link));
+    }
+
+    async function indexSyntheticFact(patientId, factId) {
+      if (patientId !== syntheticPatientId || !uuid.test(factId || '') || !state.token
+          || $('patient').value !== patientId || $('memory-card').hidden
+          || !state.links.some(link => link.patient_id === patientId && current(link))) return;
+      const previous = state.semanticJobs.get(factId);
+      if (previous?.controller) previous.controller.abort();
+      if (previous) previous.cancelled = true;
+      const job = { patientId, factId, generation: state.generation, token: state.token,
+        controller: new AbortController(), cancelled: false, status: 'pending',
+        indicator: previous?.indicator || null, retryButton: previous?.retryButton || null };
+      state.semanticJobs.set(factId, job);
+      showSemanticState(job);
+      try {
+        const response = await fetch(`/internal/synthetic/guardian/${patientId}/fact/${factId}/embedding`, {
+          method: 'POST', headers: { Authorization: `Bearer ${job.token}`,
+            'X-Synthetic-Material': 'confirmed' }, signal: job.controller.signal,
+        });
+        if (!ownsIndexJob(job)) return;
+        if (!state.links.some(link => link.patient_id === job.patientId && current(link))
+            || [401, 403].includes(response.status)) {
+          clearSession('보호자 연결 또는 의미 색인 권한이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (!validIndexJob(job)) return;
+        if (!response.ok) throw new Error(String(response.status));
+        const result = await response.json();
+        if (!validIndexJob(job)) return;
+        if (result?.status !== 'ready' || result.fact_id !== factId) throw new Error('index result unconfirmed');
+        job.status = 'ready';
+        job.controller = null;
+        showSemanticState(job);
+      } catch (_) {
+        if (ownsIndexJob(job) && !state.links.some(link => link.patient_id === job.patientId && current(link))) {
+          clearSession('보호자 연결이 유효하지 않아 정보를 숨겼습니다.');
+          return;
+        }
+        if (validIndexJob(job)) {
+          job.status = 'failed';
+          job.controller = null;
+          showSemanticState(job);
+        }
+      }
+    }
+
+    function clearSession(message = '로그아웃했습니다.') {
+      abortSemanticJobs();
+      abortFollowUps();
+      suspendVoice();
+      state.generation += 1;
+      state.authRequest += 1;
+      state.factRequest += 1;
+      state.saveRequest += 1;
+      state.draftRevision += 1;
+      state.token = null;
+      state.userId = null;
+      state.links = [];
+      document.body.classList.remove('signed-in');
+      $('email').value = '';
+      $('password').value = '';
+      $('content').value = '';
+      resetEdit();
+      $('facts').replaceChildren();
+      $('avoid-facts').replaceChildren();
+      $('links').replaceChildren();
+      $('patient').replaceChildren();
+      $('portal-card').hidden = true;
+      $('memory-card').hidden = true;
+      $('voice-card').hidden = true;
+      $('signin-card').hidden = false;
+      $('signin-status').textContent = message;
+      $('signup-status').textContent = '';
+      $('signin-button').disabled = !state.config;
+      $('signup-button').disabled = !state.config;
+    }
+
+    function resetEdit() {
+      state.editingFactId = null;
+      $('save-memory').textContent = '기억 저장';
+      $('cancel-edit').hidden = true;
+      $('starter-question').disabled = false;
+      clearStarter();
+    }
+
+    function clearStarter() {
+      $('starter-question').value = '';
+      $('starter-hint').textContent = '하나의 질문을 골라도, 확인한 이야기만 자유롭게 적을 수 있습니다.';
+      $('content').placeholder = '예: 함께 제주도에 갔을 때 성산일출봉을 좋아하셨어요.';
+    }
+
+    async function loadFacts() {
+      abortFollowUps();
+      const patientId = $('patient').value;
+      const generation = state.generation;
+      const request = ++state.factRequest;
+      const currentRequest = () => generation === state.generation && request === state.factRequest
+        && patientId === $('patient').value && !!state.token;
+      $('memory-card').hidden = !patientId;
+      $('facts').replaceChildren();
+      $('avoid-facts').replaceChildren();
+      if (!patientId) return false;
+      let facts;
+      try {
+        facts = await supabase(`/rest/v1/family_context?patient_id=eq.${encodeURIComponent(patientId)}&select=fact_id,category,content&order=created_at.desc`, 'GET', null, 'api');
+      } catch (_) {
+        if (currentRequest()) {
+          $('memory-card').hidden = true;
+          $('portal-status').textContent = '기억을 읽지 못했습니다. 다시 로그인해 확인하세요.';
+        }
+        return false;
+      }
+      if (!currentRequest()) return false;
+      if (!facts.some(fact => fact.category !== 'avoid_topic')) $('facts').textContent = '아직 남긴 기억이 없습니다.';
+      if (!facts.some(fact => fact.category === 'avoid_topic')) $('avoid-facts').textContent = '아직 피해야 할 주제를 남기지 않았습니다.';
+      for (const fact of facts) {
+        const card = document.createElement('article');
+        card.className = 'fact';
+        const title = document.createElement('h3');
+        title.textContent = labels[fact.category] || '가족 기억';
+        const text = document.createElement('p');
+        text.textContent = fact.content;
+        const edit = document.createElement('button');
+        edit.className = 'secondary';
+        edit.type = 'button';
+        edit.textContent = '수정';
+        edit.addEventListener('click', () => {
+          if (!currentRequest() || !fact.fact_id) return;
+          cancelFollowUp(fact.fact_id);
+          state.saveRequest += 1;
+          state.draftRevision += 1;
+          state.editingFactId = fact.fact_id;
+          clearStarter();
+          $('starter-question').disabled = true;
+          $('category').value = fact.category;
+          $('content').value = fact.content;
+          $('save-memory').textContent = '기억 수정';
+          $('cancel-edit').hidden = false;
+          $('memory-status').textContent = '선택한 기억을 수정하고 있습니다.';
+          $('content').focus();
+        });
+        card.append(title, text, edit);
+        if (patientId === syntheticPatientId && fact.category !== 'avoid_topic' && uuid.test(fact.fact_id || '')) {
+          let job = state.semanticJobs.get(fact.fact_id);
+          if (!job) {
+            job = { patientId, factId: fact.fact_id, status: 'unknown', cancelled: false,
+              controller: null, indicator: null, retryButton: null };
+            state.semanticJobs.set(fact.fact_id, job);
+          }
+          const indicator = document.createElement('div');
+          indicator.className = 'semantic-status';
+          const retry = document.createElement('button');
+          retry.className = 'secondary';
+          retry.type = 'button';
+          retry.textContent = '이 기억 의미 색인 다시 시도';
+          retry.addEventListener('click', () => {
+            if (currentRequest()) indexSyntheticFact(patientId, fact.fact_id);
+          });
+          job.indicator = indicator;
+          job.retryButton = retry;
+          showSemanticState(job);
+          card.append(indicator, retry);
+          const followUpButton = document.createElement('button');
+          followUpButton.className = 'secondary';
+          followUpButton.type = 'button';
+          followUpButton.textContent = '이 기억의 후속 질문 보기';
+          const followUpIndicator = document.createElement('div');
+          followUpIndicator.className = 'semantic-status';
+          const followUpQuestion = document.createElement('div');
+          followUpQuestion.className = 'hint follow-up-question';
+          followUpQuestion.hidden = true;
+          const followUpHint = document.createElement('div');
+          followUpHint.className = 'semantic-status';
+          followUpHint.textContent = '클릭하면 저장된 이 합성 기억 원문이 시험용 LLM 공급자에게 전송됩니다. 실제 환자·가족 정보는 입력하지 마세요.';
+          followUpButton.addEventListener('click', () => {
+            if (currentRequest()) return requestFollowUp(patientId, fact.fact_id,
+              followUpIndicator, followUpQuestion, followUpButton);
+          });
+          card.append(followUpButton, followUpIndicator, followUpQuestion, followUpHint);
+        } else if (patientId === syntheticPatientId && state.semanticJobs.has(fact.fact_id)) {
+          const old = state.semanticJobs.get(fact.fact_id);
+          if (old.controller) old.controller.abort();
+          old.cancelled = true;
+          state.semanticJobs.delete(fact.fact_id);
+        }
+        $(fact.category === 'avoid_topic' ? 'avoid-facts' : 'facts').append(card);
+      }
+      return true;
+    }
+
+    function renderLinks() {
+      $('links').replaceChildren();
+      $('patient').replaceChildren();
+      let verified = 0;
+      for (const link of state.links) {
+        const item = document.createElement('li');
+        const available = current(link);
+        item.className = available ? '' : 'pending';
+        item.textContent = `${link.relationship} · ${available ? '연결 확인됨' : '확인 대기 또는 종료'}`;
+        $('links').append(item);
+        if (available) {
+          verified += 1;
+          const option = document.createElement('option');
+          option.value = link.patient_id;
+          option.textContent = `연결된 환자 ${verified} · ${link.relationship}`;
+          $('patient').append(option);
+        }
+      }
+      $('patient').hidden = verified === 0;
+      $('portal-status').textContent = verified ? '검증된 연결의 가족 기억을 볼 수 있습니다.' : '유효한 환자 연결이 없습니다. 병원 담당자에게 확인을 요청하세요.';
+    }
+
+    $('signin-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      let owner = state.generation;
+      const request = ++state.authRequest;
+      const currentAuth = () => owner === state.generation && request === state.authRequest;
+      $('signin-button').disabled = true;
+      $('signup-button').disabled = true;
+      $('signup-status').textContent = '';
+      $('signin-status').textContent = '로그인하고 연결을 확인하고 있습니다.';
+      try {
+        const session = await supabase('/auth/v1/token?grant_type=password', 'POST', {
+          email: $('email').value.trim(), password: $('password').value,
+        });
+        if (!currentAuth()) return;
+        owner = ++state.generation;
+        state.token = session.access_token;
+        state.userId = session.user.id;
+        $('password').value = '';
+        const links = await supabase('/rest/v1/guardian_links?select=patient_id,relationship,access_status,effective_at,expires_at', 'GET', null, 'api');
+        if (!currentAuth()) return;
+        state.links = links;
+        renderLinks();
+        $('signin-card').hidden = true;
+        $('portal-card').hidden = false;
+        document.body.classList.add('signed-in');
+        await loadFacts();
+        await loadVoiceStatus();
+      } catch (_) {
+        if (!currentAuth()) return;
+        clearSession();
+        $('signin-status').textContent = '로그인 또는 연결 확인에 실패했습니다. 계정 정보를 다시 확인하세요.';
+      } finally {
+        if (currentAuth()) {
+          $('signin-button').disabled = !state.config;
+          $('signup-button').disabled = !state.config;
+        }
+      }
+    });
+
+    $('signup-button').addEventListener('click', async () => {
+      if (!state.config || !$('signin-form').reportValidity()) return;
+      const generation = state.generation;
+      const request = ++state.authRequest;
+      const currentAuth = () => generation === state.generation && request === state.authRequest;
+      $('signin-button').disabled = true;
+      $('signup-button').disabled = true;
+      $('signup-status').textContent = '가입 요청을 보내고 있습니다.';
+      try {
+        await supabase('/auth/v1/signup', 'POST', {
+          email: $('email').value.trim(), password: $('password').value,
+        });
+        if (!currentAuth()) return;
+        // Even if local Auth auto-confirms and returns a session, it cannot grant a patient link.
+        $('password').value = '';
+        $('signup-status').textContent = '가입 요청을 받았습니다. 확인 이메일이 오면 인증한 뒤 로그인하세요. 환자 연결은 병원에서 따로 검증합니다.';
+      } catch (_) {
+        if (currentAuth()) $('signup-status').textContent = '가입 요청을 완료하지 못했습니다. 입력과 연결 상태를 확인하세요.';
+      } finally {
+        if (currentAuth()) {
+          $('signin-button').disabled = false;
+          $('signup-button').disabled = false;
+        }
+      }
+    });
+
+    $('patient').addEventListener('change', async () => {
+      abortSemanticJobs();
+      abortFollowUps();
+      suspendVoice();
+      state.saveRequest += 1;
+      state.draftRevision += 1;
+      $('content').value = '';
+      resetEdit();
+      $('memory-status').textContent = '';
+      await loadFacts();
+      await loadVoiceStatus();
+    });
+    $('logout').addEventListener('click', () => clearSession());
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', () => { abortSemanticJobs(false); abortFollowUps(); suspendVoice(); });
+      window.addEventListener('pageshow', () => {
+        if (state.token && $('patient').value === syntheticPatientId && voiceForeground())
+          loadVoiceStatus();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!voiceForeground()) suspendVoice();
+        else if (state.token && $('patient').value === syntheticPatientId
+            && $('voice-card').hidden) loadVoiceStatus();
+        else voiceButtons();
+      });
+    }
+    $('voice-own-confirm').addEventListener('change', () => {
+      if (!$('voice-own-confirm').checked) discardVoiceAudio();
+      else voiceButtons();
+    });
+    $('voice-start').addEventListener('click', startVoiceClip);
+    $('voice-stop').addEventListener('click', () => stopVoiceClip(true));
+    $('voice-enroll').addEventListener('click', enrollVoice);
+    $('voice-delete').addEventListener('click', () => mutateVoice('delete'));
+    $('voice-reconcile').addEventListener('click', () => mutateVoice('reconcile'));
+    $('voice-refresh').addEventListener('click', loadVoiceStatus);
+    $('cancel-edit').addEventListener('click', () => {
+      state.saveRequest += 1;
+      state.draftRevision += 1;
+      $('content').value = '';
+      resetEdit();
+      $('memory-status').textContent = '수정을 취소했습니다.';
+    });
+    $('content').addEventListener('input', () => { state.draftRevision += 1; });
+    $('starter-question').addEventListener('change', () => {
+      const selected = prompts[Number($('starter-question').value)];
+      if (!selected || !$('starter-question').value) return;
+      $('category').value = selected[0];
+      $('starter-hint').textContent = selected[1];
+      $('content').placeholder = '확인한 이야기만 짧고 정확하게 적어주세요.';
+      state.draftRevision += 1;
+    });
+    $('category').addEventListener('change', () => {
+      clearStarter();
+      state.draftRevision += 1;
+    });
+    $('memory-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const generation = state.generation;
+      const patientId = $('patient').value;
+      const request = ++state.saveRequest;
+      const revision = state.draftRevision;
+      const category = $('category').value;
+      const draft = $('content').value.trim();
+      const factId = state.editingFactId;
+      const fixedSynthetic = patientId === syntheticPatientId;
+      let savedFactId = null;
+      let writeAttempted = false;
+      const currentSave = () => generation === state.generation && request === state.saveRequest
+        && patientId === $('patient').value && factId === state.editingFactId && !!state.token;
+      if (!patientId || !draft) {
+        $('memory-status').textContent = '확인한 이야기를 입력하세요.';
+        return;
+      }
+      if (fixedSynthetic && factId && state.semanticJobs.has(factId)) {
+        const prior = state.semanticJobs.get(factId);
+        if (prior.controller) prior.controller.abort();
+        prior.controller = null;
+        prior.cancelled = true;
+        prior.status = 'unknown';
+        showSemanticState(prior);
+      }
+      $('memory-status').textContent = factId ? '기억을 수정하고 있습니다.' : '기억을 저장하고 있습니다.';
+      try {
+        if (factId) {
+          writeAttempted = true;
+          const updated = await supabase(`/rest/v1/family_context?fact_id=eq.${encodeURIComponent(factId)}&patient_id=eq.${encodeURIComponent(patientId)}`,
+            'PATCH', { category, content: draft }, 'api');
+          if (!Array.isArray(updated) || updated.length !== 1) throw new Error('memory update denied');
+          if (fixedSynthetic) {
+            if (updated[0].fact_id !== factId || updated[0].patient_id !== patientId
+                || updated[0].category !== category || updated[0].content !== draft)
+              throw new Error('synthetic memory update unconfirmed');
+            savedFactId = updated[0].fact_id;
+          }
+        } else {
+          writeAttempted = true;
+          const inserted = await supabase('/rest/v1/family_context', 'POST', {
+            patient_id: patientId, author_guardian_user_id: state.userId,
+            category, content: draft,
+          }, 'api', fixedSynthetic);
+          if (fixedSynthetic) {
+            if (!Array.isArray(inserted) || inserted.length !== 1 || !uuid.test(inserted[0].fact_id || '')
+                || inserted[0].patient_id !== patientId || inserted[0].author_guardian_user_id !== state.userId
+                || inserted[0].category !== category || inserted[0].content !== draft)
+              throw new Error('synthetic memory insert unconfirmed');
+            savedFactId = inserted[0].fact_id;
+          }
+        }
+        if (!currentSave()) return;
+        if (fixedSynthetic && savedFactId && category === 'avoid_topic') {
+          const prior = state.semanticJobs.get(savedFactId);
+          if (prior?.controller) prior.controller.abort();
+          if (prior) prior.cancelled = true;
+          state.semanticJobs.delete(savedFactId);
+        }
+        if (fixedSynthetic && savedFactId && category !== 'avoid_topic') indexSyntheticFact(patientId, savedFactId);
+        const factsLoaded = await loadFacts();
+        if (currentSave()) {
+          if (!factsLoaded) {
+            $('memory-status').textContent = '기억 저장 응답은 확인했지만 목록을 다시 읽지 못했습니다. 입력을 유지하고 색인 상태를 따로 확인하세요.';
+            return;
+          }
+          const unchanged = revision === state.draftRevision
+            && $('content').value.trim() === draft && $('category').value === category;
+          if (unchanged) { $('content').value = ''; resetEdit(); }
+          $('memory-status').textContent = fixedSynthetic
+            ? (unchanged
+              ? '기억 저장 응답을 확인했습니다. 의미 색인 상태는 해당 기억에서 별도로 확인하세요.'
+              : '이전 기억은 저장됐습니다. 수정 중인 새 초안은 아직 저장되지 않았습니다. 의미 색인은 해당 기억에서 따로 확인하세요.')
+            : unchanged
+            ? (factId ? '확인한 기억을 수정했습니다.' : '확인한 기억을 저장했습니다.')
+            : '이전 내용을 반영했습니다. 새 초안은 아직 저장되지 않았습니다.';
+        }
+      } catch (_) {
+        if (currentSave()) $('memory-status').textContent = fixedSynthetic && writeAttempted
+          ? '기억 저장 결과를 확인하지 못했습니다. 입력을 유지했습니다. 목록 확인 전 중복 등록하거나 색인 준비를 주장하지 마세요.'
+          : '기억을 반영하지 못했습니다. 연결 상태를 다시 확인하세요.';
+      }
+    });
+
+    fetch('/guardian/config').then(response => {
+      if (!response.ok) throw new Error('unconfigured');
+      return response.json();
+    }).then(config => {
+      state.config = config;
+      $('signin-button').disabled = false;
+      $('signup-button').disabled = false;
+      $('signin-status').textContent = '로그인할 수 있습니다.';
+    }).catch(() => {
+      $('signin-status').textContent = '전용 로그인 연결이 아직 준비되지 않았습니다.';
+    });
+  </script>
+</body>
+</html>

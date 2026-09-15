@@ -1,0 +1,21 @@
+name: kof5_patient
+description: "iPad용 환자 음성 대화 내부 시험 앱."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  record: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  record_platform_interface: ^1.6.0
+
+flutter:
+  uses-material-design: true

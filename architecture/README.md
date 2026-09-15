@@ -1,13 +1,13 @@
 # 아키텍처 방향
 
-클라우드 중심 MVP의 제품 흐름은 [ADR-0001](decisions/0001-cloud-first-familiar-voice-mvp.md)과 [PRD](../docs/Delirium_Familiar_Voice_MVP_PRD.md)에 기록합니다. 아래는 구현 목표 흐름이며 제공업체·클라이언트 프레임워크·배포 환경이 확정됐다는 뜻은 아닙니다.
+클라우드 중심 MVP의 제품 흐름은 [ADR-0001](decisions/0001-cloud-first-familiar-voice-mvp.md), [iPad·Vercel 우선 결정 ADR-0002](decisions/0002-ipad-local-audio-vercel-first.md), [Supabase Auth/Postgres 결정 ADR-0004](decisions/0004-supabase-auth-postgres.md)와 [PRD](../docs/Delirium_Familiar_Voice_MVP_PRD.md)에 기록합니다. 아래는 구현 목표 흐름이며 hosted STT·LLM·TTS 제공업체가 확정됐다는 뜻은 아닙니다.
 
 ## MVP 목표 흐름
 
 ```mermaid
 flowchart LR
-    A["태블릿 마이크"] --> B["임시 버퍼·기기 내 VAD 후보"]
-    B --> C["발화 후보·Hosted STT"]
+    A["iPad Flutter 마이크"] --> B["휘발성 버퍼·기기 내 VAD"]
+    B --> C["후보 구간만 전송·Hosted STT"]
     C --> D["대화 상태·활성화 판단"]
     E["보호자 기억"] --> F["분리된 맥락·안전 정책"]
     G["병원 승인 정보"] --> F
@@ -16,7 +16,7 @@ flowchart LR
     H --> I["검증된 짧은 응답"]
     J["동의된 보호자 음성"] --> K["Hosted 음성 복제 TTS"]
     I --> K
-    K --> L["태블릿 재생"]
+    K --> L["iPad 재생·중단"]
 ```
 
 ## 설계 원칙
@@ -48,7 +48,7 @@ flowchart LR
 
 ## 결정 기록
 
-기술·제품 정책은 기존 [ADR 폴더](decisions/README.md)에 기록합니다. 현재 결정은 [ADR-0001 클라우드 중심 전환](decisions/0001-cloud-first-familiar-voice-mvp.md)입니다.
+기술·제품 정책은 기존 [ADR 폴더](decisions/README.md)에 기록합니다. 현재 결정은 [ADR-0001 클라우드 중심 전환](decisions/0001-cloud-first-familiar-voice-mvp.md)과 [ADR-0002 iPad·Vercel 우선 경로](decisions/0002-ipad-local-audio-vercel-first.md)입니다.
 
 ## 자동 생성 구조도
 

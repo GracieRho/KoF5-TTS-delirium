@@ -48,6 +48,29 @@
         "imports": []
       },
       {
+        "module": "kof5_tts.api",
+        "path": "src/kof5_tts/api.py",
+        "layer": "api",
+        "imports": [
+          "kof5_tts.cloud_prototype",
+          "kof5_tts.companion"
+        ]
+      },
+      {
+        "module": "kof5_tts.cloud_prototype",
+        "path": "src/kof5_tts/cloud_prototype.py",
+        "layer": "cloud_prototype",
+        "imports": [
+          "kof5_tts.companion"
+        ]
+      },
+      {
+        "module": "kof5_tts.companion",
+        "path": "src/kof5_tts/companion.py",
+        "layer": "companion",
+        "imports": []
+      },
+      {
         "module": "kof5_tts.preprocessing",
         "path": "src/kof5_tts/preprocessing/__init__.py",
         "layer": "preprocessing",
@@ -72,7 +95,11 @@
   "configs": [],
   "scripts": [
     "scripts/convert_wav_to_flac.py",
+    "scripts/demo_cloud_pipeline.py",
+    "scripts/demo_companion_text.py",
+    "scripts/demo_voice_enrollment.py",
     "scripts/download_aihub.py",
+    "scripts/run_backend.py",
     "scripts/run_preprocessing_pipeline.py"
   ],
   "limitations": [

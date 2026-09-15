@@ -1,0 +1,18 @@
+project_id = "kof5-familiar-voice-mvp"
+
+[api]
+# Only the invoker view in api is exposed; patient/voice tables stay in private kof5.
+port = 54341
+schemas = ["public", "graphql_public", "api"]
+
+[db]
+# Match this to the dedicated remote project's actual PostgreSQL major version before linking.
+major_version = 17
+# Keep this task's local DB clear of the shared yai-hub Supabase DB on 54322.
+port = 54339
+shadow_port = 54340
+
+[auth]
+# Anonymous Auth users are unpaired devices until a verified assigned staff
+# member explicitly pairs one to a current synthetic encounter.
+enable_anonymous_sign_ins = true

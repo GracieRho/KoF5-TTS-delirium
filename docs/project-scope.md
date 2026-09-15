@@ -2,14 +2,14 @@
 
 ## 배경
 
-이 프로젝트는 가족 음성과 개인적·병원 맥락을 활용한 한국어 음성 대화·지남력 지원 MVP를 검증합니다. 제품 방향은 [MVP PRD](Delirium_Familiar_Voice_MVP_PRD.md)와 [ADR-0001](../architecture/decisions/0001-cloud-first-familiar-voice-mvp.md)에 기록합니다. 실제 환자 대상 시험은 [안전·윤리 게이트](delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)를 통과한 뒤에만 진행합니다.
+이 프로젝트는 가족 음성과 개인적·병원 맥락을 활용한 한국어 음성 대화·지남력 지원 MVP를 검증합니다. 제품 방향은 [MVP PRD](Delirium_Familiar_Voice_MVP_PRD.md)와 [ADR 목록](../architecture/decisions/README.md)에 기록합니다. 실제 환자 대상 시험은 [안전·윤리 게이트](delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)를 통과한 뒤에만 진행합니다.
 
 ## 확인된 방향
 
 - 기본 언어: 한국어
 - 핵심 경험: 보호자 음성 기반의 짧은 양방향 대화와 지남력 메시지
 - 대상 영역: 섬망 환자의 비약물적 중재 지원
-- MVP 구조: 태블릿의 음성 감지와 hosted STT·LLM·음성 복제 TTS를 연결하는 클라우드 중심 흐름
+- MVP 구조: iPad Flutter의 기기 내 발화 감지와 후보 구간별 HTTP 요청을 hosted STT·LLM·음성 복제 TTS에 연결하는 클라우드 중심 흐름; Vercel을 첫 배포 대상으로 준비
 - 정보 경계: 보호자 기억과 병원 승인 정보를 분리하고 의료 판단을 생성하지 않음
 - MVP 제외: F5-TTS 파인튜닝, 자체 GPU 추론, 모델 경량화·온디바이스 TTS 추론
 
@@ -17,7 +17,7 @@
 
 - 실제 환자 시험의 대상·운영 주체와 기관 승인 절차
 - STT·LLM·음성 복제 제공업체의 품질, 보관·삭제 및 계약 조건
-- 태블릿·배포 환경, 네트워크 장애 시 동작 및 실측 성능 목표
+- iPad 마이크·VAD·재생 품질, Vercel 운영 적합성, 네트워크 장애 시 동작 및 실측 성능 목표
 - 동의 능력·환자 거부·병실 주변 음성 처리와 데이터 보존 기간
 - 임상 콘텐츠 검토 방식과 효과 평가 설계
 

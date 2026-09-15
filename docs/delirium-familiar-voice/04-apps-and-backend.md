@@ -2,7 +2,7 @@
 
 MVP에서는 앱을 세 개 모두 native로 만들 필요 없다.
 
-아래 클라이언트 기술은 검증 전 후보이며 확정된 구현 선택이 아니다.
+첫 환자 클라이언트는 사용자 시험 가능성을 위해 **iPad Flutter**로 정했다. 보호자·병원 웹 프레임워크는 아래 후보를 유지한다. 기기 내 VAD 뒤 발화 후보만 보내는 경로와 Vercel 우선 배포는 [ADR-0002](../../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따른다.
 
 ---
 
@@ -48,6 +48,8 @@ Next.js Responsive Web
 
 - patient list
 - patient detail
+- patient registration / active encounter
+- patient voice enrollment, refresh and deletion (about 30-second test sample)
 - today transcript
 - hospital context
 - message composer
@@ -57,7 +59,7 @@ Next.js Responsive Web
 
 # 34. 추천 기술 스택
 
-아래 목록은 비교할 후보 스택이다. 제공업체, 프레임워크와 배포 환경은 한국어 품질·지연·데이터 처리·운영 조건을 확인한 뒤 결정한다.
+로그인과 관계형 환자 데이터는 [ADR-0004](../../architecture/decisions/0004-supabase-auth-postgres.md)에 따라 Supabase Auth/Postgres로 결정했다. 다른 제공업체·웹 프레임워크·객체 저장·벡터 검색은 품질·지연·데이터 처리·운영 조건을 확인할 후보로 남긴다.
 
 ```text
 Patient Client
@@ -70,16 +72,16 @@ Backend
 FastAPI
 
 Auth
-Supabase Auth
+Supabase Auth (확정)
 
 Database
-Supabase Postgres
+Supabase Postgres (확정)
 
 Vector
-pgvector
+pgvector (후보)
 
 Object Storage
-Supabase Storage
+Supabase Storage (후보)
 
 STT
 Hosted streaming STT
@@ -96,6 +98,8 @@ Backend scheduler / managed cron
 Deployment
 Cloud Run / ECS / equivalent managed container
 ```
+
+현재 구현 우선순위는 Vercel의 FastAPI/웹 배포다. 위 관리형 컨테이너 목록은 운영·실시간 시험 결과에 따른 대안으로 남긴다. Vercel WebSocket은 베타로 지원되지만, 첫 경로는 iPad 후보 발화별 짧은 HTTP 요청으로 측정한다. 화자 프로필·동의·병원 환자 컬럼은 [별도 설계](08-hospital-patient-registry-and-voice.md)를 참고한다.
 
 ---
 

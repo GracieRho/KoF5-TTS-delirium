@@ -15,6 +15,7 @@ Always recording
 - conversation transcript만 저장
 - audio recording 저장은 opt-in
 - 보호자 voice sample 명시적 consent
+- 환자 화자 특징 등록은 별도 동의·assent/거부 확인과 원본 샘플 폐기를 전제로 함
 - voice clone deletion 지원
 - audit log 유지
 
