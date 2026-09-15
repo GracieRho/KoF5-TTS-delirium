@@ -544,6 +544,24 @@ async function runSyntheticVoice() {
   elements['voice-own-confirm'].handlers.change();
   assert.equal(elements['voice-start'].disabled, false);
 
+  const uncheckedPermission = pending();
+  permissions.push(uncheckedPermission);
+  const uncheckedStart = elements['voice-start'].handlers.click();
+  await pause();
+  elements['voice-own-confirm'].checked = false;
+  elements['voice-own-confirm'].handlers.change();
+  const uncheckedStream = stream();
+  uncheckedPermission.resolve(uncheckedStream);
+  await uncheckedStart;
+  assert.equal(tracks.at(-1).stopped, true, 'unchecked own-voice confirmation closes late permission track');
+  assert.equal(processors.length, 0, 'unchecked confirmation never starts PCM capture');
+  assert.equal(elements['voice-card'].hidden, false, 'unchecked confirmation leaves status review visible');
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(elements['voice-start'].disabled, true, 'rechecking requires a fresh consent/status read');
+  await elements['voice-refresh'].handlers.click();
+  assert.equal(elements['voice-start'].disabled, false);
+
   const slowPermission = pending();
   permissions.push(slowPermission);
   const lateStart = elements['voice-start'].handlers.click();
@@ -625,6 +643,16 @@ async function runSyntheticVoice() {
   await produce();
   assert.equal(elements['voice-samples'].children.length, 1);
   await elements['voice-start'].handlers.click();
+  const uncheckedActive = tracks.at(-1);
+  elements['voice-own-confirm'].checked = false;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(uncheckedActive.stopped, true, 'unchecking during active capture stops mic immediately');
+  assert.equal(elements['voice-samples'].children.length, 0, 'unchecking releases previously held WAV samples');
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(elements['voice-start'].disabled, true);
+  await elements['voice-refresh'].handlers.click();
+  await elements['voice-start'].handlers.click();
   const hiddenActive = tracks.at(-1);
   document.hidden = true;
   document.visibilityState = 'hidden';
@@ -641,6 +669,23 @@ async function runSyntheticVoice() {
   await produce();
   await produce();
   assert.equal(elements['voice-enroll'].disabled, false);
+  const uncheckedPreflight = pending();
+  statusReplies.push(uncheckedPreflight);
+  const unconfirmedEnrollment = elements['voice-enroll'].handlers.click();
+  await pause();
+  elements['voice-own-confirm'].checked = false;
+  elements['voice-own-confirm'].handlers.change();
+  uncheckedPreflight.resolve(reply(200, { ...serverStatus }));
+  await unconfirmedEnrollment;
+  assert.equal(enrollCalls.length, 0, 'unchecking during fresh consent read never starts upload');
+  assert.equal(elements['voice-samples'].children.length, 0, 'preflight cancellation releases all WAV samples');
+  elements['voice-own-confirm'].checked = true;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(elements['voice-enroll'].disabled, true);
+  await elements['voice-refresh'].handlers.click();
+  await produce();
+  await produce();
+  await produce();
   const enrollPending = pending();
   enrollReplies.push(enrollPending);
   const enrollment = elements['voice-enroll'].handlers.click();
@@ -668,11 +713,17 @@ async function runSyntheticVoice() {
   }
   serverStatus = { authorized: true, ready: false, consent_id: null,
     upload_enabled: true, clone_id: clone, status: 'verification_pending' };
+  elements['voice-own-confirm'].checked = false;
+  elements['voice-own-confirm'].handlers.change();
+  assert.equal(enrollCalls[0].options.signal.aborted, true, 'unchecking aborts in-flight upload request');
   enrollPending.resolve(reply(200, { status: 'verification_pending', clone_id: clone }));
   await enrollment;
-  assert.match(elements['voice-status'].textContent, /확인 대기/);
+  assert.match(elements['voice-status'].textContent, /결과가 아직 불명확/);
   assert.equal(elements['voice-start'].disabled, true, 'pending clone cannot reopen capture');
   assert.equal(elements['voice-samples'].children.length, 0, 'uploaded samples have no retained UI reference');
+  await elements['voice-refresh'].handlers.click();
+  assert.match(elements['voice-status'].textContent, /확인 대기/);
+  serverStatus = { ...serverStatus, status: 'deletion_pending' };
   const deletion = elements['voice-delete'].handlers.click();
   await deletion;
   assert.equal(deleteCalls.length, 1);
@@ -680,6 +731,10 @@ async function runSyntheticVoice() {
     'DELETE 200 with deletion_pending cannot claim remote absence');
   assert.equal(elements['voice-reconcile'].disabled, true, 'provider reconcile route is only for pending creation');
   assert.equal(elements['voice-delete'].disabled, false, 'deletion_pending can safely retry absence check');
+  elements['voice-own-confirm'].checked = false;
+  elements['voice-own-confirm'].handlers.change();
+  assert.match(elements['voice-status'].textContent, /삭제 확인 대기/,
+    'unchecking never conceals unfinished remote deletion state');
   window.handlers.pagehide();
   assert.equal(elements['voice-card'].hidden, true);
   assert.equal(elements['voice-samples'].children.length, 0);

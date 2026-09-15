@@ -256,6 +256,7 @@
       && $('patient').value === owner.patientId && owner.patientId === syntheticPatientId
       && state.links.some(link => link.patient_id === owner.patientId && current(link))
       && !!state.token && (!foreground || voiceForeground());
+    const ownVoiceCurrent = owner => voiceCurrent(owner) && $('voice-own-confirm').checked;
     const voiceReady = status => status?.authorized === true && status.ready === true
       && status.upload_enabled === true && uuid.test(status.consent_id || '')
       && status.status === 'none';
@@ -312,6 +313,28 @@
       $('voice-own-confirm').checked = false;
       $('voice-card').hidden = true;
       $('voice-status').textContent = message || '오디오 참조를 해제하고 추가 보관·전송하지 않습니다.';
+      showVoiceSamples();
+    }
+
+    function discardVoiceAudio() {
+      state.voiceRequest += 1;
+      const uncertainRequest = !!state.voiceUpload;
+      if (state.voiceUpload) state.voiceUpload.abort();
+      state.voiceUpload = null;
+      if (state.voicePendingStream) {
+        for (const track of state.voicePendingStream.getTracks()) track.stop();
+        state.voicePendingStream = null;
+      }
+      releaseVoiceCapture(state.voiceCapture);
+      state.voiceSamples.length = 0;
+      if (uncertainRequest || state.voiceStatus?.status === 'none') state.voiceStatus = null;
+      $('voice-status').textContent = uncertainRequest
+        ? '원격 요청 결과가 아직 불명확합니다. 상태를 다시 확인하기 전 생성·삭제를 확정하지 않습니다. 오디오 참조는 해제했습니다.'
+        : state.voiceStatus?.status === 'deletion_pending'
+        ? '합성 복제 삭제 확인 대기 중입니다. 오디오 참조를 해제했습니다.'
+        : state.voiceStatus?.status === 'pending'
+        ? '합성 업로드 확인 대기 중입니다. 오디오 참조를 해제했습니다.'
+        : '본인 음성 확인을 해제해 녹음을 닫고 오디오 참조를 해제했습니다.';
       showVoiceSamples();
     }
 
@@ -432,7 +455,7 @@
       const capture = state.voiceCapture;
       if (!capture) return;
       const durationMs = Date.now() - capture.startedAt;
-      const allowed = save && voiceCurrent(capture.owner) && voiceReady(state.voiceStatus)
+      const allowed = save && ownVoiceCurrent(capture.owner) && voiceReady(state.voiceStatus)
         && durationMs >= 20000 && durationMs <= 30000 && capture.buffers.length > 0;
       let sample = null;
       if (allowed) {
@@ -467,10 +490,10 @@
       $('voice-status').textContent = '마이크 권한을 기다리고 있습니다. 화면을 떠나면 시험을 닫습니다.';
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
-        if (!voiceCurrent(owner)) return;
+        if (!ownVoiceCurrent(owner)) return;
         state.voicePendingStream = stream;
         const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`);
-        if (!voiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+        if (!ownVoiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
           if (voiceCurrent(owner, false)) {
             state.voiceStatus = fresh;
             state.voiceSamples.length = 0;
@@ -489,18 +512,18 @@
           startedAt: Date.now(), owner, timer: null };
         processor.onaudioprocess = event => {
           event.outputBuffer.getChannelData(0).fill(0);
-          if (!voiceCurrent(owner) || state.voiceCapture !== capture) return;
+          if (!ownVoiceCurrent(owner) || state.voiceCapture !== capture) return;
           capture.buffers.push(new Float32Array(event.inputBuffer.getChannelData(0)));
         };
         source.connect(processor);
         processor.connect(context.destination);
         await context.resume();
-        if (!voiceCurrent(owner)) return;
+        if (!ownVoiceCurrent(owner)) return;
         state.voiceCapture = capture;
         if (state.voicePendingStream === stream) state.voicePendingStream = null;
         capture.timer = setInterval(() => {
           if (state.voiceCapture !== capture) return;
-          if (!voiceCurrent(owner)) { releaseVoiceCapture(capture); voiceButtons(); return; }
+          if (!ownVoiceCurrent(owner)) { releaseVoiceCapture(capture); voiceButtons(); return; }
           const seconds = (Date.now() - capture.startedAt) / 1000;
           $('voice-status').textContent = `${state.voiceSamples.length + 1}번째 테스터 본인 음성 · ${seconds.toFixed(1)}초 / 20~30초`;
           if (seconds >= 30) stopVoiceClip(true);
@@ -533,19 +556,20 @@
       let attempted = false;
       try {
         const fresh = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/status`, 'GET', null, controller.signal);
-        if (!voiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
+        if (!ownVoiceCurrent(owner) || !voiceReady(fresh) || fresh.consent_id !== consentId) {
           if (voiceCurrent(owner, false)) suspendVoice('별도 음성 동의가 바뀌어 오디오 참조를 해제하고 전송하지 않았습니다.');
           return;
         }
         const body = { consent_id: consentId, request_key: crypto.randomUUID(),
           own_voice_confirmed: true,
           samples_wav_base64: state.voiceSamples.map(sample => wavBase64(sample.wav)) };
+        if (!ownVoiceCurrent(owner)) return;
         state.voiceSamples.length = 0;
         showVoiceSamples();
         attempted = true;
         const result = await guardianVoiceRequest(owner, `${voicePath(owner.patientId)}/enroll`,
           'POST', body, controller.signal);
-        if (!voiceCurrent(owner, false)) return;
+        if (!ownVoiceCurrent(owner)) return;
         state.voiceStatus = null;
         $('voice-status').textContent = ['pending', 'verification_pending'].includes(result?.status)
           ? '합성 업로드 요청은 접수됐지만 원격 생성 확인은 대기 중입니다. 중복 업로드하지 말고 상태를 대조하세요.'
@@ -891,7 +915,10 @@
         else voiceButtons();
       });
     }
-    $('voice-own-confirm').addEventListener('change', voiceButtons);
+    $('voice-own-confirm').addEventListener('change', () => {
+      if (!$('voice-own-confirm').checked) discardVoiceAudio();
+      else voiceButtons();
+    });
     $('voice-start').addEventListener('click', startVoiceClip);
     $('voice-stop').addEventListener('click', () => stopVoiceClip(true));
     $('voice-enroll').addEventListener('click', enrollVoice);
