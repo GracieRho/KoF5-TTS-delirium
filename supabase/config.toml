@@ -13,4 +13,6 @@ port = 54339
 shadow_port = 54340
 
 [auth]
-enable_anonymous_sign_ins = false
+# Anonymous Auth users are unpaired devices until a verified assigned staff
+# member explicitly pairs one to a current synthetic encounter.
+enable_anonymous_sign_ins = true
