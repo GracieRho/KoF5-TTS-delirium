@@ -7,6 +7,9 @@ import 'device_anonymous_auth.dart';
 final _uuid = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
 );
+final _uuidV4 = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+);
 
 class DueHospitalMessage {
   const DueHospitalMessage(this.id, this.approvedText, this.dueAt);
@@ -84,6 +87,57 @@ Future<DueHospitalMessage> confirmSyntheticDueHospitalMessage(
     throw const FormatException('현재 전달 가능한 직원 승인 원문이 아닙니다.');
   }
   return DueHospitalMessage(messageId, text, dueAt);
+}
+
+Future<bool> completeSyntheticHospitalPlayback(
+  HttpClient client,
+  Uri project,
+  String publishableKey,
+  AnonymousDeviceSession session,
+  String messageId,
+  String attemptId, {
+  bool allowEphemeralLoopbackForTest = false,
+}) async {
+  checkDedicatedSupabase(
+    project,
+    publishableKey,
+    allowEphemeralLoopbackForTest: allowEphemeralLoopbackForTest,
+  );
+  if (!_uuid.hasMatch(messageId) ||
+      !_uuidV4.hasMatch(attemptId) ||
+      !session.usable(DateTime.now())) {
+    throw const FormatException('현재 기기 재생 완료 시도가 필요합니다.');
+  }
+  final request = await client.postUrl(
+    project.replace(
+      path: '/rest/v1/rpc/synthetic_hospital_message_playback_complete',
+    ),
+  );
+  request.followRedirects = false;
+  request.headers.set('apikey', publishableKey);
+  request.headers.set(
+    HttpHeaders.authorizationHeader,
+    'Bearer ${session.accessToken}',
+  );
+  request.headers.set('Content-Profile', 'api');
+  request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+  request.add(
+    utf8.encode(
+      jsonEncode({
+        'p_patient_id': syntheticPatientId,
+        'p_message_id': messageId,
+        'p_attempt_id': attemptId,
+      }),
+    ),
+  );
+  final response = await request.close();
+  final body = await _read(response, 4096);
+  if (response.statusCode != HttpStatus.ok ||
+      !session.usable(DateTime.now()) ||
+      body is! bool) {
+    throw const FormatException('병원 메시지 전달 확인 결과가 불확실합니다.');
+  }
+  return body;
 }
 
 Future<List<dynamic>> _rpc(

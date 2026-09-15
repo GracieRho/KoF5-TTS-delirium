@@ -187,4 +187,50 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test(
+    'playback-complete RPC sends exact device attempt and reads scalar bool',
+    () async {
+      const attempt = '00000000-0000-4000-8000-000000000904';
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        expect(
+          request.uri.path,
+          '/rest/v1/rpc/synthetic_hospital_message_playback_complete',
+        );
+        expect(request.headers.value('apikey'), key);
+        expect(request.headers.value('Content-Profile'), 'api');
+        expect(
+          request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer ${session.accessToken}',
+        );
+        expect(jsonDecode(await utf8.decoder.bind(request).join()), {
+          'p_patient_id': syntheticPatientId,
+          'p_message_id': messageId,
+          'p_attempt_id': attempt,
+        });
+        request.response.headers.contentType = ContentType.json;
+        request.response.write('true');
+        await request.response.close();
+      });
+      final client = HttpClient();
+      try {
+        expect(
+          await completeSyntheticHospitalPlayback(
+            client,
+            Uri.parse('http://127.0.0.1:${server.port}'),
+            key,
+            session,
+            messageId,
+            attempt,
+            allowEphemeralLoopbackForTest: true,
+          ),
+          true,
+        );
+      } finally {
+        client.close(force: true);
+        await server.close(force: true);
+      }
+    },
+  );
 }
