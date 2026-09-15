@@ -303,6 +303,37 @@ class CloudPrototypeTests(unittest.TestCase):
                 )
         self.assertEqual(calls, ["api.deepgram.com", "api.openai.com"])
 
+    def test_medical_advice_from_llm_never_reaches_tts_in_text_or_audio_path(self) -> None:
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        for unsafe in ("이 약은 안전해. 바로 먹어도 돼.", "독감 진단이 확실해.",
+                       "처방한 약은 그냥 끊어."):
+            for audio_path in (False, True):
+                with self.subTest(unsafe=unsafe, audio_path=audio_path):
+                    hosts = []
+                    def respond(request: httpx.Request) -> httpx.Response:
+                        hosts.append(request.url.host)
+                        if request.url.host == "api.deepgram.com":
+                            return httpx.Response(200, json={"results": {"channels": [{"alternatives": [
+                                {"transcript": "우리 제주도 언제 갔었지?"},
+                            ]}]}})
+                        if request.url.host == "api.openai.com":
+                            return httpx.Response(200, json={"status": "completed", "output": [{
+                                "type": "message", "content": [{"type": "output_text", "text": unsafe}],
+                            }]})
+                        raise AssertionError("medical advice must never reach TTS")
+                    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+                        with self.assertRaisesRegex(ValueError, "hard safety rule"):
+                            if audio_path:
+                                run_synthetic_pipeline(client, SYNTHETIC_WAV,
+                                                       "2024년 5월 제주도 여행", credentials)
+                            else:
+                                run_synthetic_text_pipeline(
+                                    client, "우리 제주도 언제 갔었지?", "DIRECTED",
+                                    "2024년 5월 제주도 여행", credentials,
+                                )
+                    self.assertEqual(hosts, (["api.deepgram.com"] if audio_path else [])
+                                     + ["api.openai.com"])
+
     def test_own_voice_enrollment_and_task_owned_delete_contract(self) -> None:
         calls = []
 
