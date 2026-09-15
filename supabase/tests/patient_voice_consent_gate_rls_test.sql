@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(15);
+SELECT plan(26);
 
 SELECT ok((SELECT reloptions @> ARRAY['security_invoker=true']
     FROM pg_class WHERE oid = 'kof5.usable_patient_voice_profile'::regclass),
@@ -12,6 +12,15 @@ SELECT ok(NOT has_table_privilege('authenticated', 'kof5.usable_patient_voice_pr
     'authenticated users cannot read usable voice metadata');
 SELECT ok(NOT has_table_privilege('service_role', 'kof5.usable_patient_voice_profile', 'SELECT'),
     'service role has no direct voice-view grant');
+SELECT ok((SELECT reloptions @> ARRAY['security_invoker=true']
+    FROM pg_class WHERE oid = 'kof5.voice_profile_with_trial_consents'::regclass),
+    'trial-consent view also applies caller RLS');
+SELECT ok(NOT has_table_privilege('anon', 'kof5.voice_profile_with_trial_consents', 'SELECT'),
+    'anonymous role cannot read trial voice prerequisites');
+SELECT ok(NOT has_table_privilege('authenticated', 'kof5.voice_profile_with_trial_consents', 'SELECT'),
+    'authenticated role cannot read trial voice prerequisites');
+SELECT ok(NOT has_table_privilege('service_role', 'kof5.voice_profile_with_trial_consents', 'SELECT'),
+    'service role has no direct trial voice grant');
 
 INSERT INTO kof5.hospital_patient (
     patient_id, hospital_ref, ehr_patient_ref, staff_display_name, registered_by_staff_ref
@@ -50,6 +59,61 @@ INSERT INTO kof5.patient_voice_profile (
 
 SELECT is((SELECT count(*)::integer FROM kof5.usable_patient_voice_profile), 1,
     'active profile with current assent, consent and encounter is eligible');
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'feature consent alone cannot pass trial consent prerequisites');
+
+INSERT INTO kof5.hospital_registry_activation (
+    hospital_ref, status, institution_approval_ref, clinical_safety_approval_ref, approved_at
+) VALUES ('TEST-VOICE', 'approved', 'TEST-INSTITUTION', 'TEST-CLINICAL', now() - interval '1 day');
+INSERT INTO kof5.consent_record (
+    consent_id, patient_id, scope, signer_role, signer_ref, assent_status,
+    status, effective_at, recorded_by_staff_ref
+) VALUES
+    ('00000000-0000-4000-8000-000000000965',
+     '00000000-0000-4000-8000-000000000961',
+     'patient_participation', 'patient', 'TEST-SIGNER', 'assented',
+     'active', now() - interval '1 day', 'TEST-STAFF'),
+    ('00000000-0000-4000-8000-000000000966',
+     '00000000-0000-4000-8000-000000000961',
+     'ambient_processing', 'patient', 'TEST-SIGNER', 'assented',
+     'active', now() - interval '1 day', 'TEST-STAFF');
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 1,
+    'institution approval plus separate participation and ambient consent pass DB prerequisites');
+
+UPDATE kof5.consent_record SET expires_at = now() - interval '1 hour'
+WHERE consent_id = '00000000-0000-4000-8000-000000000965';
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'expired participation consent blocks trial voice prerequisites');
+UPDATE kof5.consent_record SET expires_at = NULL
+WHERE consent_id = '00000000-0000-4000-8000-000000000965';
+
+UPDATE kof5.consent_record SET status = 'expired'
+WHERE consent_id = '00000000-0000-4000-8000-000000000966';
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'inactive ambient-processing consent blocks trial voice prerequisites');
+UPDATE kof5.consent_record SET status = 'active'
+WHERE consent_id = '00000000-0000-4000-8000-000000000966';
+
+UPDATE kof5.hospital_registry_activation SET expires_at = now() - interval '1 hour'
+WHERE hospital_ref = 'TEST-VOICE';
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'expired institution safety approval blocks trial voice prerequisites');
+UPDATE kof5.hospital_registry_activation SET expires_at = NULL
+WHERE hospital_ref = 'TEST-VOICE';
+
+SAVEPOINT participation_withdrawal_test;
+UPDATE kof5.consent_record SET status = 'withdrawn', withdrawn_at = now()
+WHERE consent_id = '00000000-0000-4000-8000-000000000965';
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'participation withdrawal blocks trial voice prerequisites');
+ROLLBACK TO SAVEPOINT participation_withdrawal_test;
+
+SAVEPOINT ambient_withdrawal_test;
+UPDATE kof5.consent_record SET status = 'withdrawn', withdrawn_at = now()
+WHERE consent_id = '00000000-0000-4000-8000-000000000966';
+SELECT is((SELECT count(*)::integer FROM kof5.voice_profile_with_trial_consents), 0,
+    'ambient-processing withdrawal blocks trial voice prerequisites');
+ROLLBACK TO SAVEPOINT ambient_withdrawal_test;
 
 UPDATE kof5.consent_record SET assent_status = 'not_attempted'
 WHERE consent_id = '00000000-0000-4000-8000-000000000963';

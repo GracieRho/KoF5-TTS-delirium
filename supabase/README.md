@@ -10,6 +10,8 @@
 
 아홉째 비공개 `kof5.usable_patient_voice_profile`은 현재 진행 중 입원·활성 환자·유효한 환자 음성 기능 동의/assent가 모두 있을 때만 암호화 특징 참조를 조회한다. 철회·만료 뒤에는 기존 프로필이 active로 남아도 조회되지 않고, 철회 기록을 다시 active로 바꾸지 못한다. 앱 역할에는 조회 권한이 없다. 이것은 내부 합성 시험의 **음성 기능 동의 한 범위**만 검증하며 환자 참여/병실 주변 음성 동의, 기관 승인, 실제 특징 객체 삭제·임상 절차를 대신하지 않는다.
 
+열째 비공개 `kof5.voice_profile_with_trial_consents`는 그 기능 동의 조회에 **별도 환자 참여·병실 주변 음성 처리 동의**와 현재 기관 안전 승인 참조를 추가한다. 각 동의가 만료·철회되거나 승인 게이트가 만료되면 0행을 반환하며 앱 역할에 SELECT를 주지 않는다. 이 DB 조건만으로 [정체성 고지·의료진 경보 게이트](../docs/delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)가 충족되지는 않는다.
+
 - `kof5` 스키마는 Data API에 노출하지 않는다. 모든 테이블에 `FORCE ROW LEVEL SECURITY`를 적용한다. 인증된 직원은 **검증된 현재 기관 자격**이 있는 경우에만 해당 기관 환자를 읽고, 담당 직원은 **검증된 현재 배정 환자**만 읽는다. `api.hospital_patient_list`는 호출자 RLS를 따르는 읽기 전용 뷰다. 동의·음성 테이블에는 클라이언트 읽기 권한을 주지 않았다. 전용 원격 프로젝트에서는 `api` 스키마를 Data API 설정에도 별도로 노출해야 한다.
 - 원본 음성과 임베딩 본문은 테이블에 두지 않는다. 샘플에는 일시 암호화 객체 참조와 폐기 시각만, 프로필에는 암호화된 특징 참조와 모델 버전만 둔다.
 - 보호자는 자기 환자 연결의 상태만 읽는다. **검증된 유효 연결**이 있을 때에만 자기 가족 기억을 읽고 기록·수정·문자열 검색할 수 있으며, 환자 번호·생년월일·입원·동의·음성 메타데이터는 읽을 수 없다. 철회/만료 즉시 가족 기억 접근도 차단한다. 원문은 `family_fact`에 저장하고, 의미 검색/임베딩 모델은 아직 정하지 않았다.
@@ -24,7 +26,7 @@ psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915120212_hospital_registry_
 psql -v ON_ERROR_STOP=1 -f supabase/smoke/registry_constraints.sql
 ```
 
-2026-09-16 현재 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 아홉 마이그레이션이 적용됐고, 기존 108개와 환자 음성 동의/철회 경계 15개인 pgTAP **123개**가 통과했다. 퇴원 후 사실·메시지 차단과 재입원 시 이전 입원 정보 제외도 검사했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 기억 등록·수정·검색/철회/비로그인 차단, 직원 승인 조회 필드, 등록자 Auth/기관 승인 게이트의 준비 상태 전환·참조 위조·중복·철회가 통과했다. 검사 뒤 환자·동의·음성 프로필·기억·감사·Auth 계정·승인 게이트 행은 모두 0건이었다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
+2026-09-16 현재 검증은 임시 PostgreSQL 18.4, 별도 `postgres:17` 작업 컨테이너, 그리고 **이 작업의 로컬 Supabase PostgreSQL 17**에서 합성 제약 검사가 통과했다. 첫 두 작업 DB와 익명 볼륨은 제거했다. 로컬 Supabase DB에는 열 마이그레이션이 적용됐고, 기존 123개와 분리 동의·기관 승인 경계 11개인 pgTAP **134개**가 통과했다. 퇴원 후 사실·메시지 차단과 재입원 시 이전 입원 정보 제외도 검사했다. CLI advisor는 `No issues found`를 보고했다. 작업 전용 **로컬 GoTrue/Data API HTTP**에서 합성 보호자 기억 등록·수정·검색/철회/비로그인 차단과 연결 없는 신규 계정 차단, 직원 승인 조회 필드, 등록자 Auth/기관 승인 게이트의 준비 상태 전환·참조 위조·중복·철회가 통과했다. 검사 뒤 환자·동의·음성 프로필·기억·감사·Auth 계정·승인 게이트 행은 모두 0건이었다. 전용 원격 프로젝트, 실제 기관 직원 승인·Auth/Storage와 환자 데이터 처리 흐름은 검증하지 않았다. CLI `db query --file`은 여러 SQL 명령을 한 prepared statement로 넣어 실패하므로, 제약 검사는 컨테이너 내부 `psql`로 실행한다.
 
 ```bash
 docker exec -i supabase_db_kof5-familiar-voice-mvp psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke/registry_constraints.sql
