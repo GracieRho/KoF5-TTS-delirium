@@ -355,16 +355,22 @@ def run_synthetic_text_pipeline(
     client: httpx.Client, transcript: str, label: str,
     known_fact: str, credentials: CloudCredentials,
     *, namespace: str = "family_context", semantic_match: bool = False,
+    routed_event: str | None = None,
     on_first_audio: Callable[[], None] | None = None,
 ) -> tuple[str | None, bytes | None]:
     """Process a bounded iPad transcript without sending candidate audio to hosted STT."""
     if (not transcript.strip() or len(transcript) > 500
             or label not in {"DIRECTED", "AMBIENT", "UNCERTAIN"}
             or namespace not in {"family_context", "hospital_context"}
-            or (semantic_match and namespace != "family_context")):
+            or (semantic_match and namespace != "family_context")
+            or (routed_event is not None and (
+                label == "AMBIENT" or routed_event not in {
+                    "turn", "barge_in", "auxiliary_alert_candidate", "barge_in_risk_candidate",
+                }
+            ))):
         raise ValueError("bounded local transcript and activation label are required")
     now = datetime.now(timezone.utc)
-    event = ConversationSession().hear(transcript, label, now)
+    event = routed_event if routed_event is not None else ConversationSession().hear(transcript, label, now)
     if event in {"patient_dissent", "closed", "discarded"}:
         return None, None
     reply = policy_reply(transcript, event, now)

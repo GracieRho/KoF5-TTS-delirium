@@ -107,6 +107,30 @@ class CloudPrototypeTests(unittest.TestCase):
             ), ("2024년 5월에 같이 갔어.", b"synthetic-mp3"))
         self.assertEqual(hosts, ["api.openai.com", "api.elevenlabs.io"])
 
+    def test_authenticated_second_turn_uses_committed_routing_event(self) -> None:
+        hosts = []
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            hosts.append(request.url.host)
+            if request.url.host == "api.elevenlabs.io":
+                return httpx.Response(200, content=b"synthetic-mp3")
+            raise AssertionError("short greeting must not reach STT or LLM")
+
+        credentials = CloudCredentials("d", "o", "e", "v", True)
+        with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+            self.assertEqual(run_synthetic_text_pipeline(
+                client, "수민아", "UNCERTAIN", "", credentials,
+            ), (None, None))
+            self.assertEqual(run_synthetic_text_pipeline(
+                client, "수민아", "UNCERTAIN", "", credentials, routed_event="turn",
+            ), ("응, 왜?", b"synthetic-mp3"))
+            for label, event in (("AMBIENT", "turn"), ("UNCERTAIN", "discarded")):
+                with self.assertRaises(ValueError):
+                    run_synthetic_text_pipeline(
+                        client, "수민아", label, "", credentials, routed_event=event,
+                    )
+        self.assertEqual(hosts, ["api.elevenlabs.io"])
+
     def test_unrelated_family_and_hospital_questions_do_not_reach_llm(self) -> None:
         hosts = []
         def respond(request: httpx.Request) -> httpx.Response:
