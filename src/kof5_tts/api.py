@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from kof5_tts.cloud_prototype import (
-    CloudCredentials, run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
+    CloudCredentials, hospital_fact_question, run_synthetic_pipeline, run_synthetic_text_pipeline, synthesize_mp3,
     validate_short_wav,
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
@@ -139,7 +139,10 @@ def _device_bearer(request: Request) -> str:
     return supplied
 
 
-async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
+async def _paired_turn_rows(
+    request: Request, patient_id: str, term: str,
+    rpc_name: Literal["patient_family_turn_context", "patient_hospital_turn_context"],
+) -> list[dict]:
     config = guardian_config()
     bearer = _device_bearer(request)
     headers = {
@@ -150,7 +153,7 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             turn = await client.post(
-                f"{url}/rest/v1/rpc/patient_family_turn_context",
+                f"{url}/rest/v1/rpc/{rpc_name}",
                 json={"p_patient_id": patient_id, "p_term": term}, headers=headers,
             )
             if turn.status_code in (401, 403):
@@ -162,16 +165,32 @@ async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
             if rows[0].get("authorized") is not True:
                 raise HTTPException(status_code=403, detail="입원 기기 배정이 중단됐습니다")
             facts = rows[0].get("facts")
-            if not isinstance(facts, list) or len(facts) > 3 or any(
-                not isinstance(row, dict) or not isinstance(row.get("content"), str)
-                or not 1 <= len(row["content"]) <= 1000 for row in facts
-            ):
-                raise ValueError("family memory response is invalid")
-            return "\n".join(row["content"] for row in facts)
+            if not isinstance(facts, list) or len(facts) > 3 or any(not isinstance(row, dict) for row in facts):
+                raise ValueError("paired fact response is invalid")
+            return facts
     except HTTPException:
         raise
     except (httpx.HTTPError, ValueError, TypeError, KeyError):
-        raise HTTPException(status_code=503, detail="기기 권한·가족 기억 조회가 실패했습니다") from None
+        raise HTTPException(status_code=503, detail="기기 권한·승인 사실 조회가 실패했습니다") from None
+
+
+async def _paired_memory(request: Request, patient_id: str, term: str) -> str:
+    facts = await _paired_turn_rows(request, patient_id, term, "patient_family_turn_context")
+    if any(not isinstance(row.get("content"), str) or not 1 <= len(row["content"]) <= 1000
+           for row in facts):
+        raise HTTPException(status_code=503, detail="가족 기억 응답을 확인하지 못했습니다")
+    return "\n".join(row["content"] for row in facts)
+
+
+async def _paired_hospital_fact(request: Request, patient_id: str, term: str) -> str:
+    facts = await _paired_turn_rows(request, patient_id, term, "patient_hospital_turn_context")
+    allowed = {"hospital", "ward", "room", "test_schedule", "visit_schedule"}
+    if any(row.get("category") not in allowed or not isinstance(row.get("content"), str)
+           or not 1 <= len(row["content"]) <= 200 or not row["content"].strip()
+           or not isinstance(row.get("verified_at"), str) for row in facts):
+        raise HTTPException(status_code=503, detail="병원 승인 사실 응답을 확인하지 못했습니다")
+    # An ambiguous question must never select an arbitrary exam or visit time.
+    return facts[0]["content"] if len(facts) == 1 else ""
 
 
 async def _paired_due_message(request: Request, patient_id: str, message_id: str) -> str:
@@ -282,13 +301,16 @@ async def paired_synthetic_text(patient_id: str, request: Request) -> dict[str, 
         raise HTTPException(status_code=404, detail="합성 시험 환자만 사용할 수 있습니다")
     credentials = _internal_demo_credentials(request)
     speech = await _read_text_turn(request)
-    # No family text reaches hosted providers before the device is rechecked each turn.
-    known_fact = await _paired_memory(request, patient_id, speech.transcript)
+    hospital = hospital_fact_question(speech.transcript)
+    # One invoker RPC checks authorization and exactly one fact namespace each turn.
+    known_fact = (await _paired_hospital_fact(request, patient_id, speech.transcript) if hospital
+                  else await _paired_memory(request, patient_id, speech.transcript))
 
     def run() -> tuple[str | None, bytes | None]:
         with httpx.Client(timeout=20) as client:
             return run_synthetic_text_pipeline(
                 client, speech.transcript, speech.label, known_fact, credentials,
+                namespace="hospital_context" if hospital else "family_context",
             )
 
     try:

@@ -325,6 +325,59 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.post(path, json=turn, headers=headers).status_code, 403)
             self.assertEqual(pipeline.call_count, 2, "revoked device cannot use stale memory")
 
+    def test_paired_turn_uses_one_approved_fact_namespace_per_question(self) -> None:
+        path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/text"
+        env = {
+            "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
+            "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
+            "KOF5_INTERNAL_DEMO_TOKEN": "t" * 32,
+            "VOICE_OWNER_CONSENT_RECORD_ID": "synthetic-consent",
+            "DEEPGRAM_API_KEY": "test-deepgram", "OPENAI_API_KEY": "test-openai",
+            "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
+        }
+        headers = {
+            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
+            "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
+        }
+        calls = []
+        authorized = True
+        hospital_facts = [{
+            "category": "test_schedule", "content": "CT 검사는 오늘 14시입니다.",
+            "verified_at": "2026-09-16T01:00:00Z", "valid_until": None,
+        }]
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            calls.append(request.url.path)
+            self.assertEqual(request.headers["content-profile"], "api")
+            if request.url.path.endswith("/patient_hospital_turn_context"):
+                return httpx.Response(200, json=[{"authorized": authorized,
+                                                  "facts": hospital_facts if authorized else []}])
+            if request.url.path.endswith("/patient_family_turn_context"):
+                return httpx.Response(200, json=[{"authorized": authorized,
+                                                  "facts": [{"content": "2024년 제주도 여행"}] if authorized else []}])
+            raise AssertionError("unrecognized fact namespace")
+
+        async_client_class = httpx.AsyncClient
+        with patch.dict(os.environ, env), patch(
+            "kof5_tts.api.httpx.AsyncClient",
+            side_effect=lambda **_: async_client_class(transport=httpx.MockTransport(respond)),
+        ), patch("kof5_tts.api.run_synthetic_text_pipeline", return_value=("합성 답", b"mp3")) as pipeline:
+            hospital_turn = {"transcript": "수민아 CT 검사는 몇 시야?", "label": "DIRECTED"}
+            self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_args.args[3], "CT 검사는 오늘 14시입니다.")
+            self.assertEqual(pipeline.call_args.kwargs["namespace"], "hospital_context")
+            family_turn = {"transcript": "수민아 제주도 언제 갔어?", "label": "DIRECTED"}
+            self.assertEqual(self.client.post(path, json=family_turn, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_args.args[3], "2024년 제주도 여행")
+            self.assertEqual(pipeline.call_args.kwargs["namespace"], "family_context")
+            self.assertEqual(len(calls), 2, "each question uses one current authorization/fact RPC")
+            hospital_facts.append(dict(hospital_facts[0], content="MRI 검사는 오늘 16시입니다."))
+            self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 200)
+            self.assertEqual(pipeline.call_args.args[3], "", "ambiguous schedules cannot pick a random fact")
+            authorized = False
+            self.assertEqual(self.client.post(path, json=hospital_turn, headers=headers).status_code, 403)
+            self.assertEqual(pipeline.call_count, 3, "withdrawal blocks the provider")
+
     def test_due_hospital_message_voices_only_atomic_approved_original(self) -> None:
         message_id = "00000000-0000-4000-8000-000000000123"
         path = f"/internal/synthetic/paired/{SYNTHETIC_DB_PATIENT}/message/{message_id}/audio"
