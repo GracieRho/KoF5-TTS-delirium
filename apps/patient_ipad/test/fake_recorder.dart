@@ -9,6 +9,7 @@ class FakeRecorderPlatform extends RecordPlatform {
   var starts = 0;
   var stops = 0;
   var stopFails = false;
+  RecordConfig? lastConfig;
   Completer<Stream<Uint8List>>? delayedStart;
   Completer<String?>? delayedStop;
 
@@ -39,6 +40,7 @@ class FakeRecorderPlatform extends RecordPlatform {
     RecordConfig config,
   ) async {
     starts++;
+    lastConfig = config;
     if (delayedStart case final pending?) return pending.future;
     return audio.stream;
   }

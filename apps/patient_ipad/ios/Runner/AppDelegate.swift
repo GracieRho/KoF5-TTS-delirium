@@ -7,6 +7,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, AVAudioPlayerDelegate {
   private var trialPlayer: AVAudioPlayer?
   private var trialSessionActive = false
+  private var trialSharesRecorderSession = false
   private var trialFinishedNaturally = false
   private var trialFinishedResult: FlutterResult?
   private var trialChannel: FlutterMethodChannel?
@@ -32,7 +33,11 @@ import UIKit
         guard let self else { result(FlutterMethodNotImplemented); return }
         switch call.method {
         case "play":
-          guard let typed = call.arguments as? FlutterStandardTypedData,
+          let options = call.arguments as? [String: Any]
+          let concurrentMic = options?["concurrentMic"] as? Bool == true
+          let typed = (options?["audio"] as? FlutterStandardTypedData)
+            ?? (call.arguments as? FlutterStandardTypedData)
+          guard let typed,
                 !typed.data.isEmpty, typed.data.count <= 2_000_000 else {
             result(FlutterError(code: "invalid_audio", message: "Bounded MP3 data required", details: nil))
             return
@@ -40,9 +45,17 @@ import UIKit
           do {
             guard self.stopTrialAudio() else { throw NSError(domain: "KoF5TrialAudio", code: 2) }
             let player = try AVAudioPlayer(data: typed.data)
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            if concurrentMic {
+              guard session.category == .playAndRecord && session.isInputAvailable else {
+                throw NSError(domain: "KoF5TrialAudio", code: 3)
+              }
+            } else {
+              try session.setCategory(.playback, mode: .default)
+            }
+            try session.setActive(true)
             self.trialSessionActive = true
+            self.trialSharesRecorderSession = concurrentMic
             self.trialPlayer = player
             player.delegate = self
             guard player.prepareToPlay(), player.play() else {
@@ -187,6 +200,11 @@ import UIKit
     trialPlayer?.stop()
     trialPlayer = nil
     guard trialSessionActive else { return true }
+    if trialSharesRecorderSession {
+      trialSharesRecorderSession = false
+      trialSessionActive = false
+      return true
+    }
     do {
       try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
       trialSessionActive = false

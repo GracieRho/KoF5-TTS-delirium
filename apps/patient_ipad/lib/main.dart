@@ -73,6 +73,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _localStatus = '한국어 기기 내 인식 지원 여부를 확인하지 않았습니다.';
   var _localTranscript = '';
   var _autoTextTrial = false;
+  var _proactivePaused = false;
+  var _bargeInTrial = false;
+  var _interruptingReply = false;
+  int? _bargeInListeningGeneration;
+  String? _pendingBargeInText;
+  int? _pendingBargeInGeneration;
 
   @override
   void initState() {
@@ -99,6 +105,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _speechStopUnconfirmed;
     _localEnabled = false;
     _autoTextTrial = false;
+    _proactivePaused = false;
+    final hadBargeInMic = _bargeInListeningGeneration != null;
+    _bargeInTrial = false;
+    _bargeInListeningGeneration = null;
+    _pendingBargeInText = null;
+    _pendingBargeInGeneration = null;
     _activation.reset();
     _autoResumeOwnerGeneration = null;
     if (cancellingSpeech) unawaited(_cancelLocalSpeech());
@@ -127,6 +139,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (stoppingPlayback) {
       unawaited(_stopReply(successStatus: '시험 자료를 폐기했습니다.').then((_) {}));
     }
+    if (hadBargeInMic) unawaited(_stop());
   }
 
   Future<bool> _cancelLocalSpeech() {
@@ -161,38 +174,55 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
-  Future<void> _start() async {
+  Future<bool> _start({int? duringReplyGeneration}) async {
+    final duringReply = duringReplyGeneration != null;
     if (_starting ||
         _stopping ||
         _listening ||
-        _sending ||
+        (_sending && !duringReply) ||
         _stopUnconfirmed ||
         _speechStopUnconfirmed ||
         _speechStop != null ||
-        !_foreground) {
-      return;
+        !_foreground ||
+        (duringReply &&
+            (!_bargeInTrial ||
+                !_autoTextTrial ||
+                !_ownVoiceTrial ||
+                duringReplyGeneration != _trialGeneration))) {
+      return false;
     }
     setState(() => _starting = true);
     try {
-      if (_playedReply && !await _stopReply()) return;
+      if (_playedReply && !await _stopReply()) return false;
       if (!await _recorder.hasPermission()) {
         if (mounted) setState(() => _status = '마이크 권한이 필요합니다.');
-        return;
+        return false;
       }
-      if (!mounted || !_foreground) return;
+      if (!mounted ||
+          !_foreground ||
+          (duringReply && duringReplyGeneration != _trialGeneration)) {
+        return false;
+      }
       final stream = await _recorder.startStream(
-        const RecordConfig(
+        RecordConfig(
           encoder: AudioEncoder.pcm16bits,
           sampleRate: 16000,
           numChannels: 1,
           streamBufferSize: 3200,
+          echoCancel: duringReply,
         ),
       );
-      if (!mounted || !_foreground) {
+      if (!mounted ||
+          !_foreground ||
+          (duringReply &&
+              (!_bargeInTrial ||
+                  !_autoTextTrial ||
+                  !_ownVoiceTrial ||
+                  duringReplyGeneration != _trialGeneration))) {
         _subscription = stream.listen((_) {}); // Discard any late PCM.
         _listening = true;
         await _stop();
-        return;
+        return false;
       }
       _detector.reset();
       _subscription = stream.listen(
@@ -209,8 +239,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _listening = true;
         _status = '기기에서 발화 후보를 감지하는 중입니다.';
       });
+      return true;
     } catch (_) {
       if (mounted) setState(() => _status = '마이크를 시작할 수 없습니다.');
+      return false;
     } finally {
       if (mounted) setState(() => _starting = false);
     }
@@ -251,13 +283,24 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (!mounted || !_foreground || !_listening) return;
     final candidate = _detector.add(pcm);
     if (candidate == null || !mounted) return;
+    final interrupting =
+        _bargeInTrial &&
+        _playedReply &&
+        !_interruptingReply &&
+        _bargeInListeningGeneration == _trialGeneration;
     // Only an explicit self-voice trial may retain one candidate for manual upload.
     setState(() {
       _candidateCount++;
       _candidateExpiry?.cancel();
-      _heldCandidate = _ownVoiceTrial ? candidate : null;
+      _heldCandidate = _playedReply
+          ? null
+          : _ownVoiceTrial
+          ? candidate
+          : null;
       _status = _autoTextTrial
-          ? '발화 후보 $_candidateCount건 감지 · 오디오는 자동 전송하지 않습니다.'
+          ? interrupting
+                ? '재생 중 발화 후보 감지 · 응답 중단 확인 중'
+                : '발화 후보 $_candidateCount건 감지 · 오디오는 자동 전송하지 않습니다.'
           : '발화 후보 $_candidateCount건 감지 · 자동 전송 없음';
       if (_heldCandidate != null) {
         _cloudStatus = '자가 음성 후보 한 건 준비 · 30초 내 직접 전송 가능';
@@ -271,6 +314,16 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         });
       }
     });
+    if (interrupting) {
+      unawaited(_interruptReply(candidate, _trialGeneration));
+      return;
+    }
+    if (_playedReply) {
+      return; // Never transcribe playback leakage as a new turn.
+    }
+    if (_bargeInListeningGeneration != null) {
+      return; // Keep the shared mic fail-closed until the interrupted turn is confirmed or discarded.
+    }
     if (_localEnabled &&
         !_recognizing &&
         !_speechStopUnconfirmed &&
@@ -278,6 +331,35 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _ownVoiceTrial) {
       unawaited(_recognizeCandidate(candidate));
     }
+  }
+
+  Future<void> _interruptReply(Uint8List candidate, int generation) async {
+    _interruptingReply = true;
+    try {
+      if (!await _stopReply(successStatus: '새 발화 후보로 응답을 중단했습니다.')) {
+        await _stop(); // Do not continue listening over uncertain playback.
+        return;
+      }
+      if (mounted &&
+          _foreground &&
+          _ownVoiceTrial &&
+          _autoTextTrial &&
+          _bargeInTrial &&
+          _listening &&
+          !_stopUnconfirmed &&
+          !_speechStopUnconfirmed &&
+          _speechStop == null &&
+          generation == _trialGeneration) {
+        await _recognizeCandidate(candidate, fromPlayback: true);
+      }
+    } finally {
+      _interruptingReply = false;
+    }
+  }
+
+  Future<void> _stopMicAndReply() async {
+    if (_playedReply) await _stopReply();
+    await _stop();
   }
 
   Future<void> _enableLocalSpeech() async {
@@ -328,7 +410,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
-  Future<void> _recognizeCandidate(Uint8List candidate) async {
+  Future<void> _recognizeCandidate(
+    Uint8List candidate, {
+    bool fromPlayback = false,
+  }) async {
     final generation = ++_localGeneration;
     _recognizing = true;
     setState(() => _localStatus = '자가 음성 후보를 iPad 안에서 전사하고 있습니다.');
@@ -347,11 +432,26 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _localTranscript = transcript ?? '';
         _localStatus = _localTranscript.isEmpty
             ? '기기 내에서 말을 확인하지 못했습니다. 후보 오디오는 자동 전송하지 않습니다.'
+            : _proactivePaused
+            ? '서버가 이 시험의 자동 글 전송을 중단했습니다. 기기 내 전사만 유지합니다.'
             : _autoTextTrial
             ? 'iPad 기기 내 전사 완료 · 환자 역할에게 향한 글만 판정합니다.'
             : 'iPad 기기 내 전사 완료 · 글과 오디오 모두 자동 전송하지 않습니다.';
       });
-      if (_autoTextTrial &&
+      if (fromPlayback) {
+        _pendingBargeInText = _localTranscript.isEmpty
+            ? null
+            : _localTranscript;
+        _pendingBargeInGeneration = _pendingBargeInText == null
+            ? null
+            : _trialGeneration;
+        setState(
+          () => _localStatus = _pendingBargeInText == null
+              ? '재생 중 후보를 기기에서 확인하지 못했습니다. 서버 전송은 하지 않습니다.'
+              : '재생 중 후보를 기기에서 전사했습니다. 내 목소리인지 확인하기 전 서버 전송은 하지 않습니다.',
+        );
+      } else if (_autoTextTrial &&
+          !_proactivePaused &&
           _localTranscript.isNotEmpty &&
           _activation.accepts(_localTranscript, DateTime.now())) {
         directedText = _localTranscript;
@@ -402,6 +502,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _sendTextTrial(String transcript) async {
     if (!_autoTextTrial ||
         !_ownVoiceTrial ||
+        _proactivePaused ||
         _sending ||
         _speechStopUnconfirmed ||
         _speechStop != null ||
@@ -409,6 +510,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       return;
     }
     final generation = ++_trialGeneration;
+    _pendingBargeInText = null;
+    _pendingBargeInGeneration = null;
     _candidateExpiry?.cancel();
     _candidateExpiry = null;
     _heldCandidate = null;
@@ -431,6 +534,31 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         'DIRECTED',
       );
     }, textOnly: true);
+  }
+
+  void _confirmBargeInText() {
+    final transcript = _pendingBargeInText;
+    if (transcript == null ||
+        _pendingBargeInGeneration != _trialGeneration ||
+        !_ownVoiceTrial ||
+        !_autoTextTrial ||
+        !_bargeInTrial ||
+        _proactivePaused ||
+        _sending ||
+        _playedReply ||
+        !_foreground ||
+        _stopUnconfirmed ||
+        _speechStopUnconfirmed ||
+        _speechStop != null) {
+      return;
+    }
+    _pendingBargeInText = null;
+    _pendingBargeInGeneration = null;
+    if (!_activation.accepts(transcript, DateTime.now())) {
+      setState(() => _cloudStatus = '끼어든 글이 내부 활성화 규칙에 맞지 않아 전송하지 않았습니다.');
+      return;
+    }
+    unawaited(_sendTextTrial(transcript));
   }
 
   Future<bool> _stopForTrial(int generation) async {
@@ -464,6 +592,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 10);
     _cloudClient = client;
+    var concurrentMicStarted = false;
     try {
       final result = await send(client).timeout(const Duration(seconds: 70));
       if (!mounted || !_foreground || generation != _trialGeneration) return;
@@ -471,16 +600,41 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _cloudTranscript = result.transcript;
         _cloudReply = result.reply ?? '';
         _cloudStatus = result.mp3 == null
-            ? '서버 안전 경로에서 음성 응답을 만들지 않았습니다.'
+            ? result.reply == null
+                  ? '서버가 응답을 만들지 않아 자동 글 전송을 중단했습니다. 기기 듣기는 재개합니다.'
+                  : '서버 안전 경로에서 음성 응답을 만들지 않았습니다.'
             : textOnly
             ? '글 전용 클라우드 시험 응답 · 재생 시작'
             : '클라우드 자가 음성 시험 응답 · 재생 시작';
       });
+      if (textOnly && result.mp3 == null) {
+        _autoResumeOwnerGeneration = generation;
+        _activation.reset();
+        if (result.reply == null) _proactivePaused = true;
+      }
       if (result.mp3 != null) {
+        if (textOnly && _bargeInTrial) {
+          concurrentMicStarted = await _start(
+            duringReplyGeneration: generation,
+          );
+          if (concurrentMicStarted) _bargeInListeningGeneration = generation;
+          if (!concurrentMicStarted ||
+              !mounted ||
+              !_foreground ||
+              !_ownVoiceTrial ||
+              generation != _trialGeneration) {
+            throw StateError('concurrent self-voice mic was not confirmed');
+          }
+        }
         _playbackOwnerGeneration = generation;
         _autoResumeOwnerGeneration = textOnly ? generation : null;
         setState(() => _playedReply = true);
-        await _player.play(result.mp3!).timeout(const Duration(seconds: 10));
+        await _player
+            .play(result.mp3!, concurrentMic: concurrentMicStarted)
+            .timeout(const Duration(seconds: 10));
+        if (concurrentMicStarted) {
+          setState(() => _sending = false);
+        }
         if (textOnly &&
             mounted &&
             _foreground &&
@@ -494,6 +648,10 @@ class _PatientMicDemoState extends State<PatientMicDemo>
       }
     } catch (_) {
       if (textOnly) _activation.reset();
+      if (generation == _trialGeneration) {
+        _bargeInListeningGeneration = null;
+        if (concurrentMicStarted) await _stop();
+      }
       if (_playbackOwnerGeneration == generation && _playedReply) {
         final stopped = await _stopReply();
         if (!stopped) return;
@@ -527,6 +685,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _playedReply = false;
         _cloudStatus = '음성 응답 재생을 마쳤습니다. 기기에서 다시 듣습니다.';
       });
+      if (_bargeInListeningGeneration == generation && _listening) {
+        await _stop(); // Leave the echo-cancelled shared mic before the next idle turn.
+      }
       _resumeAfterReplyIfReady(generation);
     } catch (_) {
       if (mounted && generation == _trialGeneration && _playedReply) {
@@ -539,6 +700,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
 
   void _resumeAfterReplyIfReady(int generation) {
     if (_sending ||
+        _stopping ||
         _replyStop != null ||
         !_foreground ||
         !_ownVoiceTrial ||
@@ -558,6 +720,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   Future<void> _stop() async {
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
+    _bargeInListeningGeneration = null;
     _localGeneration++;
     final speechStopped =
         _recognizing ||
@@ -760,7 +923,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                     _speechStopUnconfirmed ||
                                     _speechStop != null
                                 ? null
-                                : (_listening ? _stop : _start),
+                                : (_listening ? _stopMicAndReply : _start),
                             icon: Icon(
                               _listening
                                   ? Icons.stop_rounded
@@ -810,7 +973,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                '서버와 음성 공급자에 오디오가 전송됩니다. 시험자 본인의 목소리만 사용하세요.',
+                                '수동 오디오 보내기에서는 서버와 음성 공급자에 오디오가 전송됩니다. '
+                                '글 자동 시험은 전사 글만 보냅니다. 시험자 본인의 목소리만 사용하세요.',
                                 style: TextStyle(
                                   color: Color(0xFF53615F),
                                   fontSize: 16,
@@ -822,16 +986,14 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                 contentPadding: EdgeInsets.zero,
                                 title: const Text('내 목소리로만 시험합니다'),
                                 value: _ownVoiceTrial,
-                                onChanged: _sending
-                                    ? null
-                                    : (value) {
-                                        if (value != true) {
-                                          _discardTrial();
-                                        } else {
-                                          setState(() => _ownVoiceTrial = true);
-                                          unawaited(_enableLocalSpeech());
-                                        }
-                                      },
+                                onChanged: (value) {
+                                  if (value != true) {
+                                    _discardTrial();
+                                  } else if (!_sending) {
+                                    setState(() => _ownVoiceTrial = true);
+                                    unawaited(_enableLocalSpeech());
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               Semantics(
@@ -914,6 +1076,43 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                                   });
                                 },
                               ),
+                              if (_autoTextTrial) ...[
+                                const SizedBox(height: 8),
+                                FilterChip(
+                                  label: const Text('재생 중 끼어들기 · 자가 음성 실험'),
+                                  selected: _bargeInTrial,
+                                  onSelected: _sending || _playedReply
+                                      ? null
+                                      : (enabled) {
+                                          setState(() {
+                                            _bargeInTrial = enabled;
+                                            if (!enabled) {
+                                              _pendingBargeInText = null;
+                                              _pendingBargeInGeneration = null;
+                                            }
+                                            _cloudStatus = enabled
+                                                ? '재생 중 마이크를 함께 켜서 새 발화 후보에 응답을 중단합니다. 실제 iPad 검증 전 내부 실험입니다.'
+                                                : '재생 중 끼어들기 실험을 껐습니다.';
+                                          });
+                                        },
+                                ),
+                                if (_pendingBargeInText != null) ...[
+                                  const SizedBox(height: 8),
+                                  OutlinedButton(
+                                    onPressed:
+                                        _sending ||
+                                            _playedReply ||
+                                            _stopUnconfirmed ||
+                                            _speechStopUnconfirmed ||
+                                            _speechStop != null
+                                        ? null
+                                        : _confirmBargeInText,
+                                    child: const Text(
+                                      '끼어든 글이 내 목소리였음 확인 · 글 보내기',
+                                    ),
+                                  ),
+                                ],
+                              ],
                               const SizedBox(height: 20),
                               SizedBox(
                                 width: double.infinity,
