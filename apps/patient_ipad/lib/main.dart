@@ -12,7 +12,10 @@ import 'trial_audio_player.dart';
 void main() => runApp(const PatientMicDemo());
 
 class PatientMicDemo extends StatefulWidget {
-  const PatientMicDemo({super.key});
+  const PatientMicDemo({super.key, this.cloudTrial = sendOwnVoiceCandidate});
+
+  final Future<SyntheticCloudReply> Function(HttpClient, Uri, String, Uint8List)
+  cloudTrial;
 
   @override
   State<PatientMicDemo> createState() => _PatientMicDemoState();
@@ -40,6 +43,8 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   var _sending = false;
   var _playedReply = false;
   var _trialGeneration = 0;
+  int? _playbackOwnerGeneration;
+  Future<bool>? _replyStop;
   var _cloudStatus = '자가 음성 시험을 확인하면 발화 후보 한 건을 직접 보낼 수 있습니다.';
   var _cloudTranscript = '';
   var _cloudReply = '';
@@ -63,20 +68,24 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _trialGeneration++;
     _cloudClient?.close(force: true);
     _cloudClient = null;
-    unawaited(_player.stop().catchError((_) {}));
     _token.clear();
     _candidateExpiry?.cancel();
     _candidateExpiry = null;
     _heldCandidate = null;
     _ownVoiceTrial = false;
     _sending = false;
-    _playedReply = false;
+    final stoppingPlayback = _playedReply;
     if (mounted) {
       setState(() {
-        _cloudStatus = '시험 자료를 폐기했습니다.';
+        _cloudStatus = stoppingPlayback
+            ? '시험 자료 폐기 · 음성 재생 중단 확인 중'
+            : '시험 자료를 폐기했습니다.';
         _cloudTranscript = '';
         _cloudReply = '';
       });
+    }
+    if (stoppingPlayback) {
+      unawaited(_stopReply(successStatus: '시험 자료를 폐기했습니다.').then((_) {}));
     }
   }
 
@@ -133,18 +142,31 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     }
   }
 
-  Future<bool> _stopReply() async {
+  Future<bool> _stopReply({String successStatus = '음성 응답 재생을 중단했습니다.'}) {
+    final pending = _replyStop;
+    if (pending != null) return pending;
+    final future = _performStopReply(successStatus);
+    _replyStop = future;
+    future.whenComplete(() {
+      if (identical(_replyStop, future)) _replyStop = null;
+    });
+    return future;
+  }
+
+  Future<bool> _performStopReply(String successStatus) async {
     try {
-      await _player.stop();
+      await _player.stop().timeout(const Duration(seconds: 5));
+      _playedReply = false;
       if (mounted) {
         setState(() {
-          _playedReply = false;
-          _cloudStatus = '음성 응답 재생을 중단했습니다.';
+          _cloudStatus = successStatus;
         });
       }
       return true;
     } catch (_) {
-      if (mounted) setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다.');
+      if (mounted) {
+        setState(() => _cloudStatus = '음성 응답 중단을 확인하지 못했습니다. 다시 중단하세요.');
+      }
       return false;
     }
   }
@@ -211,12 +233,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     _cloudClient = client;
     try {
       final endpoint = Uri.parse(_endpoint.text.trim());
-      final result = await sendOwnVoiceCandidate(
-        client,
-        endpoint,
-        _token.text,
-        pcm,
-      ).timeout(const Duration(seconds: 70));
+      final result = await widget
+          .cloudTrial(client, endpoint, _token.text, pcm)
+          .timeout(const Duration(seconds: 70));
       if (!mounted || !_foreground || generation != _trialGeneration) return;
       setState(() {
         _cloudTranscript = result.transcript;
@@ -226,14 +245,19 @@ class _PatientMicDemoState extends State<PatientMicDemo>
             : '클라우드 자가 음성 시험 응답 · 재생 시작';
       });
       if (result.mp3 != null) {
-        await _player.play(result.mp3!);
-        if (!_foreground || generation != _trialGeneration) {
-          await _player.stop();
-        } else {
-          setState(() => _playedReply = true);
+        _playbackOwnerGeneration = generation;
+        setState(() => _playedReply = true);
+        await _player.play(result.mp3!).timeout(const Duration(seconds: 10));
+        if ((!mounted || !_foreground || generation != _trialGeneration) &&
+            _playbackOwnerGeneration == generation) {
+          await _stopReply(successStatus: '시험 자료를 폐기했습니다.');
         }
       }
     } catch (_) {
+      if (_playbackOwnerGeneration == generation && _playedReply) {
+        final stopped = await _stopReply();
+        if (!stopped) return;
+      }
       if (mounted && _foreground && generation == _trialGeneration) {
         setState(() => _cloudStatus = '전송·처리에 실패했습니다. 주소와 내부 시험 설정을 확인하세요.');
       }
@@ -287,11 +311,12 @@ class _PatientMicDemoState extends State<PatientMicDemo>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _trialGeneration++;
     _candidateExpiry?.cancel();
     _subscription?.cancel();
     _recorder.dispose();
     _cloudClient?.close(force: true);
-    unawaited(_player.stop().catchError((_) {}));
+    if (_playedReply) unawaited(_stopReply().then((_) {}));
     _endpoint.dispose();
     _token.dispose();
     super.dispose();
@@ -577,7 +602,11 @@ class _PatientMicDemoState extends State<PatientMicDemo>
                               if (_playedReply) ...[
                                 const SizedBox(height: 8),
                                 TextButton.icon(
-                                  onPressed: _stopReply,
+                                  onPressed: _sending
+                                      ? null
+                                      : () {
+                                          unawaited(_stopReply().then((_) {}));
+                                        },
                                   icon: const Icon(Icons.stop_rounded),
                                   label: const Text('음성 응답 중단'),
                                 ),
