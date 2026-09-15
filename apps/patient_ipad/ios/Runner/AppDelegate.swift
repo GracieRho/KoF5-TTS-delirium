@@ -5,6 +5,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var trialPlayer: AVAudioPlayer?
+  private var trialSessionActive = false
   private var trialChannel: FlutterMethodChannel?
   private var backgroundObserver: NSObjectProtocol?
 
@@ -29,22 +30,26 @@ import UIKit
             return
           }
           do {
-            self.stopTrialAudio()
+            guard self.stopTrialAudio() else { throw NSError(domain: "KoF5TrialAudio", code: 2) }
+            let player = try AVAudioPlayer(data: typed.data)
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
-            let player = try AVAudioPlayer(data: typed.data)
+            self.trialSessionActive = true
             self.trialPlayer = player
             guard player.prepareToPlay(), player.play() else {
               throw NSError(domain: "KoF5TrialAudio", code: 1)
             }
             result(nil)
           } catch {
-            self.stopTrialAudio()
+            _ = self.stopTrialAudio()
             result(FlutterError(code: "play_failed", message: "Could not play trial MP3", details: nil))
           }
         case "stop":
-          self.stopTrialAudio()
-          result(nil)
+          if self.stopTrialAudio() {
+            result(nil)
+          } else {
+            result(FlutterError(code: "stop_unconfirmed", message: "Could not deactivate trial playback", details: nil))
+          }
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -52,14 +57,21 @@ import UIKit
       trialChannel = channel
       backgroundObserver = NotificationCenter.default.addObserver(
         forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
-      ) { [weak self] _ in self?.stopTrialAudio() }
+      ) { [weak self] _ in _ = self?.stopTrialAudio() }
     }
   }
 
-  private func stopTrialAudio() {
+  @discardableResult private func stopTrialAudio() -> Bool {
     trialPlayer?.stop()
     trialPlayer = nil
-    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    guard trialSessionActive else { return true }
+    do {
+      try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+      trialSessionActive = false
+      return true
+    } catch {
+      return false
+    }
   }
 
   deinit {
