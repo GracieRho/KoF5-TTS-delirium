@@ -6,45 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kof5_patient/main.dart';
 import 'package:record_platform_interface/record_platform_interface.dart';
 
-class FakeRecorderPlatform extends RecordPlatform {
-  final permission = Completer<bool>();
-  var starts = 0;
-  var stops = 0;
-  var stopFails = false;
-
-  @override
-  Future<void> create(String recorderId) async {}
-
-  @override
-  Future<bool> hasPermission(String recorderId, {bool request = true}) =>
-      permission.future;
-
-  @override
-  Future<Stream<Uint8List>> startStream(
-    String recorderId,
-    RecordConfig config,
-  ) async {
-    starts++;
-    return const Stream<Uint8List>.empty();
-  }
-
-  @override
-  Future<String?> stop(String recorderId) async {
-    stops++;
-    if (stopFails) throw StateError('native stop failed');
-    return null;
-  }
-
-  @override
-  Future<void> dispose(String recorderId) async {}
-
-  @override
-  Stream<RecordState> onStateChanged(String recorderId) =>
-      const Stream<RecordState>.empty();
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
+import 'fake_recorder.dart';
 
 void main() {
   late RecordPlatform original;
@@ -73,31 +35,47 @@ void main() {
     expect(find.text('마이크 준비 중'), findsNothing);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
   });
 
-  testWidgets('failed native stop locks restart and reports uncertainty', (
+  testWidgets('late native start with failed stop stays locked', (
     tester,
   ) async {
     fake.permission.complete(true);
+    fake.delayedStart = Completer<Stream<Uint8List>>();
     await tester.pumpWidget(const PatientMicDemo());
     await tester.tap(find.text('마이크 시험 시작'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    for (var i = 0; i < 20 && fake.starts == 0; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
     expect(fake.starts, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     fake.stopFails = true;
-    await tester.tap(find.text('시험 중단'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    fake.delayedStart!.complete(const Stream<Uint8List>.empty());
+    for (var i = 0; i < 20 && fake.stops == 0; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
     expect(fake.stops, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
     expect(find.textContaining('마이크 중단을 확인하지 못했습니다'), findsOneWidget);
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
       isNull,
     );
     await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
   });
 }

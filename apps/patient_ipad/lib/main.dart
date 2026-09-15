@@ -64,7 +64,9 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         ),
       );
       if (!mounted || !_foreground) {
-        await _recorder.stop();
+        _subscription = stream.listen((_) {}); // Discard any late PCM.
+        _listening = true;
+        await _stop();
         return;
       }
       _detector.reset();
@@ -103,19 +105,24 @@ class _PatientMicDemoState extends State<PatientMicDemo>
     if (_stopping || (!_listening && _subscription == null)) return;
     _stopping = true;
     _listening = false;
+    _detector.reset();
     var confirmed = true;
     try {
       await _recorder.stop();
     } catch (_) {
       confirmed = false;
+      _stopUnconfirmed = true;
+      if (mounted) {
+        setState(() => _status = '마이크 중단을 확인하지 못했습니다. 앱을 종료하고 다시 실행하세요.');
+      }
     }
     try {
       await _subscription?.cancel();
     } catch (_) {
       confirmed = false;
+      _stopUnconfirmed = true;
     }
     _subscription = null;
-    _detector.reset();
     _stopUnconfirmed = !confirmed;
     _stopping = false;
     if (mounted) {
