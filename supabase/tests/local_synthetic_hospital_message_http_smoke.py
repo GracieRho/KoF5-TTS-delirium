@@ -118,6 +118,13 @@ def main() -> None:
 
         due_ids = f"{base}/rpc/synthetic_due_hospital_message_ids"
         due_one = f"{base}/rpc/synthetic_due_hospital_message"
+        playback_complete = f"{base}/rpc/synthetic_hospital_message_playback_complete"
+        attempt = uuid4()
+        completion = {"p_patient_id": str(PATIENT), "p_message_id": str(draft),
+                      "p_attempt_id": str(attempt)}
+        status, completed = request(playback_complete, "POST", public, device_token,
+                                    completion, schema="api")
+        assert status == 200 and completed is False, "unpaired device claimed playback"
         status, ids = request(due_ids, "POST", public, device_token,
                               {"_patient_id": str(PATIENT)}, schema="api")
         assert status == 200 and ids == [], "unpaired device discovered message IDs"
@@ -137,6 +144,39 @@ def main() -> None:
                                {"_patient_id": str(PATIENT), "_message_id": str(draft)}, schema="api")
         assert status == 200 and len(rows) == 1 and rows[0]["authorized"] is True \
             and rows[0]["approved_text"] == TEXT
+        status, completed = request(playback_complete, "POST", public, device_token,
+                                    completion, schema="api")
+        assert status == 200 and completed is True, "paired device completion was not recorded"
+        status, completed = request(playback_complete, "POST", public, device_token,
+                                    completion, schema="api")
+        assert status == 200 and completed is True, "same attempt could not retry"
+        status, completed = request(playback_complete, "POST", public, device_token,
+                                    {**completion, "p_attempt_id": str(uuid4())}, schema="api")
+        assert status == 200 and completed is False, "different attempt overwrote completion"
+        assert sql(f"SELECT delivery_status || ':' || delivered_by_device_user_id || ':' || playback_attempt_id "
+                   f"FROM kof5.hospital_message WHERE message_id='{draft}'") == \
+            f"delivered:{device}:{attempt}", "receipt did not bind exact device and attempt"
+        status, ids = request(due_ids, "POST", public, device_token,
+                              {"_patient_id": str(PATIENT)}, schema="api")
+        assert status == 200 and ids == [], "completed message remained due"
+
+        # Keep a second pending original so the existing withdrawal checks remain meaningful.
+        pending_text = "가상 철회 전 예약 안내"
+        status, _ = request(drafts, "POST", public, proposer_token,
+                            {**payload, "proposed_text": pending_text}, schema="api")
+        assert status == 201
+        status, pending_rows = request(f"{drafts}?select=draft_id,proposed_text",
+                                       "GET", public, approver_token, schema="api")
+        pending_rows = [row for row in pending_rows if row["proposed_text"] == pending_text]
+        assert status == 200 and len(pending_rows) == 1
+        pending_id = UUID(pending_rows[0]["draft_id"])
+        status, approved = request(f"{drafts}?draft_id=eq.{pending_id}&status=eq.draft",
+                                   "PATCH", public, approver_token,
+                                   {"status": "approved"}, schema="api")
+        assert status == 200 and len(approved) == 1
+        status, ids = request(due_ids, "POST", public, device_token,
+                              {"_patient_id": str(PATIENT)}, schema="api")
+        assert status == 200 and [row["message_id"] for row in ids] == [str(pending_id)]
         sql(f"""
             INSERT INTO kof5.hospital_staff_membership
                 (auth_user_id,hospital_ref,product_role,status,effective_at,verified_by_staff_ref,verified_at)
@@ -154,9 +194,12 @@ def main() -> None:
                               {"_patient_id": str(PATIENT)}, schema="api")
         assert status == 200 and ids == [], "withdrawal left due IDs visible"
         status, rows = request(due_one, "POST", public, device_token,
-                               {"_patient_id": str(PATIENT), "_message_id": str(draft)}, schema="api")
+                               {"_patient_id": str(PATIENT), "_message_id": str(pending_id)}, schema="api")
         assert status == 200 and rows[0]["authorized"] is False and rows[0]["approved_text"] is None
-        print("Local Auth staff propose → distinct approve → pending → paired due RPC → withdrawal/misissued deny: PASS")
+        status, completed = request(playback_complete, "POST", public, device_token,
+                                    completion, schema="api")
+        assert status == 200 and completed is False, "withdrawn device retried a prior completion"
+        print("Local Auth staff approve → paired due → playback receipt/idempotency → withdrawal deny: PASS")
     finally:
         try:
             sql(f"""
