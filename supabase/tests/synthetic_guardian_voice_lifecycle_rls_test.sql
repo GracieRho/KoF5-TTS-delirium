@@ -274,17 +274,33 @@ SELECT ok((SELECT authorized IS FALSE FROM
     api.synthetic_guardian_voice_confirm_remote_absence(
         current_setting('test.clone_two')::uuid, 'voice_id_not_found', now())),
     'ID-absence method is invalid when pending create had no voice ID');
-SELECT ok((SELECT authorized AND status = 'deleted'
+SELECT ok((SELECT authorized IS FALSE
     FROM api.synthetic_guardian_voice_confirm_remote_absence(
         current_setting('test.clone_two')::uuid, 'provider_name_not_found', now())),
-    'separate exact provider-name search absence resolves uncertain create');
+    'name absence cannot tombstone a provider POST still in flight');
+RESET ROLE;
+SELECT ok((SELECT status = 'deletion_pending' AND voice_id IS NULL
+    FROM kof5.synthetic_guardian_voice_clone
+    WHERE clone_id = current_setting('test.clone_two')::uuid),
+    'unknown pending create remains open for late provider result');
+SET ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+SELECT ok((SELECT authorized AND status = 'deletion_pending'
+    AND voice_id = 'test-voice-late-002'
+    FROM api.synthetic_guardian_voice_provider_result(
+        current_setting('test.clone_two')::uuid, 'test-voice-late-002', true)),
+    'late provider result records ID while deletion remains pending');
+SELECT ok((SELECT authorized AND status = 'deleted'
+    FROM api.synthetic_guardian_voice_confirm_remote_absence(
+        current_setting('test.clone_two')::uuid, 'voice_id_not_found', now())),
+    'exact voice ID absence after late result permits tombstone');
 SELECT ok((SELECT authorized AND status = 'pending'
     FROM api.synthetic_guardian_voice_begin(
         '00000000-0000-4000-8000-000000000975',
         '00000000-0000-4000-8000-000000000974',
         '00000000-0000-4000-8000-000000000952', 'elevenlabs',
         '00000000-0000-4000-8000-000000000803', ARRAY[20000,25000,30000])) ,
-    'third independent request starts after confirmed remote absence');
+    'third independent request starts only after exact ID absence');
 RESET ROLE;
 SELECT set_config('test.clone_three', (SELECT clone_id::text
     FROM kof5.synthetic_guardian_voice_clone

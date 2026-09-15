@@ -340,8 +340,10 @@ GRANT EXECUTE ON FUNCTION api.synthetic_guardian_voice_begin(
 
 -- The private transition gate accepts only server-held service_role callers.
 -- Unknown provider create result remains pending until name/ID reconciliation.
--- A DELETE HTTP response is not a transition: only a separate remote absence
--- check can supply the explicit method and observation time below.
+-- A DELETE HTTP response is not a transition: only a separate remote ID
+-- absence check can supply the explicit method and observation time below.
+-- An unknown pending create may finish after a name search, so it must stay
+-- deletion_pending until provider_result records the exact voice ID.
 CREATE FUNCTION kof5.synthetic_guardian_voice_transition(
     p_clone_id uuid, p_action text, p_voice_id text,
     p_verification_confirmed boolean, p_method text, p_checked_at timestamptz
@@ -425,8 +427,8 @@ BEGIN
         IF v_clone.status <> 'deletion_pending' OR p_checked_at IS NULL
            OR p_checked_at < v_clone.deletion_requested_at
            OR p_checked_at > now() + interval '5 seconds'
-           OR (v_clone.voice_id IS NOT NULL AND p_method <> 'voice_id_not_found')
-           OR (v_clone.voice_id IS NULL AND p_method <> 'provider_name_not_found')
+           OR v_clone.voice_id IS NULL
+           OR p_method <> 'voice_id_not_found'
            OR p_method IS NULL THEN
             RETURN QUERY SELECT false, NULL::uuid, NULL::text, NULL::text, NULL::text;
             RETURN;

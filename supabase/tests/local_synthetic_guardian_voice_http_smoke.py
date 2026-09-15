@@ -131,7 +131,45 @@ def main() -> None:
                                {"p_patient_id": str(PATIENT)}, schema="api")
         assert status == 200 and rows[0]["status"] == "deleted" \
             and rows[0]["ready"] is False and rows[0]["consent_id"] is None
-        print("Task-local Auth guardian status → server pending/verify → withdrawal deny → absence tombstone: PASS")
+        # A name search can race an in-flight provider POST. Keep the pending
+        # deletion open until the late result supplies an exact ID.
+        sql(f"""
+            INSERT INTO kof5.consent_record
+                (patient_id,guardian_ref,scope,signer_role,signer_ref,
+                 assent_status,status,effective_at,recorded_by_staff_ref)
+            VALUES ('{PATIENT}','{guardian}','guardian_voice_clone','guardian','{guardian}',
+                    'not_required','active',now()-interval '1 day','TEST-STAFF');
+        """)
+        next_consent = UUID(sql("SELECT consent_id FROM kof5.consent_record "
+                                f"WHERE patient_id='{PATIENT}' AND status='active'"))
+        status, rows = request(begin_rpc, "POST", admin, payload={**begin,
+                               "p_consent_id": str(next_consent),
+                               "p_request_key": str(uuid4())}, schema="api")
+        assert status == 200 and rows[0]["authorized"] is True
+        late_clone = UUID(rows[0]["clone_id"])
+        status, rows = request(deletion_rpc, "POST", admin, payload=
+                               {"p_clone_id": str(late_clone)}, schema="api")
+        assert status == 200 and rows[0]["status"] == "deletion_pending"
+        status, rows = request(absence_rpc, "POST", admin, payload=
+                               {"p_clone_id": str(late_clone),
+                                "p_method": "provider_name_not_found",
+                                "p_checked_at": datetime.now(timezone.utc).isoformat()},
+                               schema="api")
+        assert status == 200 and rows[0]["authorized"] is False, \
+            "in-flight provider POST was tombstoned by name absence"
+        late_id = "synthetic-late-" + uuid4().hex
+        status, rows = request(provider_rpc, "POST", admin, payload=
+                               {"p_clone_id": str(late_clone), "p_voice_id": late_id,
+                                "p_verification_confirmed": True}, schema="api")
+        assert status == 200 and rows[0]["status"] == "deletion_pending" \
+            and rows[0]["voice_id"] == late_id
+        status, rows = request(absence_rpc, "POST", admin, payload=
+                               {"p_clone_id": str(late_clone),
+                                "p_method": "voice_id_not_found",
+                                "p_checked_at": datetime.now(timezone.utc).isoformat()},
+                               schema="api")
+        assert status == 200 and rows[0]["status"] == "deleted"
+        print("Task-local Auth guardian lifecycle and late provider create/delete race: PASS")
     finally:
         try:
             sql(f"""
