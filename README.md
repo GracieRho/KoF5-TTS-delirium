@@ -79,7 +79,7 @@ iPad의 합성 기기 연결 모드는 익명 JWT를 메모리에만 두고 병�
 
 별도 `POST /internal/synthetic/text`는 같은 내부 토큰·합성 자료 확인·시험 음성 소유자 동의 표시를 요구하고, `Content-Type: application/json`의 4 KB 이하 `{"transcript":"...","label":"DIRECTED"}`를 받습니다. 이 경로는 후보 오디오를 받거나 hosted STT를 호출하지 않으며, `AMBIENT`/거부 발화는 음성 응답 없이 폐기합니다. 글은 hosted LLM에, 승인된 짧은 답은 시험 TTS 제공업체에 전달될 수 있습니다. 모델이 만든 의료 진단·처방·약물 조언과 출처 없는 합성 사실은 TTS 전에 차단하지만 실제 임상 안전성은 검증하지 않았습니다. iPad 내부 시험 화면은 시험자 본인 음성·기기 내 전사·별도 스위치를 켠 경우에만 이름 호출과 짧은 후속 질문의 글을 이 API로 보냅니다. 이름/질문 규칙은 TV·의료진 발화나 환자 화자를 구분하지 못합니다. 글 전용 시험은 정상 재생 종료 또는 MP3 없는 안전 응답 뒤 상태가 확인될 때 듣기를 재개하고, 서버가 응답을 거부하면 자동 글 전송을 중단합니다. 수동 오디오 전송 후에는 직접 다시 켜야 합니다. 실제 환자 오디오·글은 안전 게이트 통과 전 보내지 않습니다.
 
-별도 `POST /internal/synthetic/paired/00000000-0000-4000-8000-000000000975/text`는 기존 내부 합성 토큰과 **기기 Supabase Auth JWT**를 함께 요구합니다. FastAPI는 전용 Supabase의 publishable 키와 같은 JWT로 현재 기기 배정과 가족 기억 최대 세 건을 매 턴 다시 조회한 뒤 합성 공급자 파이프라인에 전달합니다. 기억이 없으면 LLM에 빈 사실을 보내지 않고 확인된 정보가 없다고 답합니다. 실제 로컬 Auth/Data API→FastAPI와 모의 공급자 연결은 통과했지만, 실제 공급자 호출·iPad·환자 자료에는 사용하지 않았습니다.
+별도 `POST /internal/synthetic/paired/00000000-0000-4000-8000-000000000975/text`는 기존 내부 합성 토큰과 **기기 Supabase Auth JWT**를 함께 요구합니다. FastAPI는 전용 Supabase의 publishable 키와 같은 JWT로 단일 RPC로 기기 권한과 가족 기억 최대 세 건을 같은 DB 스냅샷에서 매 턴 확인한 뒤 합성 공급자 파이프라인에 전달합니다. 기억이 없으면 LLM에 빈 사실을 보내지 않고 확인된 정보가 없다고 답합니다. 실제 로컬 Auth/Data API→FastAPI와 모의 공급자 연결은 통과했지만, 실제 공급자 호출·iPad·환자 자료에는 사용하지 않았습니다.
 
 루트 `app.py`와 `vercel.json`은 [Vercel FastAPI 진입점](https://vercel.com/docs/frameworks/backend/fastapi) 및 Python 함수 번들 제외 설정입니다. 현재 **합성 텍스트 API와 인증된 내부 오디오 시험 API의 배포 준비** 단계입니다. 메모리 세션은 함수 인스턴스 간 공유·영속화되지 않으므로 실제 환자 서비스나 다중 인스턴스 대화에 사용할 수 없고, Vercel 배포도 아직 실행하지 않았습니다.
 
