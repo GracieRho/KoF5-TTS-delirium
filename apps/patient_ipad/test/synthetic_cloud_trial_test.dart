@@ -197,7 +197,19 @@ void main() {
       expect(path, '/internal/synthetic/paired/$syntheticPatientId/text');
       expect(bearer, 'Bearer $jwt');
       expect((demoToken, mime), ('x' * 32, 'application/json'));
-      expect(body, {'transcript': '수민아?', 'label': 'DIRECTED'});
+      expect(body, isA<Map>());
+      final turn = (body as Map)['client_turn_id'];
+      expect(turn, isA<String>());
+      expect(
+        turn,
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      );
+      expect(body['transcript'], '수민아?');
+      expect(body['label'], 'DIRECTED');
       expect(reply.mp3, isNull);
       await expectLater(
         sendPairedOwnVoiceText(

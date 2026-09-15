@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'device_anonymous_auth.dart';
+import 'synthetic_auxiliary_alert.dart' show newSyntheticAlertIdempotencyKey;
 
 class SyntheticCloudReply {
   const SyntheticCloudReply(this.transcript, this.reply, this.mp3);
@@ -160,9 +161,11 @@ Future<SyntheticCloudReply> _sendText(
   if (deviceJwt != null) {
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $deviceJwt');
   }
-  request.add(
-    utf8.encode(jsonEncode({'transcript': transcript, 'label': label})),
-  );
+  final body = <String, String>{'transcript': transcript, 'label': label};
+  if (deviceJwt != null) {
+    body['client_turn_id'] = newSyntheticAlertIdempotencyKey();
+  }
+  request.add(utf8.encode(jsonEncode(body)));
   return _readReply(await request.close());
 }
 
