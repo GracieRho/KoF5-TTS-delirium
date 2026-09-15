@@ -27,6 +27,7 @@
 .
 ├── architecture/          # 시스템 구조, 기술 결정 기록
 │   └── decisions/         # ADR(Architecture Decision Record)
+├── apps/patient_ipad/     # iPad 환자 클라이언트 내부 마이크 시험
 ├── checkpoints/           # 로컬 모델 체크포인트(파일은 Git 제외)
 ├── configs/               # 전처리 및 실험 설정
 ├── data/                  # 기존 연구용 WAV, FLAC(파일은 Git 제외)
@@ -40,6 +41,8 @@
 ```
 
 폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR 목록](architecture/decisions/README.md)에서 확인할 수 있습니다. 병원 환자 등록·화자 특징의 최소 컬럼은 [병원 등록 설계](docs/delirium-familiar-voice/08-hospital-patient-registry-and-voice.md)에 정리했습니다.
+
+iPad의 기기 내 발화 후보 감지 코드는 [환자 앱 내부 시험](apps/patient_ipad/README.md)에 있습니다. 아직 오디오는 기기 밖으로 보내지 않습니다.
 
 ## 합성 대화 흐름 확인
 
