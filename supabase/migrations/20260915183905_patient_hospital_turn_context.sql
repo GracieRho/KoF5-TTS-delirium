@@ -15,7 +15,7 @@ ALTER POLICY hospital_context_verified_staff_read
             AND (valid_until IS NULL OR valid_until > now())
             AND category IN ('hospital', 'ward', 'room', 'test_schedule', 'visit_schedule')
             AND char_length(btrim(content)) BETWEEN 1 AND 200
-            AND content !~ '(진단|치료|처방|약|수술|통증|증상|괜찮|위험|복용|투약)'
+            AND content !~ '(진단|치료|처방|(^|[^가-힣A-Za-z0-9])약(을|은|이|물|[[:space:]])|수술|통증|증상|괜찮|위험|복용|투약)'
             AND EXISTS (
                 SELECT 1 FROM kof5.patient_device_assignment d
                 WHERE d.device_user_id = (SELECT auth.uid())
@@ -49,9 +49,9 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
           AND (f.valid_until IS NULL OR f.valid_until > now())
           AND f.category IN ('hospital', 'ward', 'room', 'test_schedule', 'visit_schedule')
           AND char_length(btrim(f.content)) BETWEEN 1 AND 200
-          AND f.content !~ '(진단|치료|처방|약|수술|통증|증상|괜찮|위험|복용|투약)'
+          AND f.content !~ '(진단|치료|처방|(^|[^가-힣A-Za-z0-9])약(을|은|이|물|[[:space:]])|수술|통증|증상|괜찮|위험|복용|투약)'
           AND char_length(btrim(p_term)) BETWEEN 2 AND 200
-          AND p_term !~ '(결과|진단|치료|처방|약|수술|통증|증상|괜찮|위험)'
+          AND p_term !~ '(결과|진단|치료|처방|(^|[^가-힣A-Za-z0-9])약(을|은|이|물|[[:space:]])|수술|통증|증상|괜찮|위험)'
           AND (
               (f.category = 'hospital' AND p_term ~
                   '((어느|무슨|어디).{0,20}병원|병원.{0,20}(이름|명칭|어디|어느|무슨))')

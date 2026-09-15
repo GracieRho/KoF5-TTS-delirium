@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(26);
+SELECT plan(27);
 
 -- Pinned synthetic IDs only. Every fixture row rolls back below.
 INSERT INTO auth.users (id, is_anonymous) VALUES
@@ -89,6 +89,9 @@ INSERT INTO kof5.hospital_context_fact (
      'test_schedule', '가상 혈액 검사는 오늘 14시입니다.', 'TEST-SOURCE', 'TEST-APPROVER',
      now() - interval '1 hour', now() + interval '1 day', 'approved', NULL),
     ('00000000-0000-4000-8000-000000000975', '00000000-0000-4000-8000-000000000976',
+     'visit_schedule', '가상 엄마 면회 예약은 내일 15시입니다.', 'TEST-SOURCE', 'TEST-APPROVER',
+     now() - interval '1 hour', now() + interval '1 day', 'approved', NULL),
+    ('00000000-0000-4000-8000-000000000975', '00000000-0000-4000-8000-000000000976',
      'medication', '가상 약을 드세요.', 'TEST-SOURCE', 'TEST-APPROVER',
      now() - interval '1 hour', NULL, 'approved', NULL),
     ('00000000-0000-4000-8000-000000000975', NULL,
@@ -147,7 +150,7 @@ SELECT set_config('request.jwt.claims',
     '{"sub":"00000000-0000-4000-8000-000000000972","is_anonymous":true}', true);
 SELECT is((SELECT count(*)::integer FROM api.hospital_context_current), 0,
     'anonymous device cannot enumerate staff hospital context view');
-SELECT is((SELECT count(*)::integer FROM kof5.hospital_context_fact), 5,
+SELECT is((SELECT count(*)::integer FROM kof5.hospital_context_fact), 6,
     'device fact RLS exposes only short approved current/safe-category rows');
 SELECT is((SELECT count(*)::integer FROM kof5.hospital_context_fact
            WHERE content = '가상 약 복용하세요.'), 0,
@@ -181,6 +184,11 @@ SELECT ok((SELECT authorized IS TRUE AND jsonb_array_length(facts) = 1
     FROM api.patient_hospital_turn_context(
         '00000000-0000-4000-8000-000000000975', '혈액검사는 몇 시야?')),
     'Korean blood-test token matches approved original across spacing');
+SELECT ok((SELECT authorized IS TRUE AND jsonb_array_length(facts) = 1
+           AND facts->0->>'content' = '가상 엄마 면회 예약은 내일 15시입니다.'
+    FROM api.patient_hospital_turn_context(
+        '00000000-0000-4000-8000-000000000975', '엄마 면회 예약은 언제야?')),
+    'reservation wording remains eligible without matching medication advice');
 SELECT ok((SELECT authorized IS TRUE AND facts = '[]'::jsonb
     FROM api.patient_hospital_turn_context(
         '00000000-0000-4000-8000-000000000975', '검사는 언제인가요?')),
