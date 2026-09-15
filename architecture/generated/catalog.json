@@ -78,6 +78,7 @@
   "configs": [],
   "scripts": [
     "scripts/convert_wav_to_flac.py",
+    "scripts/demo_companion_text.py",
     "scripts/download_aihub.py",
     "scripts/run_preprocessing_pipeline.py"
   ],

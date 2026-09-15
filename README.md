@@ -41,6 +41,14 @@
 
 폴더별 역할은 [저장소 구조](docs/repository-layout.md), 문서와 협업 규칙은 [docs/README.md](docs/README.md)와 [docs/contributing.md](docs/contributing.md), 제품 구조와 정책 변경은 [아키텍처](architecture/README.md)와 [ADR-0001](architecture/decisions/0001-cloud-first-familiar-voice-mvp.md)에서 확인할 수 있습니다.
 
+## 합성 대화 흐름 확인
+
+```bash
+python3 scripts/demo_companion_text.py
+```
+
+PRD의 첫 상호작용을 합성 발화·기억으로 검사합니다. 현재 데모에는 마이크, STT, LLM, 음성 복제 및 실제 환자 데이터가 연결되지 않았습니다.
+
 ## 기존 전처리 도구
 
 AI Hub 데이터셋 key와 선택 file key를 확인한 뒤 다운로드부터 24 kHz mono 16-bit FLAC 변환까지 실행할 수 있습니다.

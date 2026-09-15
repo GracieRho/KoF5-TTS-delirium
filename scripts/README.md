@@ -4,6 +4,7 @@
 
 현재 제공하는 저장소 도구:
 
+- `demo_companion_text.py`: 합성 사실·발화로 PRD의 첫 대화 흐름을 확인(오디오·클라우드 호출 없음)
 - `generate_architecture.py`: 코드·설정 목록과 MVP 목표 흐름을 `architecture/generated/`에 생성
 - `test_generate_architecture.py`: 생성기의 기본 동작과 결정성 검증
 - `download_aihub.py`: AI Hub 데이터셋·파일 목록 조회 및 승인 데이터 다운로드
