@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kof5_patient/device_anonymous_auth.dart';
-import 'package:kof5_patient/main.dart';
+import 'package:kof5_patient/main_debug.dart';
 import 'package:kof5_patient/on_device_speech.dart';
 import 'package:kof5_patient/synthetic_auxiliary_alert.dart';
 import 'package:kof5_patient/synthetic_cloud_trial.dart';

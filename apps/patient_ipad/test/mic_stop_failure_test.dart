@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kof5_patient/main.dart';
+import 'package:kof5_patient/main_debug.dart';
 import 'package:record_platform_interface/record_platform_interface.dart';
 
 import 'fake_recorder.dart';
