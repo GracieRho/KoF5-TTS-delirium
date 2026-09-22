@@ -2,7 +2,7 @@
 
 MVP에서는 앱을 세 개 모두 native로 만들 필요 없다.
 
-환자 클라이언트는 **iPad Flutter**, 보호자·병원 포털은 `apps/portal_web/`의 **React/TypeScript 반응형 웹**으로 구성한다. 기기 내 VAD 뒤 발화 후보만 보내는 경로와 Vercel 우선 배포는 [ADR-0002](../../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따른다.
+환자 클라이언트는 **iPad Flutter**, 보호자·병원 포털은 `apps/portal_web/`의 **Vite 기반 React/TypeScript 반응형 웹**으로 구성한다. 기기 내 VAD 뒤 발화 후보만 보내는 경로와 Vercel 우선 배포는 [ADR-0002](../../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따른다.
 
 ---
 

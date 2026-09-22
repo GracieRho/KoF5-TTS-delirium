@@ -33,7 +33,7 @@
 ├── scripts/                     # 얇은 실행 진입점
 ├── apps/
 │   ├── patient_ipad/            # 환자 병상 Flutter 앱과 별도 진단 target
-│   └── portal_web/              # 보호자·병원 React/TypeScript 반응형 포털
+│   └── portal_web/              # 보호자·병원 Vite/React 반응형 포털
 ├── tests/
 │   ├── unit/
 │   └── integration/
@@ -63,7 +63,7 @@
 ## MVP 제품 작업 경계
 
 - `apps/patient_ipad/`: Flutter iPad 클라이언트. `lib/main.dart`는 시간·날짜·병원 장소/일정과 수동적 음성 상태만 보여주는 비조작형 환자 화면입니다. API 주소, publishable key, 내부 토큰, 로그와 시험 제어는 표시하지 않습니다. `lib/main_debug.dart`는 숨은 제스처나 라우트가 아닌 별도 Flutter target이며 내부 진단에만 사용합니다. 후보 발화 처리와 실제 환자 시험의 안전 경계는 기존 합성 시험 제한을 유지합니다.
-- `apps/portal_web/`: 보호자 `/guardian`와 병원 직원 `/hospital` 화면을 함께 제공하는 React/TypeScript 반응형 웹입니다. 소스는 역할별 페이지·기능·공통 컴포넌트로 나누고, `dist/`는 생성된 빌드 출력이므로 소스 책임 경계가 아닙니다.
+- `apps/portal_web/`: 보호자 `/guardian`와 병원 직원 `/hospital` 화면을 함께 제공하는 Vite 기반 React/TypeScript 반응형 웹입니다. 소스는 역할별 페이지·기능·공통 컴포넌트로 나누고, `dist/`는 생성된 빌드 출력이므로 소스 책임 경계가 아닙니다.
 - `supabase/`: Auth/Postgres의 로컬 마이그레이션과 합성 권한 검사. 환자·입원·동의·음성 메타데이터, 가족 기억, 병원 승인 사실·메시지·안전 감사 초안은 비공개 `kof5` 스키마에 두고, 검증된 직원·보호자 범위의 조회, 보호자 기억 등록·수정·문자열 검색, 승인 게이트를 통과한 등록자만 환자 기본정보 입력을 호출자 RLS `api` 경로로 노출합니다. 작업 전용 로컬 Auth/Data API의 합성 권한 시험은 통과했지만, 전용 원격 프로젝트·실제 기관 승인/메시지 전달·환자 자료·음성 저장소·감사 기록 업무 흐름은 연결하지 않았습니다.
 - 환자 음성 인터랙션: 임시 버퍼, 발화 활성화, 대화 상태, 재생과 중단
 - 대화·정보 경계: 보호자 기억, 병원 승인 정보, 짧은 응답과 메시지 원문 보존

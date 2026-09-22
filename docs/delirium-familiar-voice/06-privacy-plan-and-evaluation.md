@@ -344,7 +344,7 @@ Guardian onboarding burden
               │                             │
               ▼                             ▼
        Patient Flutter               Guardian / Hospital Web
-       Tablet App                    React / TypeScript
+       Tablet App                    Vite / React / TypeScript
               │
               │ microphone
               ▼

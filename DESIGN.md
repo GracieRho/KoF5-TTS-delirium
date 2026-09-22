@@ -107,7 +107,7 @@
 
 ## Implementation constraints
 
-- Framework/styling system: 환자 앱은 Flutter, 보호자·병원 포털은 `apps/portal_web/`의 React/TypeScript 반응형 웹, API는 FastAPI, 인증·데이터는 Supabase Auth/Postgres/RLS를 유지한다.
+- Framework/styling system: 환자 앱은 Flutter, 보호자·병원 포털은 `apps/portal_web/`의 Vite 기반 React/TypeScript 반응형 웹, API는 FastAPI, 인증·데이터는 Supabase Auth/Postgres/RLS를 유지한다.
 - Design-token constraints: 포털 안에서 CSS 변수와 소수의 공통 컴포넌트를 재사용한다. Flutter와 웹 사이 토큰 코드 생성을 추가하지 않는다.
 - Performance constraints: 환자 시계는 네트워크 없이 계속 갱신되어야 한다. 포털의 초기 화면은 필요한 역할 데이터만 불러오며 대형 UI 프레임워크를 새로 추가하지 않는다.
 - Compatibility constraints: 환자 화면에는 빌드 설정, API origin, publishable key, 내부 토큰 입력이나 로그를 노출하지 않는다. 진단은 별도 진입점에서만 접근하며 비밀 값은 서버/빌드 환경에서 주입한다.
