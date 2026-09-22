@@ -28,8 +28,8 @@ void main() {
     expect(find.text('병원 정보를 확인하고 있습니다'), findsOneWidget);
     expect(find.textContaining('한마음병원'), findsNothing);
     expect(find.textContaining('501호'), findsNothing);
-    expect(find.text('오늘의 일정'), findsOneWidget);
-    expect(find.text('오늘 예정된 일정이 없습니다.'), findsOneWidget);
+    expect(find.text('병원 일정'), findsOneWidget);
+    expect(find.text('확인된 일정이 없습니다.'), findsOneWidget);
     expect(find.text('회진'), findsNothing);
     expect(find.text('병원 안내를 기다리고 있어요'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);

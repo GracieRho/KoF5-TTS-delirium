@@ -13,14 +13,14 @@ class SchedulePanel extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('오늘의 일정', style: Theme.of(context).textTheme.headlineLarge),
+      Text('병원 일정', style: Theme.of(context).textTheme.headlineLarge),
       const SizedBox(height: 22),
       const Divider(height: 1, thickness: 1, color: PatientColors.line),
       if (items.isEmpty)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 28),
           child: Text(
-            '오늘 예정된 일정이 없습니다.',
+            '확인된 일정이 없습니다.',
             style: TextStyle(
               color: PatientColors.muted,
               fontSize: 18,
