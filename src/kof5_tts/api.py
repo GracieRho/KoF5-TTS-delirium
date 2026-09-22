@@ -10,6 +10,7 @@ from hmac import compare_digest
 import math
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 from typing import Literal
 from uuid import UUID
@@ -49,6 +50,43 @@ app = FastAPI(title="Synthetic Familiar Voice MVP", docs_url=None, redoc_url=Non
 # ponytail: one in-memory synthetic patient; add authenticated persistence and per-patient serialization before real data.
 app.state.sessions = {}
 
+PORTAL_DIST = Path(__file__).resolve().parents[2] / "apps" / "portal_web" / "dist"
+_PORTAL_ASSET_EXTENSIONS = frozenset({
+    ".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".png", ".svg",
+    ".ttf", ".webp", ".woff", ".woff2",
+})
+_PORTAL_HEADERS = {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": (
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
+        "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self' data:; connect-src 'self' https://*.supabase.co "
+        "wss://*.supabase.co http://127.0.0.1:54341 ws://127.0.0.1:54341"
+    ),
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+def _portal_index() -> FileResponse:
+    root = PORTAL_DIST.resolve()
+    index = (root / "index.html").resolve()
+    if index.parent != root or not index.is_file():
+        raise HTTPException(status_code=503, detail="웹 포털 빌드가 준비되지 않았습니다")
+    return FileResponse(index, media_type="text/html", headers=_PORTAL_HEADERS)
+
+
+def _portal_asset_path(asset_path: str) -> Path:
+    relative = PurePosixPath(asset_path)
+    if (not asset_path or relative.is_absolute()
+            or any(part in {"", ".", ".."} or part.startswith(".") for part in relative.parts)
+            or relative.suffix.lower() not in _PORTAL_ASSET_EXTENSIONS):
+        raise HTTPException(status_code=404, detail="정적 파일을 찾을 수 없습니다")
+    root = (PORTAL_DIST / "assets").resolve()
+    target = (root / Path(*relative.parts)).resolve()
+    if root not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404, detail="정적 파일을 찾을 수 없습니다")
+    return target
+
 
 @app.get("/demo", include_in_schema=False)
 def demo() -> FileResponse:
@@ -67,11 +105,30 @@ def guardian_demo() -> FileResponse:
 
 @app.get("/guardian", include_in_schema=False)
 def guardian_portal() -> FileResponse:
-    return FileResponse(Path(__file__).with_name("guardian_portal.html"))
+    return _portal_index()
 
 
 @app.get("/hospital", include_in_schema=False)
 def hospital_portal() -> FileResponse:
+    return _portal_index()
+
+
+@app.get("/assets/{asset_path:path}", include_in_schema=False)
+def portal_asset(asset_path: str) -> FileResponse:
+    return FileResponse(
+        _portal_asset_path(asset_path),
+        headers={"Cache-Control": "public, max-age=31536000, immutable",
+                 "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@app.get("/internal/legacy/guardian", include_in_schema=False)
+def legacy_guardian_portal() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("guardian_portal.html"))
+
+
+@app.get("/internal/legacy/hospital", include_in_schema=False)
+def legacy_hospital_portal() -> FileResponse:
     return FileResponse(Path(__file__).with_name("hospital_portal.html"))
 
 
@@ -1089,3 +1146,9 @@ def end(patient_id: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="시작된 대화가 없습니다")
     session.stop()
     return {"event": "closed", "state": session.state}
+
+
+@app.get("/guardian/{spa_path:path}", include_in_schema=False)
+@app.get("/hospital/{spa_path:path}", include_in_schema=False)
+def portal_spa_fallback(spa_path: str) -> FileResponse:
+    return _portal_index()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -143,12 +144,30 @@ class SyntheticApiTests(unittest.TestCase):
         self.assertEqual(self.client.post(f"{root}/end").json()["state"], "IDLE")
 
     def test_guardian_portal_exposes_only_a_dedicated_public_supabase_config(self) -> None:
-        portal = self.client.get("/guardian")
-        self.assertEqual(portal.status_code, 200)
-        self.assertIn("보호자 로그인", portal.text)
-        hospital = self.client.get("/hospital")
-        self.assertEqual(hospital.status_code, 200)
-        self.assertIn("병원 직원 로그인", hospital.text)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            portal_dist = Path(temporary_directory)
+            assets = portal_dist / "assets"
+            assets.mkdir()
+            (portal_dist / "index.html").write_text(
+                '<!doctype html><div id="root">새 포털</div>', encoding="utf-8")
+            (assets / "index-a1b2c3.js").write_text("export {};", encoding="utf-8")
+            (assets / "index-a1b2c3.js.map").write_text("{}", encoding="utf-8")
+            with patch("kof5_tts.api.PORTAL_DIST", portal_dist):
+                for route in ("/guardian", "/hospital", "/guardian/patients/1",
+                              "/hospital/alerts"):
+                    portal = self.client.get(route)
+                    self.assertEqual(portal.status_code, 200)
+                    self.assertIn("새 포털", portal.text)
+                    self.assertEqual(portal.headers["cache-control"], "no-store")
+                    self.assertEqual(portal.headers["x-content-type-options"], "nosniff")
+                asset = self.client.get("/assets/index-a1b2c3.js")
+                self.assertEqual(asset.status_code, 200)
+                self.assertIn("immutable", asset.headers["cache-control"])
+                self.assertEqual(self.client.get("/assets/index-a1b2c3.js.map").status_code, 404)
+                self.assertEqual(self.client.get("/assets/%2e%2e/index.html").status_code, 404)
+        self.assertEqual(self.client.get("/guardian").status_code, 503)
+        self.assertIn("보호자 로그인", self.client.get("/internal/legacy/guardian").text)
+        self.assertIn("병원 직원 로그인", self.client.get("/internal/legacy/hospital").text)
         env = {
             "KOF5_SUPABASE_URL": "", "KOF5_SUPABASE_PUBLISHABLE_KEY": "",
             "KOF5_SUPABASE_PROJECT_REF": "", "VERCEL": "",
