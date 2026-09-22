@@ -343,8 +343,8 @@ Guardian onboarding burden
 └─────────────┬─────────────────────────────┬──────────────┘
               │                             │
               ▼                             ▼
-       Patient Flutter               Hospital Web
-       Tablet App                    Next.js
+       Patient Flutter               Guardian / Hospital Web
+       Tablet App                    React / TypeScript
               │
               │ microphone
               ▼
@@ -368,6 +368,8 @@ Guardian onboarding burden
 8. **Patient UI에 push-to-talk 버튼을 두지 않는다.**
 9. **환자가 먼저 말을 걸 수 있도록 always-listening 구조를 만든다.**
 10. **Always listening은 always recording이 아니다.**
+11. **Patient UI는 시간·날짜·병원 장소/일정과 수동적 음성 상태만 보여주고 설정·키·진단 기능을 노출하지 않는다.**
+12. **내부 진단은 `main_debug.dart` 별도 Flutter target으로만 실행한다.**
 11. **IDLE과 ACTIVE의 activation threshold를 다르게 한다.**
 12. **TV/ambient speech는 activation classifier로 걸러낸다.**
 13. **speaker verification은 hard gate가 아니라 보조 feature다.**

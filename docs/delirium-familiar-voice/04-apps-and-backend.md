@@ -2,7 +2,7 @@
 
 MVP에서는 앱을 세 개 모두 native로 만들 필요 없다.
 
-첫 환자 클라이언트는 사용자 시험 가능성을 위해 **iPad Flutter**로 정했다. 보호자·병원 웹 프레임워크는 아래 후보를 유지한다. 기기 내 VAD 뒤 발화 후보만 보내는 경로와 Vercel 우선 배포는 [ADR-0002](../../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따른다.
+환자 클라이언트는 **iPad Flutter**, 보호자·병원 포털은 `apps/portal_web/`의 **React/TypeScript 반응형 웹**으로 구성한다. 기기 내 VAD 뒤 발화 후보만 보내는 경로와 Vercel 우선 배포는 [ADR-0002](../../architecture/decisions/0002-ipad-local-audio-vercel-first.md)를 따른다.
 
 ---
 
@@ -20,12 +20,14 @@ Flutter tablet app
 - 앱 foreground 유지
 - 향후 iOS/Android 확장
 
+`lib/main.dart`는 환자가 조작하지 않는 시간·날짜·병원 일정/맥락·음성 상태 화면만 제공한다. 내부 시험은 `lib/main_debug.dart` 별도 target으로 실행하며 환자 화면에서 진입할 수 없다. 어떤 화면에도 비밀 키 값을 표시하지 않는다.
+
 ---
 
 ## 33.2 Guardian
 
 ```text
-Next.js Responsive Web
+React / TypeScript Responsive Web (`/guardian`)
 ```
 
 기능:
@@ -41,7 +43,7 @@ Next.js Responsive Web
 ## 33.3 Hospital
 
 ```text
-Next.js Responsive Web
+React / TypeScript Responsive Web (`/hospital`)
 ```
 
 기능:
@@ -66,7 +68,7 @@ Patient Client
 Flutter
 
 Guardian / Hospital
-Next.js
+React / TypeScript
 
 Backend
 FastAPI
@@ -99,7 +101,7 @@ Deployment
 Cloud Run / ECS / equivalent managed container
 ```
 
-현재 구현 우선순위는 Vercel의 FastAPI/웹 배포다. 위 관리형 컨테이너 목록은 운영·실시간 시험 결과에 따른 대안으로 남긴다. Vercel WebSocket은 베타로 지원되지만, 첫 경로는 iPad 후보 발화별 짧은 HTTP 요청으로 측정한다. 화자 프로필·동의·병원 환자 컬럼은 [별도 설계](08-hospital-patient-registry-and-voice.md)를 참고한다.
+현재 구현 우선순위는 Vercel의 FastAPI와 `apps/portal_web/dist/` 정적 빌드 배포다. 위 관리형 컨테이너 목록은 운영·실시간 시험 결과에 따른 대안으로 남긴다. 첫 iPad 경로는 후보 발화별 짧은 HTTP 요청으로 측정한다. 화자 프로필·동의·병원 환자 컬럼은 [별도 설계](08-hospital-patient-registry-and-voice.md)를 참고한다.
 
 ---
 
