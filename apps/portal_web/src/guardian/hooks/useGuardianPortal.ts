@@ -20,7 +20,7 @@ export function useGuardianPortal() {
     const owner = requests.current.begin(); setBusy(true)
     void guardianApi.links(api, token).then(rows => {
       if (!requests.current.owns(owner)) return
-      setLinks(rows); const first = rows.find(validLink)?.patient_id ?? ''; setPatientId(first); setBusy(false)
+      setLinks(rows); const first = rows.find(link => validLink(link))?.patient_id ?? ''; setPatientId(first); setBusy(false)
       if (first) void loadFacts(first)
     }).catch(() => { if (requests.current.owns(owner)) { setBusy(false); setStatus('환자 연결을 확인하지 못했습니다.') } })
     return () => requests.current.invalidate()

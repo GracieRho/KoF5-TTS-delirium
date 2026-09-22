@@ -10,6 +10,6 @@ export function LoginForm({ kind, ready, onLogin, onSignup }: { kind: '보호자
     <label>비밀번호<input aria-label="비밀번호" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label>
     <button className="primary" disabled={!ready || busy}>{busy ? '확인 중' : `${kind} 로그인`}</button>
     {onSignup && <button className="secondary" type="button" disabled={!ready || busy || !email || !password} onClick={signup}>보호자 계정 만들기</button>}
-    <StatusMessage>{status || (ready ? '로그인할 수 있습니다.' : '전용 로그인 연결을 확인하고 있습니다.')}</StatusMessage>
+    <StatusMessage>{status || (!ready ? '전용 로그인 연결을 확인하고 있습니다.' : '')}</StatusMessage>
   </form>
 }

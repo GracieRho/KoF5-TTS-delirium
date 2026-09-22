@@ -20,6 +20,10 @@
   --success: #2e654f;
   --success-soft: #edf6f1;
   --shadow: 0 1px 2px rgb(26 29 26 / .035);
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --panel-padding: clamp(1.25rem, 2.5vw, 1.75rem);
 }
 
 * { box-sizing: border-box }
@@ -31,7 +35,7 @@ button, a { -webkit-tap-highlight-color: transparent }
 :focus-visible { outline: 2px solid #3e7b66; outline-offset: 3px }
 a { color: inherit }
 h1, h2, h3, p { margin-top: 0 }
-h1 { margin-bottom: .85rem; font-size: clamp(2.15rem, 4.5vw, 3.65rem); line-height: 1.08; letter-spacing: -.055em; font-weight: 650 }
+h1 { margin-bottom: .85rem; font-size: 2rem; line-height: 1.2; letter-spacing: -.035em; font-weight: 650 }
 h2 { margin-bottom: .35rem; font-size: 1.08rem; line-height: 1.35; letter-spacing: -.018em }
 h3 { margin: 1.8rem 0 .8rem; font-size: .92rem; letter-spacing: -.01em }
 p { line-height: 1.65 }
@@ -47,28 +51,22 @@ hr { height: 1px; margin: 1.75rem 0; border: 0; background: var(--line) }
 .app-header nav a:hover { text-decoration: underline; text-underline-offset: 4px }
 .nav-label { color: var(--faint) }
 
-.page { max-width: 1260px; margin: auto; padding: clamp(2.8rem, 6vw, 5.5rem) clamp(1rem, 4vw, 3.25rem) 6rem }
-.page-heading { max-width: 760px; margin-bottom: clamp(2.25rem, 5vw, 4rem) }
-.page-intro { max-width: 640px; margin-bottom: 0; color: var(--muted); font-size: 1rem }
-.eyebrow { margin-bottom: .75rem; color: var(--brand); font-size: .78rem; font-weight: 750 }
+.page { max-width: 1260px; margin: auto; padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 3.25rem) 6rem }
 
 .guardian-page { max-width: 900px }
-.guardian-page .page-heading, .guardian-flow { width: min(100%, 720px); margin-inline: auto }
-.guardian-flow { display: grid; gap: 1rem }
-.auth-layout { max-width: 860px; display: grid; grid-template-columns: minmax(330px, 1fr) minmax(280px, .8fr); gap: 1rem; align-items: start }
-.hospital-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 1rem; align-items: start }
-.stack { display: grid; gap: 1rem }
+.guardian-flow { width: min(100%, 720px); margin-inline: auto; display: grid; gap: var(--space-5) }
+.auth-layout { max-width: 860px; display: grid; grid-template-columns: minmax(330px, 1fr) minmax(280px, .8fr); gap: var(--space-5); align-items: start }
+.hospital-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--space-5); align-items: start }
+.stack { display: grid; gap: var(--space-5) }
 
-.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: clamp(1.25rem, 3vw, 2rem); box-shadow: var(--shadow) }
-.panel-heading { min-height: 42px; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; margin-bottom: 1.35rem }
+.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: var(--panel-padding); box-shadow: var(--shadow) }
+.panel-heading { min-height: 42px; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5) }
 .panel-title { max-width: 560px }
 .panel-heading p { margin: .2rem 0 0; color: var(--muted); font-size: .9rem }
 .panel-actions { flex: 0 0 auto }
-.boundary { border-left: 3px solid #85a396; background: #fafbf9; box-shadow: none }
-.avoid-panel { border-left: 3px solid #b38a62 }
-.voice-panel { border-top: 3px solid var(--brand) }
+.boundary { background: #fafbf9; box-shadow: none }
 
-.form-stack { display: grid; gap: .9rem }
+.form-stack { display: grid; gap: var(--space-4) }
 .form-stack label, label.field { display: grid; gap: .45rem; color: #3b3e39; font-size: .84rem; font-weight: 720 }
 input, select, textarea { width: 100%; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 7px; padding: .68rem .78rem; color: var(--ink); background: #fff }
 input:hover, select:hover, textarea:hover { border-color: #aeb1aa }
@@ -80,27 +78,27 @@ button.primary { border-color: var(--ink); color: #fff; background: var(--ink) }
 button.primary:hover:not(:disabled) { border-color: #0d0e0d; background: #0d0e0d }
 button.danger { color: var(--danger); border-color: #dfc3c5 }
 button:disabled { opacity: .48; cursor: not-allowed }
-.button-row { display: flex; flex-wrap: wrap; gap: .55rem }
+.button-row { display: flex; flex-wrap: wrap; gap: var(--space-3) }
 .button-row > * { flex: 0 1 auto }
 
-.status { margin-top: .9rem; padding: .72rem .8rem; border: 1px solid #d8e4de; border-radius: 7px; color: #355c4d; background: var(--brand-soft); line-height: 1.5; font-size: .84rem }
-.status-warning { color: #70461f; border-color: #ead9c5; background: var(--warning-soft) }
-.status-danger { color: #7f343b; border-color: #e7cfd1; background: var(--danger-soft) }
-.status-success { border-color: #d4e4dc; background: var(--success-soft) }
+.toast { position: fixed; z-index: 1000; top: 1rem; right: 1rem; width: min(420px, calc(100vw - 2rem)); padding: .85rem 1rem; border-radius: 8px; color: #fff; background: #262a27; box-shadow: 0 12px 34px rgb(20 24 21 / .18); line-height: 1.5; font-size: .88rem }
+.toast-success { background: var(--success) }
+.toast-warning { background: #73512e }
+.toast-danger { background: var(--danger) }
 
 .item-list { display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none }
-.item { padding: 1rem 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent }
+.item { padding: 1.1rem 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent }
 .item p { margin-bottom: .35rem }
 .item p:last-child { margin-bottom: 0 }
 .item-title { margin-bottom: .35rem; color: var(--ink); font-size: .9rem; font-weight: 750 }
 .item-meta { display: block; margin-top: .3rem; color: var(--muted); font-size: .78rem; line-height: 1.5 }
-.item button { margin-top: .7rem }
-.warning-strip { padding-left: .85rem; border-left: 2px solid #b6875d; background: transparent }
-.patient-button { min-height: 64px; width: 100%; padding: .8rem .7rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; background: transparent }
+.item button { margin-top: var(--space-3) }
+.item-list + label.field, label.field + .item-list { margin-top: var(--space-5) }
+.patient-button { min-height: 68px; width: 100%; padding: var(--space-4) var(--space-3); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; background: transparent }
 .patient-button strong { display: block; margin-bottom: .2rem; font-size: .88rem }
-.patient-button[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft); box-shadow: inset 3px 0 var(--brand) }
+.patient-button[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft) }
 
-.tabs { display: flex; gap: 1.2rem; margin: 0 0 1.75rem; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin }
+.tabs { display: flex; gap: var(--space-5); margin: 0 0 var(--space-5); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin }
 .tabs button { min-height: 43px; padding: .4rem 0 .7rem; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); white-space: nowrap; background: transparent }
 .tabs button:hover:not(:disabled) { color: var(--ink); background: transparent }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand) }
@@ -119,7 +117,6 @@ button:disabled { opacity: .48; cursor: not-allowed }
   .hospital-header .workspace-label { padding: 0; border: 0 }
   .hospital-header nav { margin-top: auto; padding-top: 1.25rem; border-top: 1px solid var(--line); display: grid; gap: .5rem }
   .hospital-page { max-width: 1440px; margin-left: 220px; padding-left: clamp(2rem, 4vw, 4rem) }
-  .hospital-heading h1 { font-size: 2.2rem }
   .hospital-sidebar { position: sticky; top: 1.5rem }
 }
 
@@ -131,8 +128,7 @@ button:disabled { opacity: .48; cursor: not-allowed }
   .app-header { min-height: 64px; padding: .75rem 1rem }
   .nav-label, .workspace-label { display: none }
   .page { padding: 2.4rem 1rem 4rem }
-  .page-heading { margin-bottom: 2rem }
-  .guardian-flow { gap: .8rem }
+  .guardian-flow { gap: var(--space-4) }
   .panel { padding: 1.15rem }
   .panel-heading { display: grid; gap: .8rem; margin-bottom: 1.1rem }
   .button-row > * { flex: 1 1 145px }

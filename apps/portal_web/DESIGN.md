@@ -47,3 +47,6 @@ Acctual의 중립 작업면, 강한 제목/본문 계층, 절제된 경계·라�
 - 환자 화면에 포털의 메뉴·버튼·폼·디버그 정보를 축소 복제
 - Acctual의 금융 지표나 카피를 제품 의미 검토 없이 복제
 - 포털 표시를 의료진 확인 또는 임상 해결로 과장
+- eyebrow·kicker·overline·pretitle과 이를 큰 제목·설명문 위에 쌓는 장식적 히어로 구조
+- 동작 결과·로딩·성공·실패를 본문 안의 색상 `div`, 배너, 카드로 계속 점유하는 상태 표시. 일시적 피드백은 한 번에 하나의 접근 가능한 toast/snackbar로 표시한다.
+- 카드·callout·aside·목록 행 왼쪽에 색상 선을 붙이는 left accent border, accent stroke, accent stripe
