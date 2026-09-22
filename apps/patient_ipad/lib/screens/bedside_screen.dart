@@ -200,7 +200,7 @@ class _StackedLayout extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               const Positioned(
-                left: 190,
+                left: -24,
                 right: -24,
                 bottom: -24,
                 height: 166,

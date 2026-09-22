@@ -26,8 +26,8 @@ class GuidanceLandscapeArtwork extends StatelessWidget {
       key: const ValueKey('guidance-landscape-artwork'),
       child: SvgPicture.asset(
         'assets/images/guidance_landscape.svg',
-        fit: BoxFit.cover,
-        alignment: Alignment.centerRight,
+        fit: BoxFit.fitWidth,
+        alignment: Alignment.bottomRight,
       ),
     ),
   );
