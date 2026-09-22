@@ -8,6 +8,11 @@ abstract final class PatientColors {
   static const warm = Color(0xFFF4F2ED);
   static const paper = Color(0xFFFCFCF9);
   static const line = Color(0xFFD8DCD7);
+  static const sunSoft = Color(0x66F4EEDC);
+  static const sunGlow = Color(0x80F8E9C9);
+  static const horizonBack = Color(0x80E9EEEC);
+  static const horizonMiddle = Color(0x99E1E8E4);
+  static const horizonFront = Color(0xA6D9E2DD);
 }
 
 ThemeData patientTheme() => ThemeData(

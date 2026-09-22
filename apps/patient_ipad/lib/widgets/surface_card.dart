@@ -16,16 +16,24 @@ class SurfaceCard extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       color: PatientColors.paper,
-      border: Border.all(color: PatientColors.line),
-      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFFDDE0DC)),
+      borderRadius: BorderRadius.circular(26),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x08000000),
-          blurRadius: 20,
-          offset: Offset(0, 6),
+          color: Color(0x0A26332C),
+          blurRadius: 24,
+          offset: Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Color(0x05000000),
+          blurRadius: 3,
+          offset: Offset(0, 1),
         ),
       ],
     ),
-    child: Padding(padding: padding, child: child),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: Padding(padding: padding, child: child),
+    ),
   );
 }

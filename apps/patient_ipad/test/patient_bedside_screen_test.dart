@@ -38,7 +38,12 @@ void main() {
     expect(find.textContaining('토큰'), findsNothing);
     expect(find.textContaining('AI'), findsNothing);
     expect(find.byType(Icon), findsNothing);
-    expect(find.byType(SurfaceCard), findsOneWidget);
+    expect(find.byType(SurfaceCard), findsNWidgets(4));
+    expect(find.byKey(const ValueKey('time-ambient-artwork')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('guidance-landscape-artwork')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('compact production surface stays readable and scrollable', (
