@@ -1,45 +1,146 @@
 :root {
-  color: #1b2927; background: #f5f7f5; font-family: Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --ink: #1b2927; --muted: #5b6b68; --brand: #123f3b; --brand-soft: #e7f0ed; --paper: #fff; --line: #d8e0dd;
-  --warning: #9a4d20; --warning-soft: #fff4eb; --danger: #9b3039; --danger-soft: #fff0f1; --success: #28644f; --success-soft: #e9f4ef;
-  --shadow: 0 1px 2px rgb(17 49 45 / .08), 0 10px 28px rgb(17 49 45 / .06);
+  color: #20211f;
+  background: #f3f3f1;
+  font-family: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --ink: #20211f;
+  --muted: #747770;
+  --faint: #90928d;
+  --brand: #245847;
+  --brand-hover: #1c493b;
+  --brand-soft: #edf3ef;
+  --paper: #fff;
+  --canvas: #f3f3f1;
+  --rail: #f5f5f3;
+  --line: #e4e5e1;
+  --line-strong: #cbcdc7;
+  --warning: #845329;
+  --warning-soft: #faf4e9;
+  --danger: #913d45;
+  --danger-soft: #fbefef;
+  --success: #2e654f;
+  --success-soft: #edf6f1;
+  --shadow: 0 1px 2px rgb(26 29 26 / .035);
 }
+
 * { box-sizing: border-box }
-body { margin: 0; min-width: 320px; word-break: keep-all; overflow-wrap: anywhere }
+html, body, #root { min-height: 100% }
+html { background: var(--canvas) }
+body { margin: 0; min-width: 320px; color: var(--ink); background: var(--canvas); word-break: keep-all; overflow-wrap: anywhere }
 button, input, select, textarea { font: inherit }
 button, a { -webkit-tap-highlight-color: transparent }
-:focus-visible { outline: 3px solid #3b8a7a; outline-offset: 3px }
+:focus-visible { outline: 2px solid #3e7b66; outline-offset: 3px }
 a { color: inherit }
 h1, h2, h3, p { margin-top: 0 }
-h1 { font-family: "Nanum Myeongjo", "Apple SD Gothic Neo", serif; font-size: clamp(2rem, 5vw, 3.8rem); line-height: 1.12; letter-spacing: -.04em; margin-bottom: 1rem }
-h2 { font-size: 1.25rem; letter-spacing: -.02em }
-h3 { font-size: 1rem }
+h1 { margin-bottom: .85rem; font-size: clamp(2.15rem, 4.5vw, 3.65rem); line-height: 1.08; letter-spacing: -.055em; font-weight: 650 }
+h2 { margin-bottom: .35rem; font-size: 1.08rem; line-height: 1.35; letter-spacing: -.018em }
+h3 { margin: 1.8rem 0 .8rem; font-size: .92rem; letter-spacing: -.01em }
 p { line-height: 1.65 }
-.app-header { min-height: 66px; padding: 0 clamp(1rem, 4vw, 3.5rem); background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 1rem }
-.app-header nav a { color: #dcebe7; font-size: .9rem; text-underline-offset: 4px }
-.brand { font-weight: 800; text-decoration: none }.brand span { color: #8fc4b8; margin-right: .45rem }
-.page { max-width: 1280px; margin: auto; padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem) 5rem }
-.page-intro { max-width: 680px; color: var(--muted); font-size: 1.08rem; margin-bottom: 2rem }
-.eyebrow { color: var(--brand); font-weight: 800; margin-bottom: .65rem }
-.portal-grid { display: grid; grid-template-columns: minmax(270px, .72fr) minmax(440px, 1.28fr); gap: 1rem; align-items: start }
-.hospital-grid { display: grid; grid-template-columns: minmax(270px, 360px) minmax(0, 1fr); gap: 1rem; align-items: start }
+hr { height: 1px; margin: 1.75rem 0; border: 0; background: var(--line) }
+
+.app-header { position: relative; z-index: 5; min-height: 72px; padding: 0 clamp(1.1rem, 4vw, 3rem); border-bottom: 1px solid var(--line); background: var(--paper); display: flex; align-items: center; justify-content: space-between; gap: 1.25rem }
+.brand-block { display: flex; align-items: center; gap: .8rem }
+.brand { display: inline-flex; align-items: center; gap: .55rem; font-size: .95rem; font-weight: 760; letter-spacing: -.025em; text-decoration: none }
+.brand span { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 6px; color: #fff; background: var(--brand); font-size: .78rem; font-weight: 800 }
+.workspace-label { padding-left: .8rem; border-left: 1px solid var(--line); color: var(--muted); font-size: .78rem }
+.app-header nav { display: flex; align-items: center; gap: .8rem; font-size: .83rem }
+.app-header nav a { color: var(--brand); font-weight: 700; text-decoration: none }
+.app-header nav a:hover { text-decoration: underline; text-underline-offset: 4px }
+.nav-label { color: var(--faint) }
+
+.page { max-width: 1260px; margin: auto; padding: clamp(2.8rem, 6vw, 5.5rem) clamp(1rem, 4vw, 3.25rem) 6rem }
+.page-heading { max-width: 760px; margin-bottom: clamp(2.25rem, 5vw, 4rem) }
+.page-intro { max-width: 640px; margin-bottom: 0; color: var(--muted); font-size: 1rem }
+.eyebrow { margin-bottom: .75rem; color: var(--brand); font-size: .78rem; font-weight: 750 }
+
+.guardian-page { max-width: 900px }
+.guardian-page .page-heading, .guardian-flow { width: min(100%, 720px); margin-inline: auto }
+.guardian-flow { display: grid; gap: 1rem }
+.auth-layout { max-width: 860px; display: grid; grid-template-columns: minmax(330px, 1fr) minmax(280px, .8fr); gap: 1rem; align-items: start }
+.hospital-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 1rem; align-items: start }
 .stack { display: grid; gap: 1rem }
-.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: clamp(1.25rem, 3vw, 2rem); box-shadow: var(--shadow) }
-.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem }.panel-heading p { color: var(--muted); margin-bottom: 0 }
-.boundary { border-left: 5px solid #7aa598; box-shadow: none; background: #f0f5f2 }
-.form-stack { display: grid; gap: .85rem }.form-stack label, label.field { display: grid; gap: .4rem; font-size: .9rem; font-weight: 750 }
-input, select, textarea { width: 100%; min-height: 46px; border: 1px solid #afc0bb; border-radius: 6px; padding: .7rem .8rem; color: var(--ink); background: #fff }
-textarea { min-height: 112px; resize: vertical; line-height: 1.5 }
-button { min-height: 42px; border: 1px solid #aebfba; border-radius: 6px; padding: .65rem .9rem; font-weight: 750; color: var(--brand); background: #fff; cursor: pointer }
-button.primary { color: #fff; border-color: var(--brand); background: var(--brand) } button.danger { color: var(--danger); border-color: #e2b8bc } button:disabled { opacity: .52; cursor: not-allowed }
-.button-row { display: flex; flex-wrap: wrap; gap: .6rem }.button-row > * { flex: 0 1 auto }
-.status { margin-top: .8rem; border-left: 4px solid #6a9388; background: var(--brand-soft); padding: .7rem .85rem; line-height: 1.5; font-size: .9rem }.status-warning { border-color: var(--warning); background: var(--warning-soft) }.status-danger { border-color: var(--danger); background: var(--danger-soft) }.status-success { border-color: var(--success); background: var(--success-soft) }
-.item-list { display: grid; gap: .6rem; list-style: none; padding: 0; margin: 0 }.item { border: 1px solid var(--line); border-radius: 6px; padding: 1rem; background: #fff }.item p:last-child { margin-bottom: 0 }.item-title { color: var(--brand); font-weight: 800; margin-bottom: .35rem }.item-meta { color: var(--muted); font-size: .82rem }
-.patient-button { text-align: left; width: 100%; border-left: 4px solid transparent }.patient-button[aria-pressed="true"] { border-left-color: var(--brand); background: var(--brand-soft) }
-.tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--line); overflow-x: auto; margin: 0 0 1.5rem }.tabs button { border: 0; border-radius: 0; white-space: nowrap; background: transparent }.tabs button[aria-selected="true"] { color: var(--brand); border-bottom: 3px solid var(--brand) }
-.empty-state { color: var(--muted); padding: 1rem; border: 1px dashed #b9c8c4; border-radius: 6px }
-.disclosure { border-top: 1px solid var(--line) }.disclosure summary { cursor: pointer; padding: 1rem 0; font-weight: 800 }.disclosure-body { padding: 0 0 1rem }
-.compact { font-size: .9rem; color: var(--muted) }.danger-text { color: var(--danger) }.warning-strip { border-left: 5px solid var(--warning); background: var(--warning-soft) }
-@media (max-width: 820px) { .portal-grid, .hospital-grid { grid-template-columns: 1fr }.app-header { min-height: 60px }.page { padding-top: 2rem }.hospital-sidebar { position: static }.button-row > * { flex: 1 1 150px } }
-@media (max-width: 460px) { .app-header { padding: 0 1rem }.app-header nav { font-size: .8rem }.panel { padding: 1rem }.panel-heading { display: grid }.button-row > * { flex-basis: 100% } }
+
+.panel { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: clamp(1.25rem, 3vw, 2rem); box-shadow: var(--shadow) }
+.panel-heading { min-height: 42px; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; margin-bottom: 1.35rem }
+.panel-title { max-width: 560px }
+.panel-heading p { margin: .2rem 0 0; color: var(--muted); font-size: .9rem }
+.panel-actions { flex: 0 0 auto }
+.boundary { border-left: 3px solid #85a396; background: #fafbf9; box-shadow: none }
+.avoid-panel { border-left: 3px solid #b38a62 }
+.voice-panel { border-top: 3px solid var(--brand) }
+
+.form-stack { display: grid; gap: .9rem }
+.form-stack label, label.field { display: grid; gap: .45rem; color: #3b3e39; font-size: .84rem; font-weight: 720 }
+input, select, textarea { width: 100%; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 7px; padding: .68rem .78rem; color: var(--ink); background: #fff }
+input:hover, select:hover, textarea:hover { border-color: #aeb1aa }
+input:focus, select:focus, textarea:focus { border-color: #5e8877 }
+textarea { min-height: 116px; resize: vertical; line-height: 1.55 }
+button { min-height: 40px; border: 1px solid var(--line-strong); border-radius: 7px; padding: .58rem .82rem; color: #353835; background: #fff; font-size: .84rem; font-weight: 720; cursor: pointer }
+button:hover:not(:disabled) { border-color: #a2a59f; background: #fafaf8 }
+button.primary { border-color: var(--ink); color: #fff; background: var(--ink) }
+button.primary:hover:not(:disabled) { border-color: #0d0e0d; background: #0d0e0d }
+button.danger { color: var(--danger); border-color: #dfc3c5 }
+button:disabled { opacity: .48; cursor: not-allowed }
+.button-row { display: flex; flex-wrap: wrap; gap: .55rem }
+.button-row > * { flex: 0 1 auto }
+
+.status { margin-top: .9rem; padding: .72rem .8rem; border: 1px solid #d8e4de; border-radius: 7px; color: #355c4d; background: var(--brand-soft); line-height: 1.5; font-size: .84rem }
+.status-warning { color: #70461f; border-color: #ead9c5; background: var(--warning-soft) }
+.status-danger { color: #7f343b; border-color: #e7cfd1; background: var(--danger-soft) }
+.status-success { border-color: #d4e4dc; background: var(--success-soft) }
+
+.item-list { display: grid; gap: 0; margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none }
+.item { padding: 1rem 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent }
+.item p { margin-bottom: .35rem }
+.item p:last-child { margin-bottom: 0 }
+.item-title { margin-bottom: .35rem; color: var(--ink); font-size: .9rem; font-weight: 750 }
+.item-meta { display: block; margin-top: .3rem; color: var(--muted); font-size: .78rem; line-height: 1.5 }
+.item button { margin-top: .7rem }
+.warning-strip { padding-left: .85rem; border-left: 2px solid #b6875d; background: transparent }
+.patient-button { min-height: 64px; width: 100%; padding: .8rem .7rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; background: transparent }
+.patient-button strong { display: block; margin-bottom: .2rem; font-size: .88rem }
+.patient-button[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft); box-shadow: inset 3px 0 var(--brand) }
+
+.tabs { display: flex; gap: 1.2rem; margin: 0 0 1.75rem; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin }
+.tabs button { min-height: 43px; padding: .4rem 0 .7rem; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); white-space: nowrap; background: transparent }
+.tabs button:hover:not(:disabled) { color: var(--ink); background: transparent }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand) }
+[role="tabpanel"]:focus-visible { outline-offset: 8px }
+.empty-state { margin: .5rem 0 0; padding: 1rem 0; border: 0; color: var(--muted); font-size: .88rem }
+.disclosure { border-top: 1px solid var(--line) }
+.disclosure:last-child { border-bottom: 1px solid var(--line) }
+.disclosure summary { padding: 1rem 0; font-size: .9rem; font-weight: 750; cursor: pointer }
+.disclosure-body { padding: 0 0 1.25rem }
+.compact { color: var(--muted); font-size: .84rem }
+.danger-text { color: var(--danger) }
+
+@media (min-width: 1020px) {
+  .hospital-header { position: fixed; inset: 0 auto 0 0; width: 220px; min-height: 100vh; padding: 1.5rem 1.25rem; border: 0; border-right: 1px solid var(--line); flex-direction: column; align-items: stretch; justify-content: flex-start; background: var(--rail) }
+  .hospital-header .brand-block { display: grid; gap: 1rem }
+  .hospital-header .workspace-label { padding: 0; border: 0 }
+  .hospital-header nav { margin-top: auto; padding-top: 1.25rem; border-top: 1px solid var(--line); display: grid; gap: .5rem }
+  .hospital-page { max-width: 1440px; margin-left: 220px; padding-left: clamp(2rem, 4vw, 4rem) }
+  .hospital-heading h1 { font-size: 2.2rem }
+  .hospital-sidebar { position: sticky; top: 1.5rem }
+}
+
+@media (max-width: 1019px) {
+  .hospital-grid, .auth-layout { grid-template-columns: 1fr }
+  .hospital-sidebar { position: static }
+}
+@media (max-width: 700px) {
+  .app-header { min-height: 64px; padding: .75rem 1rem }
+  .nav-label, .workspace-label { display: none }
+  .page { padding: 2.4rem 1rem 4rem }
+  .page-heading { margin-bottom: 2rem }
+  .guardian-flow { gap: .8rem }
+  .panel { padding: 1.15rem }
+  .panel-heading { display: grid; gap: .8rem; margin-bottom: 1.1rem }
+  .button-row > * { flex: 1 1 145px }
+  .tabs { margin-inline: -1.15rem; padding-inline: 1.15rem }
+}
+@media (max-width: 420px) {
+  .brand { font-size: .87rem }
+  .app-header nav { font-size: .77rem }
+  .button-row > * { flex-basis: 100% }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important } }
