@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/patient_theme.dart';
 
@@ -20,12 +21,14 @@ class GuidanceLandscapeArtwork extends StatelessWidget {
   const GuidanceLandscapeArtwork({super.key});
 
   @override
-  Widget build(BuildContext context) => const IgnorePointer(
-    child: SizedBox(
-      key: ValueKey('guidance-landscape-artwork'),
-      width: 360,
-      height: 132,
-      child: CustomPaint(painter: _GuidanceLandscapePainter()),
+  Widget build(BuildContext context) => IgnorePointer(
+    child: SizedBox.expand(
+      key: const ValueKey('guidance-landscape-artwork'),
+      child: SvgPicture.asset(
+        'assets/images/guidance_landscape.svg',
+        fit: BoxFit.cover,
+        alignment: Alignment.centerRight,
+      ),
     ),
   );
 }
@@ -45,74 +48,6 @@ class _TimeAmbientPainter extends CustomPainter {
       size.width * 0.62,
       Paint()..color = PatientColors.sunGlow,
     );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _GuidanceLandscapePainter extends CustomPainter {
-  const _GuidanceLandscapePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawCircle(
-      Offset(size.width * 0.68, size.height * 0.34),
-      size.height * 0.28,
-      Paint()..color = PatientColors.sunGlow,
-    );
-    _drawHorizon(
-      canvas,
-      size,
-      baseline: 0.66,
-      crest: 0.44,
-      color: PatientColors.horizonBack,
-    );
-    _drawHorizon(
-      canvas,
-      size,
-      baseline: 0.82,
-      crest: 0.60,
-      color: PatientColors.horizonMiddle,
-    );
-    _drawHorizon(
-      canvas,
-      size,
-      baseline: 0.96,
-      crest: 0.72,
-      color: PatientColors.horizonFront,
-    );
-  }
-
-  void _drawHorizon(
-    Canvas canvas,
-    Size size, {
-    required double baseline,
-    required double crest,
-    required Color color,
-  }) {
-    final path = Path()
-      ..moveTo(0, size.height * baseline)
-      ..cubicTo(
-        size.width * 0.22,
-        size.height * crest,
-        size.width * 0.38,
-        size.height * crest,
-        size.width * 0.56,
-        size.height * baseline,
-      )
-      ..cubicTo(
-        size.width * 0.72,
-        size.height * (baseline + 0.11),
-        size.width * 0.84,
-        size.height * (crest - 0.03),
-        size.width,
-        size.height * crest,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(path, Paint()..color = color);
   }
 
   @override

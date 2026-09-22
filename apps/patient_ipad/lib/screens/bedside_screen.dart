@@ -137,8 +137,10 @@ class _WideLayout extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 const Positioned(
+                  left: 300,
                   right: -36,
                   bottom: -24,
+                  height: 154,
                   child: GuidanceLandscapeArtwork(),
                 ),
                 FractionallySizedBox(
@@ -198,8 +200,10 @@ class _StackedLayout extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               const Positioned(
-                right: -88,
+                left: 190,
+                right: -24,
                 bottom: -24,
+                height: 166,
                 child: GuidanceLandscapeArtwork(),
               ),
               FractionallySizedBox(
