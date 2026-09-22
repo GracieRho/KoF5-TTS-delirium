@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kof5_patient/device_anonymous_auth.dart';
-import 'package:kof5_patient/main.dart';
+import 'package:kof5_patient/main_debug.dart';
 import 'package:kof5_patient/on_device_speech.dart';
 import 'package:kof5_patient/synthetic_hospital_message.dart';
 import 'package:record_platform_interface/record_platform_interface.dart';
@@ -94,7 +94,7 @@ void main() {
               }
               return DueHospitalMessage(messageId, approved, DateTime.now());
             },
-            hospitalMessageAudio: (client, url, token, current, message) async {
+            hospitalMessageAudio: (client, url, current, message) async {
               audioCalls++;
               expect(confirms, 2);
               expect(message.approvedText, approved);

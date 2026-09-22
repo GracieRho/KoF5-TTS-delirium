@@ -10,6 +10,7 @@ from hmac import compare_digest
 import math
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 from typing import Literal
 from uuid import UUID
@@ -49,6 +50,43 @@ app = FastAPI(title="Synthetic Familiar Voice MVP", docs_url=None, redoc_url=Non
 # ponytail: one in-memory synthetic patient; add authenticated persistence and per-patient serialization before real data.
 app.state.sessions = {}
 
+PORTAL_DIST = Path(__file__).resolve().parents[2] / "apps" / "portal_web" / "dist"
+_PORTAL_ASSET_EXTENSIONS = frozenset({
+    ".avif", ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".png", ".svg",
+    ".ttf", ".webp", ".woff", ".woff2",
+})
+_PORTAL_HEADERS = {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": (
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
+        "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self' data:; connect-src 'self' https://*.supabase.co "
+        "wss://*.supabase.co http://127.0.0.1:54341 ws://127.0.0.1:54341"
+    ),
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+def _portal_index() -> FileResponse:
+    root = PORTAL_DIST.resolve()
+    index = (root / "index.html").resolve()
+    if index.parent != root or not index.is_file():
+        raise HTTPException(status_code=503, detail="웹 포털 빌드가 준비되지 않았습니다")
+    return FileResponse(index, media_type="text/html", headers=_PORTAL_HEADERS)
+
+
+def _portal_asset_path(asset_path: str) -> Path:
+    relative = PurePosixPath(asset_path)
+    if (not asset_path or relative.is_absolute()
+            or any(part in {"", ".", ".."} or part.startswith(".") for part in relative.parts)
+            or relative.suffix.lower() not in _PORTAL_ASSET_EXTENSIONS):
+        raise HTTPException(status_code=404, detail="정적 파일을 찾을 수 없습니다")
+    root = (PORTAL_DIST / "assets").resolve()
+    target = (root / Path(*relative.parts)).resolve()
+    if root not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404, detail="정적 파일을 찾을 수 없습니다")
+    return target
+
 
 @app.get("/demo", include_in_schema=False)
 def demo() -> FileResponse:
@@ -67,11 +105,32 @@ def guardian_demo() -> FileResponse:
 
 @app.get("/guardian", include_in_schema=False)
 def guardian_portal() -> FileResponse:
-    return FileResponse(Path(__file__).with_name("guardian_portal.html"))
+    return _portal_index()
 
 
 @app.get("/hospital", include_in_schema=False)
 def hospital_portal() -> FileResponse:
+    return _portal_index()
+
+
+@app.get("/assets/{asset_path:path}", include_in_schema=False)
+def portal_asset(asset_path: str) -> FileResponse:
+    return FileResponse(
+        _portal_asset_path(asset_path),
+        headers={"Cache-Control": "public, max-age=31536000, immutable",
+                 "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@app.get("/internal/legacy/guardian", include_in_schema=False)
+def legacy_guardian_portal(request: Request) -> FileResponse:
+    _internal_demo_auth(request)
+    return FileResponse(Path(__file__).with_name("guardian_portal.html"))
+
+
+@app.get("/internal/legacy/hospital", include_in_schema=False)
+def legacy_hospital_portal(request: Request) -> FileResponse:
+    _internal_demo_auth(request)
     return FileResponse(Path(__file__).with_name("hospital_portal.html"))
 
 
@@ -125,6 +184,11 @@ def health() -> dict[str, str]:
     return {"status": "synthetic_demo_only"}
 
 
+def _synthetic_material(request: Request) -> None:
+    if request.headers.get("x-synthetic-material") != "confirmed":
+        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+
+
 def _internal_demo_auth(request: Request) -> None:
     token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
     if len(token) < 32 or not token.isascii():
@@ -132,8 +196,7 @@ def _internal_demo_auth(request: Request) -> None:
     supplied_token = request.headers.get("x-internal-demo-token", "")
     if not supplied_token.isascii() or not compare_digest(supplied_token, token):
         raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
-    if request.headers.get("x-synthetic-material") != "confirmed":
-        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+    _synthetic_material(request)
 
 
 def _internal_demo_credentials(request: Request) -> CloudCredentials:
@@ -1039,7 +1102,9 @@ async def paired_synthetic_message_audio(patient_id: str, message_id: str, reque
     """Read one due approved synthetic message under device RLS, then voice its exact text."""
     if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", message_id):
         raise HTTPException(status_code=404, detail="합성 시험 메시지만 사용할 수 있습니다")
-    _internal_demo_auth(request)
+    # A shipped patient app cannot safely contain a server-side demo secret.
+    # Device JWT, pairing, current admission and consent are rechecked below.
+    _synthetic_material(request)
     credentials = await _paired_clone_credentials(request, patient_id)
     approved_text = await _paired_due_message(request, patient_id, message_id)
 
@@ -1089,3 +1154,9 @@ def end(patient_id: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="시작된 대화가 없습니다")
     session.stop()
     return {"event": "closed", "state": session.state}
+
+
+@app.get("/guardian/{spa_path:path}", include_in_schema=False)
+@app.get("/hospital/{spa_path:path}", include_in_schema=False)
+def portal_spa_fallback(spa_path: str) -> FileResponse:
+    return _portal_index()

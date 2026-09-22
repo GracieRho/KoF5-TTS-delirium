@@ -1,0 +1,13 @@
+export type PortalConfig = { url: string; publishable_key: string }
+export type Session = { access_token: string; user?: { id?: string } }
+export type GuardianLink = { patient_id: string; relationship: string; access_status: string; effective_at: string; expires_at?: string | null }
+export type FamilyFact = { fact_id: string; patient_id?: string; category: string; content: string; created_at?: string }
+export type Patient = { patient_id: string; ehr_patient_ref: string; staff_display_name: string; encounter_id?: string | null; ward_ref?: string | null; room_ref?: string | null; bed_ref?: string | null }
+export type HospitalFact = { fact_id: string; category: string; content: string; encounter_id: string; verified_at?: string; valid_until?: string | null; synthetic_source_ref?: string | null }
+export type HospitalMessage = { message_id?: string; patient_id?: string; encounter_id: string; approved_text: string; approved_by_staff_ref?: string; approved_at?: string; due_at: string; delivery_status: string; delivered_at?: string | null; cancelled_at?: string | null }
+export type HospitalReadiness = { hospital_ref: string; ready: boolean }
+export type MessageDraft = { draft_id: string; proposed_text: string; schedule_mode: string; requested_due_at?: string | null; proposed_by_auth_user_id: string; proposed_at: string; status: string }
+export type ContextDraft = { draft_id: string; patient_id: string; encounter_id: string; category: string; proposed_text: string; source_ref: string; proposed_by_auth_user_id: string; proposed_at: string; status: string }
+export type Transcript = { turn_id: string; transcript: string; captured_at: string }
+export type VoiceStatus = { authorized?: boolean; ready?: boolean; upload_enabled?: boolean; consent_id?: string | null; clone_id?: string | null; status?: 'none' | 'pending' | 'verification_pending' | 'created' | 'failed' | 'deletion_pending' | 'deleted' }
+export type SyntheticAlert = { alert_id: string; patient_id: string; encounter_id: string; state: 'created' | 'delivered' | 'acknowledged' | 'resolved' | 'failed'; risk_category: string; failure_reason?: string | null; created_at: string; delivered_at?: string | null; acknowledged_at?: string | null; resolved_at?: string | null; failed_at?: string | null }

@@ -1,8 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm --prefix apps/portal_web ci",
+  "buildCommand": "npm --prefix apps/portal_web run build",
   "functions": {
     "app.py": {
-      "excludeFiles": "{.git/**,.worktrees/**,.omx/**,.venv/**,.cache/**,.env*,secrets/**,apps/**,architecture/**,checkpoints/**,configs/**,data/**,docs/**,recordings/**,outputs/**,runs/**,scripts/**,tests/**}"
+      "includeFiles": "apps/portal_web/dist/**",
+      "excludeFiles": "{.git/**,.worktrees/**,.omx/**,.venv/**,.cache/**,.env*,secrets/**,apps/portal_web/node_modules/**,apps/patient_ipad/**,architecture/**,checkpoints/**,configs/**,data/**,docs/**,recordings/**,outputs/**,runs/**,scripts/**,tests/**}"
     }
   }
 }

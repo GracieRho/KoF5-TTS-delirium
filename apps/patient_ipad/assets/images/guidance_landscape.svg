@@ -1,0 +1,27 @@
+<svg width="720" height="154" viewBox="0 0 720 154" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sun" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(574 52) rotate(90) scale(43)">
+      <stop stop-color="#FFF2CF" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#F8E9C5" stop-opacity="0.58"/>
+    </radialGradient>
+    <linearGradient id="ridgeBack" x1="84" y1="84" x2="720" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F6F4" stop-opacity="0"/>
+      <stop offset="0.28" stop-color="#ECF1EF" stop-opacity="0.52"/>
+      <stop offset="1" stop-color="#E5ECE8" stop-opacity="0.66"/>
+    </linearGradient>
+    <linearGradient id="ridgeMiddle" x1="40" y1="112" x2="720" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2F5F3" stop-opacity="0"/>
+      <stop offset="0.34" stop-color="#E8EEEB" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#DEE8E3" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="ridgeFront" x1="0" y1="134" x2="720" y2="134" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EDF2EF" stop-opacity="0"/>
+      <stop offset="0.4" stop-color="#E2EAE6" stop-opacity="0.68"/>
+      <stop offset="1" stop-color="#D8E4DE" stop-opacity="0.84"/>
+    </linearGradient>
+  </defs>
+  <circle cx="574" cy="52" r="43" fill="url(#sun)"/>
+  <path d="M72 118C170 92 248 48 340 47C420 46 465 75 521 73C583 71 626 34 720 30V154H72V118Z" fill="url(#ridgeBack)"/>
+  <path d="M24 139C132 118 221 87 306 84C391 81 442 114 520 111C596 108 653 74 720 73V154H24V139Z" fill="url(#ridgeMiddle)"/>
+  <path d="M0 154C114 142 197 118 278 116C370 114 427 143 514 139C588 136 650 111 720 110V154H0Z" fill="url(#ridgeFront)"/>
+</svg>

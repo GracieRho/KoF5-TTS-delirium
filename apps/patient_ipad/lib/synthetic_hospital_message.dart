@@ -182,7 +182,6 @@ Future<List<dynamic>> _rpc(
 Future<Uint8List> synthesizeSyntheticHospitalMessage(
   HttpClient client,
   Uri endpoint,
-  String demoToken,
   AnonymousDeviceSession session,
   DueHospitalMessage message, {
   String? allowedOriginForTest,
@@ -211,14 +210,11 @@ Future<Uint8List> synthesizeSyntheticHospitalMessage(
       endpoint.path !=
           '/internal/synthetic/paired/$syntheticPatientId/message/${message.id}/audio' ||
       !_uuid.hasMatch(message.id) ||
-      !session.usable(DateTime.now()) ||
-      demoToken.length < 32 ||
-      !demoToken.runes.every((code) => code > 32 && code < 127)) {
+      !session.usable(DateTime.now())) {
     throw const FormatException('확인된 합성 병원 음성 시험 API가 필요합니다.');
   }
   final request = await client.postUrl(endpoint);
   request.followRedirects = false;
-  request.headers.set('X-Internal-Demo-Token', demoToken);
   request.headers.set('X-Synthetic-Material', 'confirmed');
   request.headers.set(
     HttpHeaders.authorizationHeader,

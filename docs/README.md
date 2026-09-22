@@ -7,13 +7,14 @@
 현재 제품 방향과 향후 검토 문서를 아래에서 찾을 수 있습니다.
 
 1. `repository-layout.md`: 폴더별 역할과 팀 작업 흐름
-2. `contributing.md`: 워크트리, 브랜치, PR과 리뷰 절차
-3. [MVP PRD 인덱스](Delirium_Familiar_Voice_MVP_PRD.md): 제품 방향, 기능, 평가와 주제별 문서
-4. [환자 시험 전 안전·윤리 게이트](delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md): 실제 환자 시험을 막는 선행 조건
-5. [병원 환자·목소리 프로필 설계](delirium-familiar-voice/08-hospital-patient-registry-and-voice.md): FHIR 범주와 최소 컬럼, 등록·삭제·권한 경계
-6. [ADR 폴더](../architecture/decisions/README.md): 클라우드 중심 전환, iPad·Vercel 우선 경로와 병원 등록 제안
-7. 향후 임상·데이터 거버넌스 문서: 승인된 발화, 동의, 보관 기간, 접근 권한과 폐기 절차
-8. 향후 평가·개발 문서: 한국어 음성 품질, 오작동, 지연 시간, 장애 처리와 재현 방법
+2. [DESIGN.md](../DESIGN.md): 환자 iPad와 보호자·병원 웹의 제품·UX 구현 계약
+3. `contributing.md`: 워크트리, 브랜치, PR과 리뷰 절차
+4. [MVP PRD 인덱스](Delirium_Familiar_Voice_MVP_PRD.md): 제품 방향, 기능, 평가와 주제별 문서
+5. [환자 시험 전 안전·윤리 게이트](delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md): 실제 환자 시험을 막는 선행 조건
+6. [병원 환자·목소리 프로필 설계](delirium-familiar-voice/08-hospital-patient-registry-and-voice.md): FHIR 범주와 최소 컬럼, 등록·삭제·권한 경계
+7. [ADR 폴더](../architecture/decisions/README.md): 클라우드 중심 전환, iPad·Vercel 우선 경로와 병원 등록 제안
+8. 향후 임상·데이터 거버넌스 문서: 승인된 발화, 동의, 보관 기간, 접근 권한과 폐기 절차
+9. 향후 평가·개발 문서: 한국어 음성 품질, 오작동, 지연 시간, 장애 처리와 재현 방법
 
 ## 작성 원칙
 

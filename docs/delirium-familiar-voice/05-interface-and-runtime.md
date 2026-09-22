@@ -1,24 +1,24 @@
 # 43. Patient Screen
 
-화면은 최대한 단순하게 한다.
+화면은 최대한 단순한 비조작형 병상 디스플레이로 만든다. 환자가 눌러야 하는 버튼, 설정, API 주소, 키, 토큰, 로그를 두지 않는다.
 
 예:
 
 ```text
 ┌─────────────────────────────┐
 │                             │
-│        가족 사진            │
-│                             │
 │      9월 15일 화요일        │
 │        오후 3:20            │
 │                             │
+│   해오름병원 · 502호         │
+│   다음 일정  오후 4시 CT     │
 │                             │
-│     [대화 상태 visual]      │
+│       [음성 상태]           │
 │                             │
 └─────────────────────────────┘
 ```
 
-환자가 눌러야 하는 핵심 버튼은 두지 않는다.
+환자가 눌러야 하는 핵심 버튼은 두지 않는다. 화면에 AI 정체성 표시는 제공하지 않는다. 이는 기존 [Gate 07 Identity Transparency](07-pre-patient-trial-safety-ethics-gate.md#3-gate-1--identity-transparency) 요구와 충돌하므로, 대체 고지·동의·정체성 질문 대응이 임상·기관 검토로 승인되기 전 실제 환자에게 사용하지 않는다.
 
 ---
 
@@ -58,6 +58,9 @@ voice animation
 - Listening
 - Speaking
 - Temporary connection/error state
+- Date, time, hospital place and next schedule
+
+내부 진단 화면은 위 환자 화면의 메뉴나 숨은 제스처로 열지 않는다. `apps/patient_ipad/lib/main_debug.dart` 별도 Flutter target으로만 실행한다.
 
 ## Guardian
 

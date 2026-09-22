@@ -1,0 +1,8 @@
+import { useRef, type KeyboardEvent } from 'react'
+export type HospitalTab = 'summary' | 'messages' | 'context' | 'operations'
+const labels: [HospitalTab, string][] = [['summary','개요'],['messages','일정·메시지'],['context','병원 맥락'],['operations','안전·기기']]
+export function HospitalTabs({ value, onChange, synthetic }: { value: HospitalTab; onChange: (value: HospitalTab) => void; synthetic: boolean }) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([]); const visible = labels.filter(([id]) => synthetic || id === 'summary')
+  function move(event: KeyboardEvent, index: number) { const key = event.key; if (!['ArrowLeft','ArrowRight','Home','End'].includes(key)) return; event.preventDefault(); const next = key === 'Home' ? 0 : key === 'End' ? visible.length - 1 : (index + (key === 'ArrowRight' ? 1 : -1) + visible.length) % visible.length; onChange(visible[next][0]); refs.current[next]?.focus() }
+  return <div className="tabs" role="tablist" aria-label="병원 업무">{visible.map(([id,label], index) => <button id={`hospital-tab-${id}`} aria-controls={`hospital-panel-${id}`} key={id} ref={element => { refs.current[index] = element }} role="tab" tabIndex={value === id ? 0 : -1} aria-selected={value === id} onKeyDown={event => move(event, index)} onClick={() => onChange(id)}>{label}</button>)}</div>
+}

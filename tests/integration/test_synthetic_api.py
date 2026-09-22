@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -143,12 +144,38 @@ class SyntheticApiTests(unittest.TestCase):
         self.assertEqual(self.client.post(f"{root}/end").json()["state"], "IDLE")
 
     def test_guardian_portal_exposes_only_a_dedicated_public_supabase_config(self) -> None:
-        portal = self.client.get("/guardian")
-        self.assertEqual(portal.status_code, 200)
-        self.assertIn("보호자 로그인", portal.text)
-        hospital = self.client.get("/hospital")
-        self.assertEqual(hospital.status_code, 200)
-        self.assertIn("병원 직원 로그인", hospital.text)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            portal_dist = Path(temporary_directory)
+            assets = portal_dist / "assets"
+            assets.mkdir()
+            (portal_dist / "index.html").write_text(
+                '<!doctype html><div id="root">새 포털</div>', encoding="utf-8")
+            (assets / "index-a1b2c3.js").write_text("export {};", encoding="utf-8")
+            (assets / "index-a1b2c3.js.map").write_text("{}", encoding="utf-8")
+            with patch("kof5_tts.api.PORTAL_DIST", portal_dist):
+                for route in ("/guardian", "/hospital", "/guardian/patients/1",
+                              "/hospital/alerts"):
+                    portal = self.client.get(route)
+                    self.assertEqual(portal.status_code, 200)
+                    self.assertIn("새 포털", portal.text)
+                    self.assertEqual(portal.headers["cache-control"], "no-store")
+                    self.assertEqual(portal.headers["x-content-type-options"], "nosniff")
+                asset = self.client.get("/assets/index-a1b2c3.js")
+                self.assertEqual(asset.status_code, 200)
+                self.assertIn("immutable", asset.headers["cache-control"])
+                self.assertEqual(self.client.get("/assets/index-a1b2c3.js.map").status_code, 404)
+                self.assertEqual(self.client.get("/assets/%2e%2e/index.html").status_code, 404)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch("kof5_tts.api.PORTAL_DIST", Path(temporary_directory) / "missing"):
+                self.assertEqual(self.client.get("/guardian").status_code, 503)
+        self.assertEqual(self.client.get("/internal/legacy/guardian").status_code, 503)
+        legacy_headers = {"X-Internal-Demo-Token": "t" * 32,
+                          "X-Synthetic-Material": "confirmed"}
+        with patch.dict(os.environ, {"KOF5_INTERNAL_DEMO_TOKEN": "t" * 32}):
+            self.assertIn("보호자 로그인", self.client.get(
+                "/internal/legacy/guardian", headers=legacy_headers).text)
+            self.assertIn("병원 직원 로그인", self.client.get(
+                "/internal/legacy/hospital", headers=legacy_headers).text)
         env = {
             "KOF5_SUPABASE_URL": "", "KOF5_SUPABASE_PUBLISHABLE_KEY": "",
             "KOF5_SUPABASE_PROJECT_REF": "", "VERCEL": "",
@@ -158,7 +185,7 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.get("/portal/config").status_code, 503)
         with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                                           "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
-                                          "SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
+                                          "KOF5_SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
             config = self.client.get("/guardian/config")
             self.assertEqual(config.json(), {
                 "url": "http://127.0.0.1:54341", "publishable_key": "sb_publishable_local",
@@ -1137,7 +1164,6 @@ class SyntheticApiTests(unittest.TestCase):
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
         }
         headers = {
-            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
             "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
         }
         approved = "CT 검사는 오늘 14시입니다."
@@ -1177,6 +1203,9 @@ class SyntheticApiTests(unittest.TestCase):
                  side_effect=lambda **_: sync_client_class(transport=httpx.MockTransport(provider))):
             self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
                                               headers=headers).status_code, 404)
+            self.assertEqual(self.client.post(path, headers={
+                "Authorization": headers["Authorization"],
+            }).status_code, 400)
             self.assertEqual(self.client.post(path, headers={k: v for k, v in headers.items()
                                                              if k != "Authorization"}).status_code, 401)
             self.assertEqual(spoken, [])
