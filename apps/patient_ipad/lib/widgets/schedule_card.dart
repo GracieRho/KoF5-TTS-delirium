@@ -9,55 +9,60 @@ class ScheduleCard extends StatelessWidget {
   final ScheduleItem item;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 17),
+  Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: item.isCurrent ? PatientColors.greenSoft : const Color(0xFFF7F9F8),
-      borderRadius: BorderRadius.circular(20),
+      color: item.isCurrent ? PatientColors.greenSoft : Colors.transparent,
       border: item.isCurrent
-          ? Border.all(color: const Color(0xFFB8D8CC))
+          ? const Border(left: BorderSide(color: PatientColors.green, width: 2))
           : null,
     ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 90,
-          child: Text(
-            item.timeLabel,
-            style: const TextStyle(
-              color: PatientColors.green,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
+    child: Padding(
+      padding: EdgeInsets.fromLTRB(item.isCurrent ? 18 : 0, 20, 0, 22),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(
+              item.timeLabel,
+              style: const TextStyle(
+                color: PatientColors.green,
+                fontSize: 16,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (item.description case final description?) ...[
-                const SizedBox(height: 4),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  description,
+                  item.title,
                   style: const TextStyle(
-                    color: PatientColors.muted,
-                    fontSize: 16,
+                    color: PatientColors.ink,
+                    fontSize: 20,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (item.description case final description?) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: PatientColors.muted,
+                      fontSize: 16,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

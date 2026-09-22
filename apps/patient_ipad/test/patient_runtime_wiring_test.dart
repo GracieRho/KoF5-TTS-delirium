@@ -39,7 +39,7 @@ void main() {
     );
 
     expect(find.text('안내 말씀을 들려드리고 있어요'), findsOneWidget);
-    expect(find.text('오후 3시에 검사가 있습니다.'), findsOneWidget);
+    expect(find.text('오후 3시에 검사가 있습니다.'), findsNothing);
     expect(find.byType(ButtonStyleButton), findsNothing);
 
     playback.complete(true);

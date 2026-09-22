@@ -5,6 +5,7 @@ import 'package:kof5_patient/models/bedside_context.dart';
 import 'package:kof5_patient/models/bedside_data.dart';
 import 'package:kof5_patient/models/bedside_status.dart';
 import 'package:kof5_patient/models/schedule_item.dart';
+import 'package:kof5_patient/widgets/surface_card.dart';
 
 void main() {
   final now = DateTime(2026, 9, 22, 15, 7);
@@ -31,6 +32,8 @@ void main() {
     expect(find.textContaining('API'), findsNothing);
     expect(find.textContaining('토큰'), findsNothing);
     expect(find.textContaining('AI'), findsNothing);
+    expect(find.byType(Icon), findsNothing);
+    expect(find.byType(SurfaceCard), findsOneWidget);
   });
 
   testWidgets('compact production surface stays readable and scrollable', (

@@ -15,14 +15,14 @@ class SurfaceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: PatientColors.paper,
       border: Border.all(color: PatientColors.line),
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(18),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x0D1F332D),
-          blurRadius: 24,
-          offset: Offset(0, 8),
+          color: Color(0x08000000),
+          blurRadius: 20,
+          offset: Offset(0, 6),
         ),
       ],
     ),
