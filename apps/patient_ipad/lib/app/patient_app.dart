@@ -53,6 +53,8 @@ class _PatientAppState extends State<PatientApp> {
         data: widget.data.withRuntime(
           status: runtime.status,
           message: runtime.message,
+          context: runtime.context,
+          schedule: runtime.schedule,
         ),
         clock: _clock,
       ),

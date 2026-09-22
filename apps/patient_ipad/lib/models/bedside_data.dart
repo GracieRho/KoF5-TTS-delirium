@@ -15,16 +15,20 @@ class BedsideData {
   final BedsideStatus status;
   final String? message;
 
-  BedsideData withRuntime({required BedsideStatus status, String? message}) =>
-      BedsideData(
-        context: context,
-        schedule: schedule,
-        status: status,
-        message: message ?? this.message,
-      );
+  BedsideData withRuntime({
+    required BedsideStatus status,
+    String? message,
+    BedsideContext? context,
+    List<ScheduleItem>? schedule,
+  }) => BedsideData(
+    context: context ?? this.context,
+    schedule: schedule ?? this.schedule,
+    status: status,
+    message: message ?? this.message,
+  );
 
   static const unverified = BedsideData(
-    context: BedsideContext(hospital: '', ward: '', room: ''),
+    context: BedsideContext.unverified,
     schedule: [],
     status: BedsideStatus.waiting,
     message: '확인된 병실 안내가 아직 없습니다.',

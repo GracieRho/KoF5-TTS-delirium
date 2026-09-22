@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kof5_patient/app/patient_app.dart';
 import 'package:kof5_patient/controllers/patient_runtime_controller.dart';
+import 'package:kof5_patient/models/approved_bedside_data.dart';
+import 'package:kof5_patient/models/bedside_context.dart';
+import 'package:kof5_patient/models/schedule_item.dart';
 import 'package:kof5_patient/services/runtime_hospital_message.dart';
 
 void main() {
@@ -47,6 +50,46 @@ void main() {
 
     expect(find.text('병원 안내를 기다리고 있어요'), findsOneWidget);
     expect(polls, 1);
+
+    await tester.pumpWidget(const SizedBox());
+    runtime.dispose();
+  });
+
+  testWidgets('failed refresh clears previously verified bedside orientation', (
+    tester,
+  ) async {
+    var loads = 0;
+    final runtime = PatientRuntimeController(
+      loadBedsideData: () async {
+        loads++;
+        if (loads > 1) throw const FormatException('stale');
+        return const ApprovedBedsideData(
+          context: BedsideContext(
+            hospital: '승인 병원',
+            ward: '승인 병동',
+            room: '승인 병실',
+          ),
+          schedule: [ScheduleItem(timeLabel: '검사 일정', title: '승인 검사 내용')],
+        );
+      },
+      pollHospital: () async => null,
+      pollInterval: const Duration(hours: 1),
+    );
+    addTearDown(runtime.dispose);
+
+    await tester.pumpWidget(PatientApp(runtime: runtime));
+    await _until(
+      tester,
+      () => find.textContaining('승인 병원').evaluate().isNotEmpty,
+    );
+    expect(find.text('승인 검사 내용'), findsOneWidget);
+
+    await runtime.refresh();
+    await tester.pump();
+
+    expect(find.textContaining('승인 병원'), findsNothing);
+    expect(find.text('승인 검사 내용'), findsNothing);
+    expect(find.text('병원 정보를 확인하고 있습니다'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     runtime.dispose();

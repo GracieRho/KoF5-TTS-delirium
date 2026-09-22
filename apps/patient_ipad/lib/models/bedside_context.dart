@@ -11,4 +11,6 @@ class BedsideContext {
 
   bool get verified =>
       hospital.isNotEmpty && ward.isNotEmpty && room.isNotEmpty;
+
+  static const unverified = BedsideContext(hospital: '', ward: '', room: '');
 }
