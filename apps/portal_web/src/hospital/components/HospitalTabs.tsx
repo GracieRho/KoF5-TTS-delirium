@@ -1,0 +1,3 @@
+export type HospitalTab = 'summary' | 'queue' | 'registration' | 'messages' | 'context' | 'safety' | 'device'
+const labels: [HospitalTab, string][] = [['summary','입원 정보'],['queue','전달 대기'],['registration','환자 등록'],['messages','메시지 승인'],['context','병원 맥락'],['safety','전사·경고'],['device','기기·음성']]
+export function HospitalTabs({ value, onChange, synthetic }: { value: HospitalTab; onChange: (value: HospitalTab) => void; synthetic: boolean }) { return <div className="tabs" role="tablist" aria-label="병원 업무">{labels.filter(([id]) => synthetic || !['messages','context','safety','device'].includes(id)).map(([id,label]) => <button key={id} role="tab" aria-selected={value === id} onClick={() => onChange(id)}>{label}</button>)}</div> }

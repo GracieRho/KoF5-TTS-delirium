@@ -1,0 +1,2 @@
+export function formatHospitalTime(value?: string | null) { if (!value) return '시각 미확인'; return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Seoul', hourCycle: 'h23' }).format(new Date(value)) + ' (한국 시간)' }
+export function encounterLabel(patient: { encounter_id?: string | null; ward_ref?: string | null; room_ref?: string | null; bed_ref?: string | null }) { return patient.encounter_id ? `${patient.ward_ref || '병동 미확인'} · ${patient.room_ref || '호실 미확인'} · ${patient.bed_ref || '병상 미확인'}` : '현재 입원 없음' }
