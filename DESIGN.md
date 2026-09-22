@@ -2,7 +2,7 @@
 
 ## Source of truth
 
-- Status: Needs refresh
+- Status: Active
 - Last refreshed: 2026-09-22
 - Primary product surfaces: 환자 병상 iPad, 보호자 반응형 웹, 병원 직원 반응형 웹, 내부 진단 화면
 - Evidence reviewed: `docs/delirium-familiar-voice/01-vision-and-scope.md`, `02-patient-conversation.md`, `03-context-and-guardian.md`, `04-apps-and-backend.md`, `05-interface-and-runtime.md`, `07-pre-patient-trial-safety-ethics-gate.md`, `08-hospital-patient-registry-and-voice.md`, `09-phase5-and-patient-trial-status.md`, `apps/patient_ipad/`, 기존 `src/kof5_tts/*_portal.html`
