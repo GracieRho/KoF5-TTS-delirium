@@ -4,7 +4,7 @@ import type { PortalConfig, Session } from '../types/domain'
 type Options = { method?: string; body?: unknown; token?: string | null; schema?: 'api'; returnRow?: boolean }
 
 export class SupabaseRest {
-  constructor(private config: PortalConfig) {}
+  constructor(private config: PortalConfig, private onAuthError?: (token: string) => void) {}
 
   async request<T>(path: string, options: Options = {}): Promise<T> {
     const method = options.method ?? 'GET'
@@ -14,6 +14,7 @@ export class SupabaseRest {
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
     if (options.returnRow) headers.Prefer = 'return=representation'
     const response = await fetch(this.config.url + path, { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) })
+    if (options.token && (response.status === 401 || response.status === 403)) this.onAuthError?.(options.token)
     return readJson<T>(response)
   }
 
