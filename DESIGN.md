@@ -11,21 +11,17 @@
 
 ### Reference patterns
 
-보호자 포털:
+단일 시각 레퍼런스는 [Acctual Web의 Mobbin 화면 모음](https://mobbin.com/apps/acctual-web-061f9247-bc8e-4bcc-9d21-deb0aa2b2cf8/4b3f6020-01ec-4e1e-9916-98976ddf3efb/screens)이다. 다음 화면 ID를 구현·리뷰 시 고정 highlight로 사용한다.
 
-- [Base44 Memory](https://mobbin.com/screens/0e4f499d-670b-4c3e-98bf-8eca59297b32): 한 번에 하나의 기억을 부담 없이 작성하는 입력 흐름을 참고한다. 자유 대시보드처럼 기능을 늘리지 않는다.
-- [komoot photo/share](https://mobbin.com/screens/c83a4224-e1cd-4e66-9c1f-dd943c44969d): 사진과 설명을 함께 확인하는 검토 구조를 참고한다. 공개 공유·소셜 반응 패턴은 사용하지 않는다.
-- [Delphi voice enrollment](https://mobbin.com/screens/904d476f-dd99-40e0-a4f6-6cea3ddb4f36): 음성 등록의 단계, 준비 상태와 재시도를 참고한다. 성공 표시가 실제 삭제·보존·임상 사용 승인을 뜻하게 만들지 않는다.
-- [Oyster checklist](https://mobbin.com/screens/b36e49cb-4dce-41aa-a161-696caedaef44): 온보딩의 남은 작업과 완료 상태를 참고한다. 안전 게이트를 단순 체크박스로 대체하지 않는다.
-- [Gusto consent](https://mobbin.com/screens/8b9abf72-9ad1-45ca-9d20-f754ecb16cb9): 동의 내용을 읽고 명시적으로 확인하는 구조를 참고한다. 목적별 동의를 하나의 포괄 동의로 합치지 않는다.
+- [`99b2fcf7-a4e2-4b55-bb7d-642dcf1bd6a4`](https://mobbin.com/screens/99b2fcf7-a4e2-4b55-bb7d-642dcf1bd6a4)
+- [`64fc965a-d486-4181-9129-e61ca5cf176b`](https://mobbin.com/screens/64fc965a-d486-4181-9129-e61ca5cf176b)
+- [`4d45d9bc-2fa2-44a3-9e67-c476bbc9b5b8`](https://mobbin.com/screens/4d45d9bc-2fa2-44a3-9e67-c476bbc9b5b8)
+- [`fc8e6275-f856-44da-9b2e-894d54b41a1e`](https://mobbin.com/screens/fc8e6275-f856-44da-9b2e-894d54b41a1e)
+- [`3bf71644-d8e1-4da4-9553-7ead9b198756`](https://mobbin.com/screens/3bf71644-d8e1-4da4-9553-7ead9b198756)
+- [`4a1d40e2-0783-4f20-a0f7-c27c52338cad`](https://mobbin.com/screens/4a1d40e2-0783-4f20-a0f7-c27c52338cad)
+- [`511ecfa5-8eda-4afd-bb07-6f49211b2518`](https://mobbin.com/screens/511ecfa5-8eda-4afd-bb07-6f49211b2518)
 
-병원 포털:
-
-- [Fresha table](https://mobbin.com/screens/a1f76a62-568f-4b2d-9c9f-6a610dd3ebf7): 검색 가능한 고밀도 환자 목록과 상태 스캔 패턴을 참고한다. 모바일에서 데스크톱 표를 그대로 축소하지 않는다.
-- [Time2book detail panel](https://mobbin.com/screens/c101a468-c2e9-4803-957e-b49489612815): 목록 문맥을 유지한 상세 패널을 참고한다. 중요한 승인·오류를 패널 안에 숨기지 않는다.
-- [Deputy approval queue](https://mobbin.com/screens/40b0eeda-18ea-4067-ba0f-1b757cdbe424): 대기 항목, 근거, 승인 작업을 한 흐름에서 비교하는 패턴을 참고한다. 자기 승인이나 일괄 안전 승인을 허용하지 않는다.
-- [Deputy schedule](https://mobbin.com/screens/a0e97f81-c13c-4ca3-ba74-1e00efd1ad19): 시간순 일정과 상태 구분을 참고한다. 승인되지 않은 일정을 환자 화면에 노출하지 않는다.
-- [incident.io alerts](https://mobbin.com/screens/1d72b14c-95e4-4d38-affb-039c4dc40139): 경고의 생성·수신·확인·해결 상태 분리를 참고한다. 포털 표시를 의료진 확인이나 임상 해결로 표현하지 않는다.
+Acctual에서 차분한 중립 작업면, 선명한 타이포그래피 계층, 절제된 경계·라운드, 일관된 폼·버튼·목록·상세 패널 언어를 차용한다. 금융 제품의 숫자 중심 밀도, 장식적 대시보드, 실제 의료 승인처럼 보일 수 있는 상태 의미는 복제하지 않는다.
 
 ## Brand
 
@@ -59,6 +55,7 @@
 - Role-specific complexity: 보호자에게는 가족 맥락만, 직원에게는 병원 운영 정보만 보이고 기술 진단은 제품 화면과 분리한다.
 - Safety is explicit in operations: 웹에서 동의, 승인, 전달, 실패 상태를 서로 다른 상태로 보여주고 성공처럼 뭉뚱그리지 않는다.
 - Tradeoffs: 환자 화면에서 AI 정체성 표시는 제거하지만 이 선택은 Gate 07을 통과한 것으로 간주하지 않는다. 실제 환자 사용 전 대체 고지 방식과 정체성 질문 응답을 별도로 승인받아야 한다.
+- One language, three modes: 환자·보호자·병원 화면은 같은 색상 역할, 타이포 계층, 4/8px 간격, 경계, 라운드와 상태 의미를 쓴다. 환자는 이를 큰 글자·넓은 여백·무조작·저밀도 화면으로, 보호자는 모바일 우선 단계형 흐름으로, 병원은 데스크톱 우선 고밀도 마스터-디테일로 변형한다.
 
 ## Visual language
 
@@ -74,7 +71,7 @@
 - Existing components to reuse: 현재 Supabase Auth/RLS 흐름, 환자·입원·기억·메시지·경고 상태 모델, Flutter의 기존 오디오·세션 로직
 - New/changed components: 환자 `Clock`, `DateAndPlace`, `ScheduleCard`, `PassiveAudioStatus`; 공통 웹 `AppShell`, `StatusBadge`, `EmptyState`, `InlineNotice`; 보호자 기억·음성 폼; 병원 환자 목록·상세·승인/메시지 패널
 - Variants and states: 일정 없음/다음 일정/진행 중, 오디오 대기/듣는 중/말하는 중/일시적 연결 문제, 웹 로딩/빈 상태/권한 없음/저장 중/저장됨/실패
-- Token/component ownership: React 포털의 토큰과 공통 컴포넌트는 `apps/portal_web/`가 소유한다. Flutter 환자 화면은 같은 의미 체계를 따르되 Dart 구현을 공유하려는 별도 디자인시스템 패키지는 만들지 않는다.
+- Token/component ownership: React 포털의 토큰과 공통 컴포넌트는 `apps/portal_web/`가 소유한다. Flutter 환자 화면은 같은 의미 색상·간격·타이포·상태 체계를 Dart theme과 전용 저밀도 컴포넌트로 옮기되, 웹 컴포넌트를 흉내 내는 조작 요소나 별도 디자인시스템 패키지는 만들지 않는다.
 
 ## Accessibility
 
