@@ -18,6 +18,11 @@ void main() {
 
     await tester.pumpWidget(PatientApp(now: () => now, startRuntime: false));
 
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.theme?.textTheme.bodyLarge?.fontFamily, 'Pretendard');
+    expect(app.theme?.textTheme.displayLarge?.fontFamily, 'Pretendard');
+    expect(app.theme?.textTheme.displayLarge?.fontWeight, FontWeight.w400);
+
     expect(find.text('오후 3:07'), findsOneWidget);
     expect(find.text('9월 22일 화요일'), findsOneWidget);
     expect(find.text('병원 정보를 확인하고 있습니다'), findsOneWidget);

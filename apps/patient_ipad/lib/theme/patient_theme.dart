@@ -12,6 +12,7 @@ abstract final class PatientColors {
 
 ThemeData patientTheme() => ThemeData(
   useMaterial3: true,
+  fontFamily: 'Pretendard',
   scaffoldBackgroundColor: PatientColors.warm,
   colorScheme: ColorScheme.fromSeed(
     seedColor: PatientColors.green,
@@ -20,10 +21,10 @@ ThemeData patientTheme() => ThemeData(
   textTheme: const TextTheme(
     displayLarge: TextStyle(
       color: PatientColors.ink,
-      fontSize: 92,
-      height: 0.98,
-      fontWeight: FontWeight.w300,
-      letterSpacing: -3,
+      fontSize: 86,
+      height: 1,
+      fontWeight: FontWeight.w400,
+      letterSpacing: -1.5,
       fontFeatures: [FontFeature.tabularFigures()],
     ),
     headlineLarge: TextStyle(
@@ -31,7 +32,7 @@ ThemeData patientTheme() => ThemeData(
       fontSize: 28,
       height: 1.25,
       fontWeight: FontWeight.w600,
-      letterSpacing: -0.5,
+      letterSpacing: -0.3,
     ),
     titleLarge: TextStyle(
       color: PatientColors.ink,

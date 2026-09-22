@@ -15,23 +15,23 @@ import 'fake_recorder.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
-    final bytes = await File(
-      '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
-    ).readAsBytes();
-    await (FontLoader('Roboto')
-          ..addFont(Future.value(ByteData.sublistView(bytes))))
+    Future<ByteData> font(String name) async =>
+        ByteData.sublistView(await File('assets/fonts/$name').readAsBytes());
+    await (FontLoader('Pretendard')
+          ..addFont(font('Pretendard-Regular.otf'))
+          ..addFont(font('Pretendard-SemiBold.otf'))
+          ..addFont(font('Pretendard-Bold.otf')))
         .load();
+    await (FontLoader(
+      'Roboto',
+    )..addFont(font('Pretendard-Regular.otf'))).load();
   });
 
   testWidgets('capture patient bedside surface', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1024, 768));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const data = BedsideData(
-      context: BedsideContext(
-        hospital: '한마음병원',
-        ward: '5병동',
-        room: '501호',
-      ),
+      context: BedsideContext(hospital: '한마음병원', ward: '5병동', room: '501호'),
       schedule: [
         ScheduleItem(timeLabel: '오전 10:00', title: '담당 의료진 회진'),
         ScheduleItem(timeLabel: '오후 3:00', title: '영상검사'),
@@ -70,11 +70,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(768, 1024));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const data = BedsideData(
-      context: BedsideContext(
-        hospital: '한마음병원',
-        ward: '5병동',
-        room: '501호',
-      ),
+      context: BedsideContext(hospital: '한마음병원', ward: '5병동', room: '501호'),
       schedule: [
         ScheduleItem(timeLabel: '오전 10:00', title: '담당 의료진 회진'),
         ScheduleItem(timeLabel: '오후 3:00', title: '영상검사'),
