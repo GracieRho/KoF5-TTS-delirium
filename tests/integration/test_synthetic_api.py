@@ -183,7 +183,7 @@ class SyntheticApiTests(unittest.TestCase):
             self.assertEqual(self.client.get("/portal/config").status_code, 503)
         with patch.dict(os.environ, {**env, "KOF5_SUPABASE_URL": "http://127.0.0.1:54341",
                                           "KOF5_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_local",
-                                          "SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
+                                          "KOF5_SUPABASE_SECRET_KEY": "sb_secret_never_return"}):
             config = self.client.get("/guardian/config")
             self.assertEqual(config.json(), {
                 "url": "http://127.0.0.1:54341", "publishable_key": "sb_publishable_local",
