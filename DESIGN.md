@@ -23,6 +23,8 @@
 
 Acctual에서 차분한 중립 작업면, 선명한 타이포그래피 계층, 절제된 경계·라운드, 일관된 폼·버튼·목록·상세 패널 언어를 차용한다. 금융 제품의 숫자 중심 밀도, 장식적 대시보드, 실제 의료 승인처럼 보일 수 있는 상태 의미는 복제하지 않는다.
 
+2026-09-22에 내려받은 Acctual PNG 205장을 직접 감사했다. 대표 프레임은 환자 변형 검토 `0, 20, 23, 34, 38, 40, 48, 56, 61, 63, 68`, 보호자 `83, 88, 108`, 병원 `84, 85, 123, 126, 139, 145, 148, 158, 176–181, 184–185, 193, 194, 201`이다. 로컬 임시 다운로드 경로는 근거 보관소가 아니며 위 Mobbin URL과 화면 ID가 지속 가능한 참조다.
+
 ## Brand
 
 - Personality: 차분함, 익숙함, 존중, 임상적 신뢰성
@@ -55,14 +57,14 @@ Acctual에서 차분한 중립 작업면, 선명한 타이포그래피 계층, �
 - Role-specific complexity: 보호자에게는 가족 맥락만, 직원에게는 병원 운영 정보만 보이고 기술 진단은 제품 화면과 분리한다.
 - Safety is explicit in operations: 웹에서 동의, 승인, 전달, 실패 상태를 서로 다른 상태로 보여주고 성공처럼 뭉뚱그리지 않는다.
 - Tradeoffs: 환자 화면에서 AI 정체성 표시는 제거하지만 이 선택은 Gate 07을 통과한 것으로 간주하지 않는다. 실제 환자 사용 전 대체 고지 방식과 정체성 질문 응답을 별도로 승인받아야 한다.
-- One language, three modes: 환자·보호자·병원 화면은 같은 색상 역할, 타이포 계층, 4/8px 간격, 경계, 라운드와 상태 의미를 쓴다. 환자는 이를 큰 글자·넓은 여백·무조작·저밀도 화면으로, 보호자는 모바일 우선 단계형 흐름으로, 병원은 데스크톱 우선 고밀도 마스터-디테일로 변형한다.
+- One language, three modes: 환자·보호자·병원 화면은 같은 색상 역할, 타이포 계층과 여백 리듬을 쓴다. Acctual의 rail·table·drawer 구조는 보호자·병원 웹에만 적용한다. 환자는 구조를 공유하지 않고 큰 글자·넓은 여백·무조작·저밀도 화면으로 변형한다.
 
 ## Visual language
 
-- Color: 따뜻한 중립 배경, 높은 명도 대비의 본문, 상태 색상은 의미가 고정된 소수만 사용한다. 색만으로 상태를 전달하지 않는다.
+- Color: Acctual의 `#F3F3F1` canvas, 흰 workspace, near-black 본문을 기본으로 한다. 검정 단일 primary CTA와 소수의 의미 상태색만 사용하며 색만으로 상태를 전달하지 않는다.
 - Typography: 환자 화면은 멀리서 읽히는 큰 한국어 숫자·본문과 짧은 행 길이. 웹은 기본 16px 이상과 명확한 제목 계층을 사용한다.
 - Spacing/layout rhythm: 환자 화면은 넓은 여백과 세 영역 이하의 고정 구획. 웹은 4/8px 계열의 일관된 간격과 카드 남용 없는 정보 그룹을 사용한다.
-- Shape/radius/elevation: 완만한 모서리와 낮은 대비의 경계선을 우선하고, 그림자는 중첩 관계가 필요할 때만 사용한다.
+- Shape/radius/elevation: hairline 경계와 절제된 모서리를 우선하고, 그림자는 drawer처럼 중첩 관계가 필요할 때만 사용한다.
 - Motion: 음성 상태 변화에 짧고 잔잔한 전환만 사용하며 지속적인 파형·맥박 효과는 피한다.
 - Imagery/iconography: 장식용 사진보다 시간·일정·장소 정보의 가독성을 우선한다. 아이콘은 텍스트 라벨을 대체하지 않는다.
 
@@ -71,7 +73,7 @@ Acctual에서 차분한 중립 작업면, 선명한 타이포그래피 계층, �
 - Existing components to reuse: 현재 Supabase Auth/RLS 흐름, 환자·입원·기억·메시지·경고 상태 모델, Flutter의 기존 오디오·세션 로직
 - New/changed components: 환자 `Clock`, `DateAndPlace`, `ScheduleCard`, `PassiveAudioStatus`; 공통 웹 `AppShell`, `StatusBadge`, `EmptyState`, `InlineNotice`; 보호자 기억·음성 폼; 병원 환자 목록·상세·승인/메시지 패널
 - Variants and states: 일정 없음/다음 일정/진행 중, 오디오 대기/듣는 중/말하는 중/일시적 연결 문제, 웹 로딩/빈 상태/권한 없음/저장 중/저장됨/실패
-- Token/component ownership: React 포털의 토큰과 공통 컴포넌트는 `apps/portal_web/`가 소유한다. Flutter 환자 화면은 같은 의미 색상·간격·타이포·상태 체계를 Dart theme과 전용 저밀도 컴포넌트로 옮기되, 웹 컴포넌트를 흉내 내는 조작 요소나 별도 디자인시스템 패키지는 만들지 않는다.
+- Token/component ownership: React 포털의 토큰과 공통 컴포넌트는 `apps/portal_web/`가 소유한다. Flutter 환자 화면은 색상·타입·여백만 Dart theme과 전용 저밀도 컴포넌트로 옮기되, 웹 구조·컴포넌트를 흉내 내는 조작 요소나 별도 디자인시스템 패키지는 만들지 않는다.
 
 ## Accessibility
 
