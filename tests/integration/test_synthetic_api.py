@@ -165,7 +165,9 @@ class SyntheticApiTests(unittest.TestCase):
                 self.assertIn("immutable", asset.headers["cache-control"])
                 self.assertEqual(self.client.get("/assets/index-a1b2c3.js.map").status_code, 404)
                 self.assertEqual(self.client.get("/assets/%2e%2e/index.html").status_code, 404)
-        self.assertEqual(self.client.get("/guardian").status_code, 503)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch("kof5_tts.api.PORTAL_DIST", Path(temporary_directory) / "missing"):
+                self.assertEqual(self.client.get("/guardian").status_code, 503)
         self.assertEqual(self.client.get("/internal/legacy/guardian").status_code, 503)
         legacy_headers = {"X-Internal-Demo-Token": "t" * 32,
                           "X-Synthetic-Material": "confirmed"}
