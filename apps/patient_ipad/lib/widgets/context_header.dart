@@ -19,7 +19,9 @@ class ContextHeader extends StatelessWidget {
       const SizedBox(width: 12),
       Expanded(
         child: Text(
-          '${contextData.hospital}  ·  ${contextData.ward}  ·  ${contextData.room}',
+          contextData.verified
+              ? '${contextData.hospital}  ·  ${contextData.ward}  ·  ${contextData.room}'
+              : '병원 정보를 확인하고 있습니다',
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: PatientColors.ink,

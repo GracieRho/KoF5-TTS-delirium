@@ -2,54 +2,41 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:record/record.dart';
 
 import '../device_anonymous_auth.dart';
 import '../models/bedside_status.dart';
 import '../models/runtime_state.dart';
-import '../speech_candidate.dart';
+import '../services/runtime_config.dart';
+import '../services/runtime_hospital_message.dart';
 import '../synthetic_auxiliary_alert.dart';
 import '../synthetic_hospital_message.dart';
 import '../trial_audio_player.dart';
-import '../services/runtime_config.dart';
-import '../services/runtime_hospital_message.dart';
 
-typedef CaptureStarter = Future<Stream<Uint8List>> Function();
-typedef CaptureStopper = Future<void> Function();
 typedef HospitalPoller = Future<RuntimeHospitalMessage?> Function();
 typedef MessagePlayer = Future<bool> Function(RuntimeHospitalMessage message);
 
 class PatientRuntimeController extends ValueNotifier<RuntimeState> {
   PatientRuntimeController({
     RuntimeConfig config = RuntimeConfig.environment,
-    CaptureStarter? startCapture,
-    CaptureStopper? stopCapture,
     HospitalPoller? pollHospital,
     MessagePlayer? playMessage,
     Duration pollInterval = const Duration(seconds: 30),
   }) : _config = config,
-       _startCaptureOverride = startCapture,
-       _stopCaptureOverride = stopCapture,
        _pollHospitalOverride = pollHospital,
        _playMessageOverride = playMessage,
        _pollInterval = pollInterval,
        super(
          const RuntimeState(
-           status: BedsideStatus.listening,
-           message: '병실 안내를 준비하고 있습니다.',
+           status: BedsideStatus.waiting,
+           message: '확인된 병실 안내가 아직 없습니다.',
          ),
        );
 
   final RuntimeConfig _config;
-  final CaptureStarter? _startCaptureOverride;
-  final CaptureStopper? _stopCaptureOverride;
   final HospitalPoller? _pollHospitalOverride;
   final MessagePlayer? _playMessageOverride;
   final Duration _pollInterval;
-  AudioRecorder? _recorder;
-  final SpeechCandidateDetector _detector = SpeechCandidateDetector();
   final TrialAudioPlayer _player = TrialAudioPlayer();
-  StreamSubscription<Uint8List>? _capture;
   Timer? _pollTimer;
   HttpClient? _client;
   AnonymousDeviceSession? _session;
@@ -57,48 +44,16 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
   var _disposed = false;
 
   Future<void> start() async {
-    if (_disposed || _capture != null) return;
-    try {
-      final stream = _startCaptureOverride != null
-          ? await _startCaptureOverride()
-          : await _startRecorder();
-      if (_disposed) return;
-      _detector.reset();
-      _capture = stream.listen(
-        _onAudio,
-        onError: (_) => _setResting('병실 안내를 잠시 준비하고 있습니다.'),
-      );
-      value = const RuntimeState(
-        status: BedsideStatus.listening,
-        message: '오늘 일정과 병실 안내를 확인할 수 있습니다.',
-      );
-      _pollTimer ??= Timer.periodic(
-        _pollInterval,
-        (_) => unawaited(_pollHospitalMessage()),
-      );
-      unawaited(_pollHospitalMessage());
-    } catch (_) {
-      _setResting('병실 안내를 잠시 준비하고 있습니다.');
-    }
-  }
-
-  Future<Stream<Uint8List>> _startRecorder() async {
-    final recorder = _recorder ??= AudioRecorder();
-    if (!await recorder.hasPermission()) {
-      throw StateError('microphone permission unavailable');
-    }
-    return recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-        streamBufferSize: 3200,
-      ),
+    if (_disposed || _pollTimer != null) return;
+    value = const RuntimeState(
+      status: BedsideStatus.waiting,
+      message: '확인된 병실 안내가 아직 없습니다.',
     );
-  }
-
-  void _onAudio(Uint8List pcm) {
-    _detector.add(pcm); // Local VAD stays active; audio is not retained here.
+    _pollTimer = Timer.periodic(
+      _pollInterval,
+      (_) => unawaited(_pollHospitalMessage()),
+    );
+    await _pollHospitalMessage();
   }
 
   Future<void> _pollHospitalMessage() async {
@@ -109,7 +64,6 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
           ? await _pollHospitalOverride()
           : await _pollCloudHospitalMessage();
       if (_disposed || message == null) return;
-      await _pauseCapture();
       value = RuntimeState(
         status: BedsideStatus.playing,
         message: message.text,
@@ -119,13 +73,12 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
           : await _playAndConfirm(message);
       if (!_disposed) {
         value = RuntimeState(
-          status: BedsideStatus.listening,
+          status: BedsideStatus.waiting,
           message: completed ? message.text : '안내 말씀을 다시 준비하고 있습니다.',
         );
-        await start();
       }
     } catch (_) {
-      if (!_disposed && _capture == null) await start();
+      _setResting('병원 안내 연결을 잠시 확인하고 있습니다.');
     } finally {
       _busy = false;
     }
@@ -174,7 +127,6 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
     final audio = await synthesizeSyntheticHospitalMessage(
       client,
       endpoint,
-      _config.internalToken,
       session,
       approved,
     );
@@ -201,18 +153,6 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
     );
   }
 
-  Future<void> _pauseCapture() async {
-    final capture = _capture;
-    _capture = null;
-    await capture?.cancel();
-    if (_stopCaptureOverride != null) {
-      await _stopCaptureOverride();
-    } else {
-      await _recorder?.stop();
-    }
-    _detector.reset();
-  }
-
   void _setResting(String message) {
     if (!_disposed) {
       value = RuntimeState(status: BedsideStatus.resting, message: message);
@@ -224,11 +164,6 @@ class PatientRuntimeController extends ValueNotifier<RuntimeState> {
     if (_disposed) return;
     _disposed = true;
     _pollTimer?.cancel();
-    unawaited(_capture?.cancel());
-    _capture = null;
-    if (_startCaptureOverride == null && _recorder != null) {
-      unawaited(_recorder!.dispose());
-    }
     _client?.close(force: true);
     super.dispose();
   }

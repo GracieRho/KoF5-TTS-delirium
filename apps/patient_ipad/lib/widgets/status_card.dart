@@ -26,8 +26,8 @@ class StatusCard extends StatelessWidget {
             child: Icon(
               status == BedsideStatus.playing
                   ? Icons.volume_up_rounded
-                  : status == BedsideStatus.listening
-                  ? Icons.hearing_rounded
+                  : status == BedsideStatus.waiting
+                  ? Icons.notifications_none_rounded
                   : Icons.bedtime_outlined,
               color: PatientColors.green,
               size: 34,

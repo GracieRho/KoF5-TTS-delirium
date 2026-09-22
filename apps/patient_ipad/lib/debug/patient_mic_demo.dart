@@ -77,7 +77,6 @@ class PatientMicDemo extends StatefulWidget {
   final Future<Uint8List> Function(
     HttpClient,
     Uri,
-    String,
     AnonymousDeviceSession,
     DueHospitalMessage,
   )
@@ -708,8 +707,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
         _speechStopUnconfirmed ||
         (automatic && !_scheduledHospitalTrial) ||
         _playedHospitalIds.contains(message.id) ||
-        _pendingHospitalAckMessageId != null ||
-        _token.text.length < 32) {
+        _pendingHospitalAckMessageId != null) {
       return;
     }
     final generation = ++_hospitalGeneration;
@@ -745,7 +743,7 @@ class _PatientMicDemoState extends State<PatientMicDemo>
             '/internal/synthetic/paired/$syntheticPatientId/message/${message.id}/audio',
       );
       final mp3 = await widget
-          .hospitalMessageAudio(client, endpoint, _token.text, session, current)
+          .hospitalMessageAudio(client, endpoint, session, current)
           .timeout(const Duration(seconds: 70));
       if (!_hospitalReady(session, generation)) return;
       final playbackOwner = -generation;

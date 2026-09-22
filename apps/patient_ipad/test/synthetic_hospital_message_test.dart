@@ -62,7 +62,7 @@ void main() {
               '/internal/synthetic/paired/$syntheticPatientId/message/$messageId/audio',
             );
             expect(body, isEmpty);
-            expect(request.headers.value('X-Internal-Demo-Token'), 'x' * 32);
+            expect(request.headers.value('X-Internal-Demo-Token'), isNull);
             expect(request.headers.value('X-Synthetic-Material'), 'confirmed');
             request.response.write(
               jsonEncode({
@@ -98,7 +98,6 @@ void main() {
           Uri.parse(
             'http://127.0.0.1:${server.port}/internal/synthetic/paired/$syntheticPatientId/message/$messageId/audio',
           ),
-          'x' * 32,
           session,
           message,
           allowedOriginForTest: 'http://127.0.0.1:${server.port}',
@@ -161,7 +160,6 @@ void main() {
           Uri.parse(
             'http://127.0.0.1:${server.port}/internal/synthetic/paired/$syntheticPatientId/message/$messageId/audio',
           ),
-          'x' * 32,
           session,
           message,
           allowedOriginForTest: 'http://127.0.0.1:${server.port}',
@@ -175,7 +173,6 @@ void main() {
           Uri.parse(
             'https://example.com/internal/synthetic/paired/$syntheticPatientId/message/$messageId/audio',
           ),
-          'x' * 32,
           session,
           message,
         ),

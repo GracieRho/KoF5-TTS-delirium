@@ -88,7 +88,7 @@ void main() {
                 expect(id, messageId);
                 return DueHospitalMessage(messageId, approved, DateTime.now());
               },
-              hospitalMessageAudio: (client, url, token, current, message) async {
+              hospitalMessageAudio: (client, url, current, message) async {
                 audioCalls++;
                 expect(message.approvedText, approved);
                 expect(

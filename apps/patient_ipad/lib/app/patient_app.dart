@@ -8,7 +8,7 @@ import '../theme/patient_theme.dart';
 
 class PatientApp extends StatefulWidget {
   const PatientApp({
-    this.data = BedsideData.preview,
+    this.data = BedsideData.unverified,
     this.now,
     this.runtime,
     this.startRuntime = true,
