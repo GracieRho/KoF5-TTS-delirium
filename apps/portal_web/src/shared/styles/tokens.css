@@ -69,6 +69,7 @@ hr { height: 1px; margin: 1.75rem 0; border: 0; background: var(--line) }
 .form-stack { display: grid; gap: var(--space-4) }
 .form-stack label, label.field { display: grid; gap: .45rem; color: #3b3e39; font-size: .84rem; font-weight: 720 }
 input, select, textarea { width: 100%; min-height: 44px; border: 1px solid var(--line-strong); border-radius: 7px; padding: .68rem .78rem; color: var(--ink); background: #fff }
+select { appearance: none; padding-right: 2.75rem; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='10' viewBox='0 0 16 10' fill='none'%3E%3Cpath d='M2 2l6 6 6-6' stroke='%234A4E49' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .9rem center; background-size: 16px 10px }
 input:hover, select:hover, textarea:hover { border-color: #aeb1aa }
 input:focus, select:focus, textarea:focus { border-color: #5e8877 }
 textarea { min-height: 116px; resize: vertical; line-height: 1.55 }
