@@ -166,8 +166,14 @@ class SyntheticApiTests(unittest.TestCase):
                 self.assertEqual(self.client.get("/assets/index-a1b2c3.js.map").status_code, 404)
                 self.assertEqual(self.client.get("/assets/%2e%2e/index.html").status_code, 404)
         self.assertEqual(self.client.get("/guardian").status_code, 503)
-        self.assertIn("보호자 로그인", self.client.get("/internal/legacy/guardian").text)
-        self.assertIn("병원 직원 로그인", self.client.get("/internal/legacy/hospital").text)
+        self.assertEqual(self.client.get("/internal/legacy/guardian").status_code, 503)
+        legacy_headers = {"X-Internal-Demo-Token": "t" * 32,
+                          "X-Synthetic-Material": "confirmed"}
+        with patch.dict(os.environ, {"KOF5_INTERNAL_DEMO_TOKEN": "t" * 32}):
+            self.assertIn("보호자 로그인", self.client.get(
+                "/internal/legacy/guardian", headers=legacy_headers).text)
+            self.assertIn("병원 직원 로그인", self.client.get(
+                "/internal/legacy/hospital", headers=legacy_headers).text)
         env = {
             "KOF5_SUPABASE_URL": "", "KOF5_SUPABASE_PUBLISHABLE_KEY": "",
             "KOF5_SUPABASE_PROJECT_REF": "", "VERCEL": "",

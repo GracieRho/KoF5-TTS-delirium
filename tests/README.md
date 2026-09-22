@@ -13,7 +13,7 @@ node tests/test_guardian_portal_race.js
 node tests/test_hospital_portal_race.js
 ```
 
-`tests/integration/test_synthetic_api.py`는 React 빌드가 `/guardian`과 `/hospital`의 SPA 진입점·하위 경로에서 제공되고, 정적 자산만 장기 캐시되며 소스맵과 경로 이탈 요청은 차단되는지도 확인합니다.
+`tests/integration/test_synthetic_api.py`는 React 빌드가 `/guardian`과 `/hospital`의 SPA 진입점·하위 경로에서 제공되고, 정적 자산만 장기 캐시되며 소스맵과 경로 이탈 요청은 차단되는지도 확인합니다. 이전 단일 HTML 포털은 합성 자료 확인 헤더가 필요한 `/internal/legacy/*`에서만 열립니다.
 
 보호자 웹 경합 검사는 외부 호출 없이 지연된 조회·저장·로그아웃/재로그인 응답, 환자 전환 시 초안 폐기, 같은 환자의 저장 중 새 초안 보존을 재현합니다.
 병원 웹 경합 검사는 지연된 다른 환자 사실과 이전 로그인 세션의 권한 오류가 현재 환자 정보를 덮거나 새 세션을 종료하지 못하는지 재현합니다. `TZ=UTC node tests/test_hospital_portal_race.js`는 로그아웃 시 환자 상세 텍스트 삭제와 기기 시간대와 무관한 한국 예약 시각도 확인합니다.

@@ -123,12 +123,14 @@ def portal_asset(asset_path: str) -> FileResponse:
 
 
 @app.get("/internal/legacy/guardian", include_in_schema=False)
-def legacy_guardian_portal() -> FileResponse:
+def legacy_guardian_portal(request: Request) -> FileResponse:
+    _internal_demo_auth(request)
     return FileResponse(Path(__file__).with_name("guardian_portal.html"))
 
 
 @app.get("/internal/legacy/hospital", include_in_schema=False)
-def legacy_hospital_portal() -> FileResponse:
+def legacy_hospital_portal(request: Request) -> FileResponse:
+    _internal_demo_auth(request)
     return FileResponse(Path(__file__).with_name("hospital_portal.html"))
 
 
