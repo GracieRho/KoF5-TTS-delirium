@@ -1164,7 +1164,6 @@ class SyntheticApiTests(unittest.TestCase):
             "ELEVENLABS_API_KEY": "test-eleven", "ELEVENLABS_VOICE_ID": "test-voice",
         }
         headers = {
-            "X-Internal-Demo-Token": env["KOF5_INTERNAL_DEMO_TOKEN"],
             "X-Synthetic-Material": "confirmed", "Authorization": "Bearer " + "a" * 40,
         }
         approved = "CT 검사는 오늘 14시입니다."
@@ -1204,6 +1203,9 @@ class SyntheticApiTests(unittest.TestCase):
                  side_effect=lambda **_: sync_client_class(transport=httpx.MockTransport(provider))):
             self.assertEqual(self.client.post(path.replace(SYNTHETIC_DB_PATIENT, "real_patient"),
                                               headers=headers).status_code, 404)
+            self.assertEqual(self.client.post(path, headers={
+                "Authorization": headers["Authorization"],
+            }).status_code, 400)
             self.assertEqual(self.client.post(path, headers={k: v for k, v in headers.items()
                                                              if k != "Authorization"}).status_code, 401)
             self.assertEqual(spoken, [])

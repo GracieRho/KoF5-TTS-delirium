@@ -184,6 +184,11 @@ def health() -> dict[str, str]:
     return {"status": "synthetic_demo_only"}
 
 
+def _synthetic_material(request: Request) -> None:
+    if request.headers.get("x-synthetic-material") != "confirmed":
+        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+
+
 def _internal_demo_auth(request: Request) -> None:
     token = os.environ.get("KOF5_INTERNAL_DEMO_TOKEN", "")
     if len(token) < 32 or not token.isascii():
@@ -191,8 +196,7 @@ def _internal_demo_auth(request: Request) -> None:
     supplied_token = request.headers.get("x-internal-demo-token", "")
     if not supplied_token.isascii() or not compare_digest(supplied_token, token):
         raise HTTPException(status_code=401, detail="내부 시험 인증이 필요합니다")
-    if request.headers.get("x-synthetic-material") != "confirmed":
-        raise HTTPException(status_code=400, detail="합성·자가 시험 자료만 허용합니다")
+    _synthetic_material(request)
 
 
 def _internal_demo_credentials(request: Request) -> CloudCredentials:
@@ -1098,7 +1102,9 @@ async def paired_synthetic_message_audio(patient_id: str, message_id: str, reque
     """Read one due approved synthetic message under device RLS, then voice its exact text."""
     if patient_id != SYNTHETIC_DB_PATIENT or not re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", message_id):
         raise HTTPException(status_code=404, detail="합성 시험 메시지만 사용할 수 있습니다")
-    _internal_demo_auth(request)
+    # A shipped patient app cannot safely contain a server-side demo secret.
+    # Device JWT, pairing, current admission and consent are rechecked below.
+    _synthetic_material(request)
     credentials = await _paired_clone_credentials(request, patient_id)
     approved_text = await _paired_due_message(request, patient_id, message_id)
 
