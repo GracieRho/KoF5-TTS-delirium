@@ -204,3 +204,76 @@
   .hospital-theme .summary-row { grid-template-columns: 1fr; }
   .hospital-theme .summary-row .item-meta { grid-column: 1; }
 }
+
+/* Care workspace uses the same type, surface, interaction and sheet tokens. */
+.care-page-heading,.care-patient-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:28px}
+.care-page-heading h1,.care-patient-heading h1 {margin:0 0 10px;font-size:1.6rem;color:var(--ink)}
+.care-page-heading p,.care-patient-heading p {margin:0;color:var(--muted);font-size:.85rem}
+.care-patient-heading p span {display:block;margin-top:6px;font-size:.75rem}
+.care-metrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius-surface);overflow:hidden;margin-bottom:28px;background:var(--paper)}
+.care-metrics button {border:0;border-right:1px solid var(--line);border-radius:0;padding:20px;text-align:left;display:grid;gap:14px;min-height:110px}
+.care-metrics button:last-child {border-right:0}
+.care-metrics button>span {font-size:.77rem;color:var(--muted)}
+.care-metrics strong {font-size:1.85rem;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.care-metrics strong small {font-size:.8rem;margin-left:7px;font-weight:500;color:var(--muted)}
+.care-list-toolbar {display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.care-list-toolbar label {min-width:0}.care-search {flex:1}.care-list-toolbar>span {font-size:.8rem;white-space:nowrap;color:var(--muted)}
+.care-list-toolbar input,.care-list-toolbar select {min-height:42px;font-size:.8rem;background-color:var(--paper)}
+.care-table-wrap {overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-surface)}
+.care-patient-table {width:100%;border-collapse:collapse;text-align:left;font-size:.8rem}
+.care-patient-table th {padding:14px 16px;background:var(--rail);font-weight:600;color:var(--muted);white-space:nowrap}
+.care-patient-table td {padding:20px 16px;border-top:1px solid var(--line);vertical-align:middle;min-width:130px}
+.care-patient-table td:first-child {min-width:170px}.care-patient-table td:last-child {min-width:92px}
+.care-patient-table small,.care-global-list small {display:block;margin-top:8px;color:var(--muted);font-size:.72rem;line-height:1.6}
+.care-patient-table tr:hover td {background:var(--surface-hover)}
+button.care-name {border:0;background:transparent;padding:0;min-height:28px;font-weight:700;color:var(--brand);font-size:.98rem;text-align:left}
+.care-label {display:inline-block;font-size:.72rem;line-height:1.6;padding:4px 7px;border-radius:5px;background:var(--brand-soft);color:var(--brand);white-space:normal}
+.care-label.attention {color:var(--warning);background:var(--warning-soft)}
+.care-back {border:0;padding:0;background:transparent;color:var(--muted);margin-bottom:16px;font-size:.8rem}
+.care-tabs {gap:24px;margin-bottom:24px}.care-tabs button {font-size:.83rem;display:flex;gap:7px;align-items:center}.care-tabs button span {font-size:.7rem;color:var(--muted)}
+.care-detail-stats {display:grid;grid-template-columns:1.4fr 1fr 1fr;border-bottom:1px solid var(--line);margin-bottom:24px;padding:0 0 22px;gap:24px}
+.care-detail-stats>div {display:grid;gap:10px}.care-detail-stats span {font-size:.75rem;color:var(--muted)}.care-detail-stats strong {font-size:1.05rem}.care-detail-stats small {font-size:.72rem;color:var(--muted);font-weight:400}
+.care-overview-grid {display:grid;grid-template-columns:1.3fr 1fr;gap:20px}.care-detail .panel {margin-bottom:22px;padding:22px;border:1px solid var(--line);border-radius:var(--radius-surface)}
+.care-next-row {display:flex;justify-content:space-between;align-items:center;gap:15px;border-top:1px solid var(--line);padding:16px 0}.care-next-row strong {font-size:.8rem}.care-next-row small {display:block;font-size:.7rem;color:var(--muted);margin-top:7px}
+.care-readiness-row {display:flex;justify-content:space-between;gap:15px;font-size:.8rem;padding:13px 0;border-top:1px solid var(--line)}
+.care-readiness-row span {color:var(--muted)}.care-readiness {padding:20px;background:var(--brand-soft);border-radius:var(--radius-control);margin:20px 0}.care-readiness strong {font-size:.85rem}.care-readiness p {font-size:.82rem;margin:9px 0}.care-readiness small {font-size:.74rem;color:var(--muted)}
+.form-hint {font-size:.79rem;line-height:1.7;color:var(--muted);margin:14px 0 22px}
+.care-records,.care-task-list,.care-activity,.care-global-list {list-style:none;margin:0;padding:0}
+.care-records>li {padding:22px 0;border-top:1px solid var(--line)}.care-records p {margin:13px 0 10px;font-size:.86rem;white-space:pre-wrap}.care-records small {color:var(--muted);font-size:.72rem}
+.care-record-heading,.care-record-footer {display:flex;align-items:center;justify-content:space-between;gap:14px}.care-record-heading {margin-bottom:10px}.care-record-heading strong {font-size:.85rem}.care-record-heading time {font-size:.72rem;color:var(--muted)}.care-record-footer {justify-content:flex-end}.care-record-footer>small {margin-right:auto}.care-record-footer button {font-size:.75rem;min-height:34px}
+.care-task-list>li {display:flex;justify-content:space-between;gap:24px;padding:24px 0;border-top:1px solid var(--line)}.care-task-list>li>div:first-child {flex:1;min-width:0}.care-task-list h3 {margin:8px 0;font-size:.95rem}.care-task-list p {margin:8px 0;font-size:.82rem}.care-category {font-size:.72rem;color:var(--muted)}.care-task-actions {display:flex;gap:8px;flex-wrap:wrap;align-content:flex-start;justify-content:flex-end;max-width:200px}.care-task-actions button {font-size:.76rem;min-height:34px}.care-task-actions .care-label {width:100%;text-align:center}
+.care-history-title {margin:36px 0 20px}.care-activity li {display:grid;grid-template-columns:170px 1fr;gap:20px;padding:15px 0;border-top:1px solid var(--line)}.care-activity time {font-size:.72rem;color:var(--muted)}.care-activity p {font-size:.8rem;margin:0}
+.care-global-list>li {display:grid;grid-template-columns:150px minmax(0,1fr) 150px;gap:24px;align-items:start;border-top:1px solid var(--line);padding:22px 0}.care-global-list strong {font-size:.85rem}.care-global-list p {font-size:.82rem;margin:0 0 6px}.care-global-list button {font-size:.76rem;margin-top:10px}
+.care-blocking {padding:24px}
+@media(max-width:1150px) {
+ .hospital-theme .studio-content {padding-inline:28px}
+ .care-metrics button {padding:16px}.care-overview-grid {grid-template-columns:1fr}
+ .care-global-list>li {grid-template-columns:120px minmax(0,1fr)}.care-global-list>li>:last-child {grid-column:2}
+}
+@media(max-width:760px) {
+ .care-page-heading,.care-patient-heading {gap:16px;flex-wrap:wrap}.care-page-heading h1,.care-patient-heading h1 {font-size:1.35rem}
+ .care-metrics {grid-template-columns:repeat(2,minmax(0,1fr))}.care-metrics button {min-height:98px}.care-metrics button:nth-child(2){border-right:0}.care-metrics button:nth-child(n+3){border-top:1px solid var(--line)}
+ .care-list-toolbar {flex-wrap:wrap}.care-search {flex-basis:100%}.care-list-toolbar>label:not(.care-search){flex:1}
+ .care-detail-stats {grid-template-columns:1fr 1fr}.care-detail-stats>div:first-child {grid-column:1/-1}
+ .care-task-list>li {flex-direction:column;gap:12px}.care-task-actions {max-width:none;justify-content:flex-start}.care-task-actions .care-label {width:auto}
+ .care-record-heading,.care-record-footer {flex-wrap:wrap}.care-record-footer>small {width:100%}
+ .care-detail .section-heading {flex-wrap:wrap;gap:14px}.care-detail .button-row {width:100%}
+ .care-global-list>li {grid-template-columns:1fr;gap:12px}.care-global-list>li>:last-child {grid-column:auto}
+ .care-activity li {grid-template-columns:1fr;gap:8px}
+ .hospital-theme .studio-nav nav {overflow-x:auto;justify-content:flex-start}.hospital-theme .studio-nav nav button {flex:0 0 82px}
+}
+
+@media(max-width:1150px) and (min-width:761px) {
+ .care-patient-table th,.care-patient-table td {padding:14px 8px;min-width:0}
+ .care-patient-table td:first-child {min-width:110px}.care-patient-table td:last-child {min-width:64px}
+ .care-patient-table th {white-space:normal}
+}
+@media(max-width:760px) {
+ .care-patient-table thead {display:none}
+ .care-patient-table,.care-patient-table tbody {display:block}
+ .care-patient-table tr {display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);padding:16px 0;gap:14px}
+ .care-patient-table td,.care-patient-table td:first-child,.care-patient-table td:last-child {display:block;min-width:0;padding:0;border:0}
+ .care-patient-table td:first-child,.care-patient-table td:last-child {grid-column:1/-1}
+ .care-patient-table td[data-label]::before {content:attr(data-label);display:block;color:var(--muted);font-size:.7rem;margin-bottom:8px}
+ .care-patient-table td:last-child button {width:100%}
+}

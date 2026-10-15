@@ -4,7 +4,7 @@
 
 - 보호자 `guardian@email.com` / `test1234`, 병원 `hospital@email.com` / `test1234`. 실제 원격 계정이 아닌 이 프로젝트의 로컬 Supabase Auth 계정이다.
 - 가상 환자 6명, 현재 입원·병동·병실, 병원 승인 사실 18건, 안내 메시지 12건(대기 7·가상 전달 이력 5), 가족 기억 6건. 실존 인물·임상 기록에서 가져오지 않았다.
-- 첫 환자는 기기 시험 예약 ID `…975`와 분리한 `…976`. 기기·2인 승인·기관 승인 제한을 우회하지 않는다. 현재 등록 승인 게이트도 열지 않았다.
+- 첫 환자는 기기 시험 예약 ID `…975`와 분리한 `…976`. 기기·2인 승인·기관 승인 제한을 우회하지 않는다. 후속 병원 돌봄 확장에서 이 전용 로컬 기관에만 TEST 승인 근거와 만료일을 갖춘 등록·돌봄 권한을 설정했다. 원격 기관의 승인을 의미하지 않는다.
 - 보호자 `/studio`와 병원 `/hospital`만 독립 공간이다. `/guardian`은 스튜디오 내부 병원 연결 탭으로 이동한다. 상대 역할의 메뉴·헤더 링크와 중복 병원 업무 메뉴를 제거했다.
 - 서버 RPC는 유효한 Auth 세션과 보호자 연결/직원 승인 기록으로 역할을 계산한다. 모든 PostgREST 요청은 pre-request에서 세션 폐기를 확인하고 기존 RLS를 그대로 적용한다.
 - `/local-studio/*`는 루프백·명시적 활성화·같은 Origin·보호자 JWT·지정 계정 소유권을 모두 요구한다. 현재 SQLite 공간은 보호자 한 계정 전용이며 저장된 소유자와 다른 계정으로 재지정하면 거부한다.
@@ -18,6 +18,7 @@
 supabase start --exclude edge-runtime,imgproxy,mailpit,postgres-meta,realtime,storage-api,studio,logflare,vector,supavisor
 supabase migration up --local
 .venv/bin/python supabase/tests/seed_portal.py
+.venv/bin/python supabase/tests/seed_hospital_care.py
 npm run build --prefix apps/portal_web
 .venv/bin/python scripts/run_local_portal.py
 ```
