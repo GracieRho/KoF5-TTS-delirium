@@ -29,6 +29,7 @@ from kof5_tts.cloud_prototype import (
     validate_test_voice_samples,
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
+from kof5_tts.local_studio import router as local_studio_router
 
 SYNTHETIC_PATIENT = "synthetic_patient"
 SYNTHETIC_DB_PATIENT = "00000000-0000-4000-8000-000000000975"
@@ -49,6 +50,7 @@ FAMILY_FACT = Fact(
 app = FastAPI(title="Synthetic Familiar Voice MVP", docs_url=None, redoc_url=None)
 # ponytail: one in-memory synthetic patient; add authenticated persistence and per-patient serialization before real data.
 app.state.sessions = {}
+app.include_router(local_studio_router)
 
 PORTAL_DIST = Path(__file__).resolve().parents[2] / "apps" / "portal_web" / "dist"
 _PORTAL_ASSET_EXTENSIONS = frozenset({
@@ -103,6 +105,7 @@ def guardian_demo() -> FileResponse:
     return FileResponse(Path(__file__).with_name("synthetic_guardian_demo.html"))
 
 
+@app.get("/studio", include_in_schema=False)
 @app.get("/guardian", include_in_schema=False)
 def guardian_portal() -> FileResponse:
     return _portal_index()

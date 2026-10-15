@@ -53,7 +53,8 @@
         "layer": "api",
         "imports": [
           "kof5_tts.cloud_prototype",
-          "kof5_tts.companion"
+          "kof5_tts.companion",
+          "kof5_tts.local_studio"
         ]
       },
       {
@@ -69,6 +70,14 @@
         "path": "src/kof5_tts/companion.py",
         "layer": "companion",
         "imports": []
+      },
+      {
+        "module": "kof5_tts.local_studio",
+        "path": "src/kof5_tts/local_studio.py",
+        "layer": "local_studio",
+        "imports": [
+          "kof5_tts.cloud_prototype"
+        ]
       },
       {
         "module": "kof5_tts.preprocessing",
