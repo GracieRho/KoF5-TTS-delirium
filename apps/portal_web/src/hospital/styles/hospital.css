@@ -8,6 +8,10 @@
   --brand: var(--hospital-indigo);
   --brand-hover: #252e8d;
   --brand-soft: #edf1fc;
+  --surface-hover: #f0f4fc;
+  --border-hover: #b8c8e3;
+  --nav-hover: #e2ebf5;
+  --focus-ring: var(--hospital-blue);
   --rail: #eff4f8;
   --line: #e0e8ef;
   --line-strong: #bfcedc;
@@ -15,15 +19,20 @@
   color: var(--ink);
 }
 .hospital-theme :focus-visible {
-  outline-color: var(--hospital-blue);
+  outline-color: var(--focus-ring);
 }
-.hospital-theme .studio-nav nav a {
-  color: #65788d;
+.hospital-theme .studio-nav nav :is(button, a) {
+  color: var(--muted);
 }
-.hospital-theme .studio-nav nav a:hover {
-  background: #e2ebf5;
+.hospital-theme .studio-nav nav :is(button, a):hover:not(:disabled) {
+  background: var(--nav-hover);
+  color: var(--hospital-indigo);
 }
-.hospital-theme .studio-nav nav a[aria-current='page'] {
+.hospital-theme .studio-nav nav :is(button, a):focus-visible {
+  background: var(--nav-hover);
+  outline-color: var(--focus-ring);
+}
+.hospital-theme .studio-nav nav :is(button, a)[aria-current='page'] {
   color: var(--hospital-indigo);
 }
 .hospital-theme .studio-nav-bottom {

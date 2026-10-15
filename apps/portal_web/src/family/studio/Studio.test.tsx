@@ -27,6 +27,7 @@ const state: StudioState = {
   providers: { voice: false, conversation: false, transcription: false }
 }
 beforeEach(() => {
+  window.history.replaceState(null, '', '/studio')
   HTMLDialogElement.prototype.showModal = function () {
     this.setAttribute('open', '')
   }
@@ -46,6 +47,7 @@ describe('가족 시연 공간', () => {
     render(<Studio />)
     expect(await screen.findByText('2 / 3 준비 완료')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: '목소리 등록' })[0])
+    expect(new URLSearchParams(window.location.search).get('tab')).toBe('voice')
     expect(
       await screen.findByText(
         '음성 공급자 연결 전입니다. 서버에 ElevenLabs 키를 연결하면 등록할 수 있어요.'

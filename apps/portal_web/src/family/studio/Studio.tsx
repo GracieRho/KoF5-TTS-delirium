@@ -23,7 +23,15 @@ const tabs = {
 export function Studio() {
   const auth = useAuth()
   const [state, setState] = useState<StudioState | null>(null)
-  const [tab, setTab] = useState<Tab>(new URLSearchParams(window.location.search).get('tab') === 'linked' ? 'linked' : 'home')
+  const initialTab = new URLSearchParams(window.location.search).get('tab')
+  const [tab, setTabState] = useState<Tab>(initialTab && initialTab in tabs ? initialTab as Tab : 'home')
+  function setTab(next: Tab) {
+    setTabState(next)
+    const url = new URL(window.location.href)
+    if (next === 'home') url.searchParams.delete('tab')
+    else url.searchParams.set('tab', next)
+    window.history.replaceState(null, '', url)
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
