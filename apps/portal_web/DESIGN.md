@@ -1,4 +1,4 @@
-# Familiar Voice 표면 디자인
+# Favilium 표면 디자인
 
 루트 [`DESIGN.md`](../../DESIGN.md)가 제품·안전 계약의 최종 기준이고, 이 문서는 구현용 시각 규칙만 좁혀 기록한다.
 

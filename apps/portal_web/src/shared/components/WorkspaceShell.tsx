@@ -54,7 +54,7 @@ export function WorkspaceShell({
         </header>
         <div className="studio-content">{children}</div>
         <footer className="studio-footer">
-          <span>Familiar Voice</span>
+          <span>Favilium</span>
           <span>기억을 소중히, 목소리를 따뜻하게.</span>
         </footer>
       </main>

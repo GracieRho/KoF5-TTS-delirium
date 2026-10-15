@@ -11,7 +11,7 @@ describe('공통 포털 셸', () => {
 
   it('보호자 화면은 동일한 브랜드와 병원 이동 경로를 제공한다', () => {
     render(<AppHeader area="보호자"/>)
-    expect(screen.getByRole('link', { name: /Familiar Voice/ })).toHaveAttribute('href', '/guardian')
+    expect(screen.getByRole('link', { name: 'Favilium' })).toHaveAttribute('href', '/guardian')
     expect(screen.getByRole('link', { name: '병원 업무' })).toHaveAttribute('href', '/hospital')
   })
 })
