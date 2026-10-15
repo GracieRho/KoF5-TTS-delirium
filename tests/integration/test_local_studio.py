@@ -60,6 +60,26 @@ class LocalStudioTests(unittest.TestCase):
         state['voice'] = {'status': status, 'name': 'KoF5 internal self-voice test ' + 'a' * 32, 'voice_id': 'fakevoice'}
         studio.save(state)
 
+    def test_hospital_submission_uses_saved_ids_and_hides_provider_voice_id(self):
+        self.setup_voice()
+        self.client.post('/local-studio/memories', json={'title': '산책', 'category': 'story', 'content': '가상 기억'})
+        payload = {'patient_id': '00000000-0000-4000-8000-000000000976',
+                   'encounter_id': '00000000-0000-4000-8000-000000000977', 'sharing_consent': True}
+        response = httpx.Response(200, json='00000000-0000-4000-8000-000000000978', request=httpx.Request('POST', 'http://127.0.0.1'))
+        with patch.object(studio.httpx, 'Client') as factory:
+            post = factory.return_value.__enter__.return_value.post
+            post.return_value = response
+            result = self.client.post('/local-studio/hospital-materials', json=payload)
+            self.assertEqual(result.status_code, 200)
+            body = post.call_args.kwargs['json']
+            self.assertEqual(body['_memories'][0]['id'], studio.load()['memories'][0]['id'])
+            self.assertEqual(len(body['_voice_revision']), 64)
+            self.assertNotIn('fakevoice', str(body))
+            self.assertEqual(body['_voice_status'], 'created')
+            self.assertEqual(self.client.post('/local-studio/hospital-materials', json={**payload, 'sharing_consent': False}).status_code, 422)
+        with patch.object(studio.httpx, 'Client', side_effect=httpx.ConnectError('offline')):
+            self.assertEqual(self.client.post('/local-studio/hospital-materials', json=payload).status_code, 502)
+
     def sample_payload(self):
         wav = make_synthetic_wav(seconds=20)
         return {'own_voice_confirmed': True, 'provider_processing_consent': True, 'samples_wav_base64': [base64.b64encode(wav).decode()] * 3}

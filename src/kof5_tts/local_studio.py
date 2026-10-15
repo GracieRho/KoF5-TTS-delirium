@@ -5,11 +5,12 @@ from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from contextlib import contextmanager
 import json
+from hashlib import sha256
 import os
 from pathlib import Path
 import sqlite3
 from threading import RLock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -342,3 +343,36 @@ def transcribe(payload: AudioInput):
         return {'text': text}
     except (httpx.HTTPError, ValueError):
         raise HTTPException(502, '질문을 전사하지 못했습니다. 직접 입력할 수 있습니다.') from None
+
+
+class MaterialSubmission(StudioInput):
+    patient_id: UUID
+    encounter_id: UUID
+    sharing_consent: bool
+
+
+@router.post('/hospital-materials')
+def submit_hospital_material(payload: MaterialSubmission, request: Request):
+    if not payload.sharing_consent:
+        raise HTTPException(422, '병원에 소개·기억·음성 등록 상태를 보내는 데 동의하세요.')
+    with LOCK:
+        current = load()
+        if not all(current['profile'].values()) or not current['memories']:
+            raise HTTPException(409, '가족 소개와 기억을 먼저 저장하세요.')
+        # Only an opaque revision leaves the voice store, never the provider voice ID.
+        revision = sha256(json.dumps(current['voice'], sort_keys=True).encode()).hexdigest()
+        try:
+            with httpx.Client(timeout=15) as client:
+                response = client.post(os.environ['KOF5_SUPABASE_URL'] + '/rest/v1/rpc/submit_family_material',
+                    headers={'apikey': os.environ['KOF5_SUPABASE_PUBLISHABLE_KEY'],
+                             'Authorization': request.headers['authorization'], 'Content-Profile': 'api'},
+                    json={'_patient': str(payload.patient_id), '_encounter': str(payload.encounter_id),
+                          '_profile': current['profile'], '_memories': current['memories'],
+                          '_voice_status': current['voice']['status'], '_voice_revision': revision})
+            if response.status_code in (401, 403):
+                raise HTTPException(403, '현재 입원의 보호자 연결을 확인해주세요.')
+            response.raise_for_status()
+            material_id = str(UUID(response.json()))
+        except (httpx.HTTPError, ValueError, TypeError):
+            raise HTTPException(502, '자료 전송 결과를 확인하지 못했습니다. 제출 목록을 다시 조회해주세요.') from None
+        return {'material_id': material_id}
