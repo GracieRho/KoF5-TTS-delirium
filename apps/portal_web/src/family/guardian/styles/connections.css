@@ -1,0 +1,42 @@
+.guardian-connections {max-width:900px}
+.guardian-connections>.section-heading {margin-bottom:28px}
+.hospital-connection {margin-bottom:20px}
+.hospital-connection .panel-heading {min-height:0;margin-bottom:8px;align-items:center}
+.connection-status {display:inline-flex;border-radius:var(--radius-control);padding:5px 10px;background:var(--brand-soft);color:var(--brand);font-size:.78rem;font-weight:600}
+.connection-relationship,.connection-meta {color:var(--muted);font-size:.85rem;margin:0;line-height:1.6}
+.connection-identity {margin-top:8px;color:var(--muted);font-size:.8rem}
+.connection-identity summary,.connection-history summary,.connection-preview-details summary {cursor:pointer;padding:4px 0}
+.connection-identity p {margin:8px 0 0}
+.connection-current {margin-top:24px;border-top:1px solid var(--line);padding-top:20px}
+.connection-current h3 {margin:0 0 12px;color:var(--muted);font-size:.8rem;font-weight:500}
+.connection-result-heading {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+.connection-review {margin-top:16px}
+.connection-review>span {font-size:.78rem;color:var(--muted)}
+.connection-review p {margin:6px 0 0;font-size:.9rem}
+.connection-current>.connection-meta:last-child {margin-top:12px}
+.connection-actions {display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:24px}
+.connection-history {margin-top:20px;border-top:1px solid var(--line);padding-top:12px;font-size:.85rem}
+.connection-history ul,.connection-memory-list {list-style:none;padding:0;margin:0}
+.connection-history li,.connection-memory-list li {padding:16px 0;border-bottom:1px solid var(--line)}
+.connection-history li>button {margin-top:12px}
+.connection-recipient {display:grid;gap:6px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.connection-recipient span {font-size:.85rem;color:var(--muted)}
+.connection-preview {margin:0}
+.connection-preview>div {display:grid;grid-template-columns:110px minmax(0,1fr);gap:16px;padding:8px 0}
+.connection-preview dt {color:var(--muted);font-size:.85rem}
+.connection-preview dd {margin:0;font-size:.9rem}
+.connection-memory-list strong {display:block;margin:6px 0}
+.connection-memory-list p {margin:0}
+.connection-send-form {padding-top:20px;border-top:1px solid var(--line)}
+.connection-send-form .check-field {color:var(--ink);margin:0}
+.connection-send-form>button {justify-self:end}
+.connection-withdraw {border-top:1px solid var(--line);padding-top:20px}
+.connection-withdraw .button-row {margin-top:16px}
+@media(max-width:760px) {
+ .hospital-connection .panel-heading {display:flex;gap:12px}
+ .connection-actions>button {flex:1;min-width:0}
+ .connection-preview>div {grid-template-columns:88px minmax(0,1fr);gap:12px}
+ .connection-send-form>button {width:100%}
+}
+.connection-send-form label.check-field {display:flex;align-items:flex-start;gap:10px;font-weight:400}
+.connection-send-form label.check-field input {margin-top:3px}
