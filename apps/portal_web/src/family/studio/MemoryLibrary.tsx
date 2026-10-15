@@ -1,3 +1,4 @@
+import { Select } from '../../shared/components/Select'
 import { useState, type FormEvent } from 'react'
 import { ResponsiveSheet } from '../../shared/components/ResponsiveSheet'
 import { Icon } from '../../shared/components/Icon'
@@ -39,7 +40,7 @@ export function MemoryLibrary({
       <div className="section-heading">
         <div>
           <h1>가족의 기억</h1>
-          <p className="compact">함께한 순간이 대화의 바탕이 됩니다.</p>
+
         </div>
         <button className="primary" onClick={() => edit(null)}>
           <Icon name="plus" size={17} /> 기억 추가
@@ -77,7 +78,7 @@ export function MemoryLibrary({
         <div className="studio-empty">
           <Icon name="memory" size={38} />
           <h2>작은 기억 하나부터 시작해요</h2>
-          <p>자주 가던 장소, 좋아하는 음식, 함께 웃었던 순간을 적어주세요.</p>
+
           <button onClick={() => edit(null)}>첫 기억 추가</button>
         </div>
       )}
@@ -89,12 +90,10 @@ export function MemoryLibrary({
         }}
       >
         <form className="form-stack" onSubmit={submit}>
-          <label className="field">
-            분류
-            <select
+          <Select help="피해야 할 이야기는 답변의 추억 소재로 사용하지 않습니다." label="분류"
               value={draft.category}
-              onChange={(e) =>
-                setDraft({ ...draft, category: e.target.value as MemoryInput['category'] })
+              onValueChange={selectedValue =>
+                setDraft({ ...draft, category: selectedValue as MemoryInput['category'] })
               }
             >
               {Object.entries(categories).map(([key, label]) => (
@@ -102,8 +101,7 @@ export function MemoryLibrary({
                   {label}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
           <label className="field">
             제목
             <input
@@ -125,7 +123,7 @@ export function MemoryLibrary({
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
             />
           </label>
-          <p className="compact">피해야 할 이야기는 답변의 추억 소재로 사용하지 않습니다.</p>
+
           <button className="primary" disabled={busy}>
             기억 저장
           </button>

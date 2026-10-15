@@ -1,3 +1,4 @@
+import { Select } from '../../../shared/components/Select'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { FamilyFact } from '../../../shared/types/domain'
 import { FAMILY_LABELS } from '../../../shared/types/constants'
@@ -9,8 +10,8 @@ export function MemoryForm({ editing, busy, onSave, onCancel }: { editing: Famil
   useEffect(() => { setCategory(editing?.category ?? 'family'); setContent(editing?.content ?? '') }, [editing])
   async function submit(event: FormEvent) { event.preventDefault(); await onSave(category, content.trim(), editing?.fact_id); if (!editing) setContent('') }
   return <form className="form-stack" onSubmit={submit}>
-    <label>시작 질문<select defaultValue="" onChange={e => { const value = Number(e.target.value); if (e.target.value && !Number.isNaN(value)) setCategory(prompts[value][0]) }}><option value="">질문을 골라보세요</option>{prompts.map(([, question], index) => <option key={question} value={index}>{question}</option>)}</select></label>
-    <label>기억 종류<select value={category} onChange={e => setCategory(e.target.value)}>{Object.entries(FAMILY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    <Select label="시작 질문" defaultValue="" onValueChange={selectedValue => { const value = Number(selectedValue); if (selectedValue && !Number.isNaN(value)) setCategory(prompts[value][0]) }}><option value="">질문을 골라보세요</option>{prompts.map(([, question], index) => <option key={question} value={index}>{question}</option>)}</Select>
+    <Select label="기억 종류" value={category} onValueChange={selectedValue => setCategory(selectedValue)}>{Object.entries(FAMILY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>
     <label>확인한 이야기<textarea maxLength={1000} required value={content} onChange={e => setContent(e.target.value)} placeholder="예: 함께 제주도에 갔을 때 성산일출봉을 좋아하셨어요." /></label>
     <div className="button-row"><button className="primary" disabled={busy || !content.trim()}>{editing ? '수정 저장' : '기억 저장'}</button>{editing && <button type="button" onClick={onCancel}>수정 취소</button>}</div>
   </form>

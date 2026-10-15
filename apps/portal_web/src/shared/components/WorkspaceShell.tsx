@@ -5,7 +5,6 @@ import { Icon } from './Icon'
 type Props = {
   area: '보호자' | '병원'
   title: string
-  subtitle: string
   current: string
   status?: string
   note?: ReactNode
@@ -18,7 +17,6 @@ type Props = {
 export function WorkspaceShell({
   area,
   title,
-  subtitle,
   current,
   status,
   note,
@@ -34,7 +32,6 @@ export function WorkspaceShell({
         <div className="studio-space">
           <div>
             <strong>{title}</strong>
-            <span>{subtitle}</span>
           </div>
         </div>
         <nav aria-label={`${title} 메뉴`}>{navigation}</nav>
@@ -55,10 +52,6 @@ export function WorkspaceShell({
           {status && <span className="workspace-status">{status}</span>}
         </header>
         <div className="studio-content">{children}</div>
-        <footer className="studio-footer">
-          <span>Favilium</span>
-          <span>기억을 소중히, 목소리를 따뜻하게.</span>
-        </footer>
       </main>
     </div>
   )

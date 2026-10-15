@@ -1,3 +1,4 @@
+import { HelpTooltip } from '../../shared/components/HelpTooltip'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../shared/components/Icon'
 import { wavBase64 } from '../guardian/utils/voiceAudio'
@@ -80,7 +81,7 @@ export function VoiceEnrollment({ state, busy, enroll, action, report }: Props) 
       <div className="section-heading">
         <div>
           <h1>익숙한 목소리</h1>
-          <p className="compact">평소 이야기하듯, 편안한 목소리로 읽어주세요.</p>
+
         </div>
         <span className="state-label">{labels[state.voice.status]}</span>
       </div>
@@ -89,16 +90,11 @@ export function VoiceEnrollment({ state, busy, enroll, action, report }: Props) 
           <div className={`voice-symbol ${recorder.recording ? 'is-recording' : ''}`}>
             <Icon name="voice" size={34} />
           </div>
-          <h2>
+          <div className="heading-with-help"><h2>
             {state.voice.status === 'created'
               ? `${state.profile.guardian_name}님의 목소리가 준비됐어요`
               : '당신의 목소리를 담아요'}
-          </h2>
-          <p>
-            20~30초씩 세 번, 총 1분 이상 녹음합니다.
-            <br />
-            배경 소음이 없는 곳에서 같은 말투로 읽어주세요.
-          </p>
+          </h2><HelpTooltip label="녹음 방법">20~30초씩 세 번, 총 1분 이상 녹음합니다. 배경 소음이 없는 곳에서 같은 말투로 읽어주세요.</HelpTooltip></div>
           <div className="sample-progress" aria-label={`샘플 ${samples.length}/3개 준비`}>
             {[0, 1, 2].map((i) => (
               <span key={i} className={samples.length > i ? 'complete' : ''}>
@@ -157,7 +153,7 @@ export function VoiceEnrollment({ state, busy, enroll, action, report }: Props) 
           </div>
           {!state.providers.voice && (
             <p className="blocking-note">
-              음성 공급자 연결 전입니다. 서버에 ElevenLabs 키를 연결하면 등록할 수 있어요.
+              음성 서비스 연결 전
             </p>
           )}
           {['pending', 'verification_pending'].includes(state.voice.status) && (
@@ -176,18 +172,9 @@ export function VoiceEnrollment({ state, busy, enroll, action, report }: Props) 
           )}
         </div>
         <aside className="reading-guide">
-          <h2>읽기 가이드</h2>
-          <p className="compact">
-            문장을 외울 필요는 없어요. 자연스럽게 읽고, 20초가 지나면 녹음을 마쳐주세요.
-          </p>
+          <div className="heading-with-help"><h2>읽기 가이드</h2><HelpTooltip label="읽기 가이드 도움말">문장을 외울 필요 없이 자연스럽게 읽고, 20초가 지나면 녹음을 마쳐주세요. 동의한 성인 본인의 목소리와 가상 가족 정보만 사용할 수 있습니다. 실제 환자 대상 사용은 지원하지 않으며 원본 녹음은 서버에 저장하지 않습니다.</HelpTooltip></div>
+
           <blockquote>{scripts[Math.min(samples.length, 2)]}</blockquote>
-          <div className="guide-rule">
-            <Icon name="shield" />
-            <p>
-              현재는 동의한 성인 본인의 목소리와 가상 가족 정보만 사용할 수 있습니다. 실제 환자
-              대상 사용은 지원하지 않으며 원본 녹음은 서버에 저장하지 않습니다.
-            </p>
-          </div>
         </aside>
       </div>
     </section>

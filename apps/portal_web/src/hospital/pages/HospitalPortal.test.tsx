@@ -20,3 +20,11 @@ it('일반 가상 환자도 다섯 개 돌봄 작업 탭을 갖는다',()=>{
  expect(screen.getByText('돌봄 열람 권한 확인이 필요합니다.')).toBeInTheDocument()
  expect(screen.queryByRole('button',{name:'돌봄 업무 추가'})).not.toBeInTheDocument()
 })
+it('화면 설명은 기본적으로 숨기고 미확인 기록 상태는 유지한다',()=>{
+ render(<HospitalPortal />)
+ expect(screen.queryByText('입원 환자의 변화와 오늘 확인할 일을 함께 봅니다.')).not.toBeInTheDocument()
+ expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+ expect(screen.getByText('기록 미확인 1명')).toBeVisible()
+ fireEvent.click(screen.getByRole('button',{name:'돌봄 현황 도움말'}))
+ expect(screen.getByRole('tooltip')).toHaveTextContent('돌봄 지표는 열람 가능한 0명의 기록 기준입니다.')
+})

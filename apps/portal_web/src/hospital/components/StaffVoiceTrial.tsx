@@ -1,3 +1,4 @@
+import { HelpTooltip } from '../../shared/components/HelpTooltip'
 import { useEffect, useRef, useState } from 'react'
 import type { SupabaseRest } from '../../shared/api/supabase'
 import { RequestEpoch, retainOwnedStream } from '../../shared/hooks/requestEpoch'
@@ -23,5 +24,5 @@ export function StaffVoiceTrial({ api, token, patient }: { api: SupabaseRest; to
       stream.current = media; startedRef.current = Date.now(); setDuration(0); setActive(true); setStatus('시험자 본인 음성을 메모리에서만 녹음 중입니다.'); timer.current = window.setTimeout(() => { if (epoch.current.owns(owner)) release('30초 시험 상한 도달') }, 30000)
     } catch { media?.getTracks().forEach(track => track.stop()); if (epoch.current.owns(owner) && mounted.current) release('마이크 권한 또는 브라우저 녹음 기능 확인 실패') }
   }
-  return <div><p className="compact">담당 직원이 자신의 목소리로만 시험합니다. 실제 환자·주변인 음성은 녹음하지 마세요.</p><label className="field"><span><input type="checkbox" checked={confirmed} onChange={event => changeConfirmed(event.target.checked)} style={{ width: 'auto', minHeight: 0 }} /> 이 시험은 직원인 내 목소리만 사용합니다.</span></label><div className="button-row"><button disabled={!ready || !confirmed || active} onClick={() => void start()}>본인 음성 시험 시작</button><button disabled={!active} onClick={() => { epoch.current.invalidate(); release() }}>중단하고 오디오 참조 해제</button></div><p>{active ? '마이크 시험 중 · 최대 30초' : `${duration.toFixed(1)}초 / 최대 30초`}</p><StatusMessage>{status}</StatusMessage></div>
+  return <div><HelpTooltip label="음성 사용 안내">담당 직원이 자신의 목소리로만 시험합니다. 실제 환자·주변인 음성은 녹음하지 마세요.</HelpTooltip><label className="field"><span><input type="checkbox" checked={confirmed} onChange={event => changeConfirmed(event.target.checked)} style={{ width: 'auto', minHeight: 0 }} /> 이 시험은 직원인 내 목소리만 사용합니다.</span></label><div className="button-row"><button disabled={!ready || !confirmed || active} onClick={() => void start()}>본인 음성 시험 시작</button><button disabled={!active} onClick={() => { epoch.current.invalidate(); release() }}>중단하고 오디오 참조 해제</button></div><p>{active ? '마이크 시험 중 · 최대 30초' : `${duration.toFixed(1)}초 / 최대 30초`}</p><StatusMessage>{status}</StatusMessage></div>
 }

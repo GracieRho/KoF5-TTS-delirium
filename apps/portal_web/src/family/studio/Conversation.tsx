@@ -1,3 +1,4 @@
+import { HelpTooltip } from '../../shared/components/HelpTooltip'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Icon } from '../../shared/components/Icon'
 import { wavBase64 } from '../guardian/utils/voiceAudio'
@@ -135,7 +136,7 @@ export function Conversation({
       <div className="section-heading">
         <div>
           <h1>목소리로 대화하기</h1>
-          <p className="compact">등록한 기억을 바탕으로, 익숙한 목소리로 답합니다.</p>
+
         </div>
         <span className="state-label">{ready ? '대화 준비 완료' : '등록 후 사용할 수 있어요'}</span>
       </div>
@@ -149,11 +150,7 @@ export function Conversation({
               ? `${state.profile.guardian_name}님의 목소리와 함께`
               : '우리 가족의 이야기를 나눠요'}
           </h2>
-          <p>
-            가족이 남긴 기억을 바탕으로 AI가 답합니다.
-            <br />
-            실제 보호자와 연결된 통화가 아닙니다.
-          </p>
+          <span className="state-label">AI 대화</span><HelpTooltip label="AI 대화 도움말">등록한 가족의 기억을 바탕으로 AI가 답합니다. 실제 보호자와 연결된 통화가 아닙니다.</HelpTooltip>
         </div>
         {message && (
           <div className="conversation-result">
@@ -162,9 +159,7 @@ export function Conversation({
               <span className="memory-category">가족 목소리로 읽는 AI 답변</span>
               <p>{message.reply}</p>
               <audio ref={audio} controls src={message.url} aria-label="복제 목소리로 답변 듣기" />
-              <small>
-                일반 기억 {message.count}건을 문맥으로 전달 · 대화 원문은 서버에 저장하지 않음
-              </small>
+              <HelpTooltip label="답변 데이터 안내">일반 기억 {message.count}건을 문맥으로 전달하며 대화 원문은 서버에 저장하지 않습니다.</HelpTooltip>
             </div>
           </div>
         )}

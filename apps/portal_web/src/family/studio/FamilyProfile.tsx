@@ -31,9 +31,6 @@ export function FamilyProfile({
   }
   return (
     <form className="form-stack" onSubmit={submit}>
-      <p className="compact">
-        가상의 가족 정보와 별칭을 사용하세요. 실제 환자 정보나 주민번호·병력은 입력하지 않습니다.
-      </p>
       {field('guardian_name', '나의 이름', '예: 수민')}
       {field('patient_alias', '대화 상대의 별칭', '예: 아버지')}
       {field('relationship', '우리의 관계', '예: 딸')}

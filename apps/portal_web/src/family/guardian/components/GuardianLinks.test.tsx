@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { GuardianLinks } from './GuardianLinks'
 
@@ -12,6 +12,7 @@ describe('보호자 연결 선택', () => {
       expires_at: null,
     }]} selected="00000000-0000-4000-8000-000000000975" onSelect={vi.fn()}/>)
 
+    fireEvent.click(screen.getByRole('combobox', {name:'기억을 남길 연결'}))
     expect(screen.getByRole('option', { name: '딸 · 000975' })).toBeInTheDocument()
   })
 })

@@ -3,7 +3,7 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-10-15
+- Last refreshed: 2026-10-16
 - Primary product surfaces: 보호자 웹 `/studio`, 병원 웹 `/hospital`, 환자 병상 iPad.
 - Evidence reviewed: `apps/portal_web/src/`, `docs/delirium-familiar-voice/03-context-and-guardian.md`, `07-pre-patient-trial-safety-ethics-gate.md`, 기존 환자 iPad 규격, 사용자 제공 팔레트 이미지.
 - 새 웹 레퍼런스: 사용자 제공 `/Users/maxkim/recon/rozeta/rozeta-design-audit/COMPONENT-SPEC.md`, `screenshots/03-subject-notes.png`, `SCREENSHOTS.ko.md`. 이 절대 경로는 개발 머신의 참고 자료이며 빌드 의존성이 아니다.
@@ -147,6 +147,14 @@
 - Disabled: 공급자 미연결·동의 없음·샘플 부족·등록 미완료를 구분한다.
 - Slow network: 생성 요청 결과가 불명확하면 `pending`으로 남기고 재생성을 막는다. 원격 조회로 조정한다.
 - 마이크는 최대 30초, 탭 숨김/화면 종료 시 트랙·버퍼 해제. 대화 화면의 동의 해제는 로컬 응답과 재생을 지운다. 이미 공급자에 전달된 요청을 되돌린다는 의미는 아니다.
+
+## Content and help controls
+
+- 제목 아래에 화면 목적을 반복하는 소개·홍보·상시 설명 문단을 추가하지 않는다. 사용자가 요청한 내용을 다시 풀어쓴 문장은 삭제한다. 사이드바 부제와 하단 홍보 문구도 두지 않는다.
+- 작업에 필요한 설명은 `shared/components/HelpTooltip`의 `?` 버튼으로 제공한다. 관련 제목·필드·동작 가까이에 배치하며 마우스 hover, 키보드 focus, 클릭/터치로 열고 Escape·바깥 클릭으로 닫는다.
+- 실제 환자/업무 데이터, 처리 상태, 오류, 권한 부족, 동의 체크박스는 설명 문구로 취급하지 않는다. 이를 숨기거나 성공처럼 꾸미지 않는다. 집계 범위의 상세 설명은 도움말로 옮기되 일부 기록이 미확인인 경우 짧은 상태를 유지한다.
+- 모든 선택 입력은 `shared/components/Select`를 사용한다. OS 기본 메뉴를 직접 노출하는 `<select>`는 공용 컴포넌트 내부의 폼 값·필수 입력 검사 용도로만 허용한다.
+- 선택 메뉴는 현재 테마의 토큰, 공통 여백·모서리·체크 표시를 사용한다. 방향키·Home/End·Enter/Space·Escape·Tab·글자 탐색을 지원하고 비활성 항목은 선택하지 않는다. 팝업은 시트 위에서도 보이고 화면 가장자리에 잘리지 않아야 한다.
 
 ## Content voice
 

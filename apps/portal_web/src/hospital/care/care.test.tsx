@@ -7,8 +7,9 @@ const patient={patient_id:'patient',encounter_id:'encounter',staff_display_name:
 it('평가를 미리 음성으로 채우지 않고 실제 입력한 결과를 저장한다',async()=>{
  const save=vi.fn().mockResolvedValue(undefined)
  const {container}=render(<CareNoteForm patient={patient} busy={false} kind="assessment" save={save}/>)
- expect(screen.getByLabelText('기록된 결과')).toHaveValue('')
- fireEvent.change(screen.getByLabelText('기록된 결과'),{target:{value:'unable'}})
+ expect(screen.getByRole('combobox',{name:'기록된 결과'})).toHaveTextContent('결과 선택')
+ fireEvent.click(screen.getByRole('combobox',{name:'기록된 결과'}))
+ fireEvent.click(screen.getByRole('option',{name:'평가 불가'}))
  fireEvent.change(screen.getByLabelText('평가 불가 사유와 관찰 내용'),{target:{value:'피로를 표현해 평가를 마치지 못했습니다.'}})
  fireEvent.submit(container.querySelector('form')!)
  await waitFor(()=>expect(save).toHaveBeenCalledWith(expect.objectContaining({kind:'assessment',result:'unable',score:null,tool:'4AT',patient_id:'patient',encounter_id:'encounter'})))

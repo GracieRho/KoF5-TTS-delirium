@@ -1,3 +1,4 @@
+import { HelpTooltip } from '../../shared/components/HelpTooltip'
 import { useAuth } from '../../shared/auth/AuthContext'
 import { GuardianPortal } from '../guardian/pages/GuardianPortal'
 import { useEffect, useRef, useState } from 'react'
@@ -122,7 +123,6 @@ export function Studio() {
       area="보호자"
       homeHref="/studio"
       title="가족의 공간"
-      subtitle="목소리와 기억을 함께"
       current={tabs[tab]}
       navigation={
         <>
@@ -164,11 +164,6 @@ export function Studio() {
                     <br />
                     함께한 기억으로.
                   </h1>
-                  <p>
-                    가족이 남긴 이야기가
-                    <br />
-                    따뜻한 대화로 이어집니다.
-                  </p>
                   <button onClick={() => setTab('chat')} disabled={!done.every(Boolean)}>
                     대화해보기
                     <Icon name="arrow" size={18} />
@@ -190,8 +185,7 @@ export function Studio() {
                         {done[index] ? <Icon name="check" size={19} /> : `0${index + 1}`}
                       </span>
                       <div>
-                        <h3>{step.title}</h3>
-                        <p>{step.text}</p>
+                        <div className="heading-with-help"><h3>{step.title}</h3><HelpTooltip label={`${step.title} 도움말`}>{step.text}</HelpTooltip></div>
                       </div>
                       <button
                         onClick={() => {
@@ -206,13 +200,7 @@ export function Studio() {
                   ))}
                 </div>
               </section>
-              <div className="studio-bottom-note">
-                <Icon name="shield" size={20} />
-                <p>
-                  가족 목소리로 읽어주는 AI 대화입니다. 실제 가족 통화나 의료 상담을 대신하지
-                  않습니다.
-                </p>
-              </div>
+              <div className="studio-bottom-note"><span>AI 대화</span><HelpTooltip label="AI 대화 안내">가족 목소리로 읽어주는 AI 대화입니다. 실제 가족 통화나 의료 상담을 대신하지 않습니다.</HelpTooltip></div>
             </>
           )}
           {tab === 'memory' && (
@@ -247,7 +235,7 @@ export function Studio() {
           )}
           <ResponsiveSheet
             open={profileOpen}
-            title="우리 가족 소개"
+            help="가상의 가족 정보와 별칭을 사용하세요. 실제 환자 정보나 주민번호·병력은 입력하지 않습니다." title="우리 가족 소개"
             onClose={() => {
               if (!busy) setProfileOpen(false)
             }}

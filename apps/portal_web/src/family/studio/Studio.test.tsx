@@ -50,7 +50,7 @@ describe('가족 시연 공간', () => {
     expect(new URLSearchParams(window.location.search).get('tab')).toBe('voice')
     expect(
       await screen.findByText(
-        '음성 공급자 연결 전입니다. 서버에 ElevenLabs 키를 연결하면 등록할 수 있어요.'
+        '음성 서비스 연결 전'
       )
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '첫 샘플 녹음' })).toBeDisabled()
