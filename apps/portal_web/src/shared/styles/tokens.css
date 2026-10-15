@@ -240,7 +240,7 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
 .step-done { color: var(--brand); background: #edf2e5; border-color: #edf2e5 }
 .setup-row h3 { margin: 0 0 5px; font-size: .9rem }
 .setup-row p { color: var(--muted); font-size: .78rem; margin: 0 }
-.setup-row button { margin-left: auto; flex-shrink: 0; min-width: 126px; min-height: 36px; font-size: .75rem; border-color: var(--line); background: #fafbf8 }
+.setup-row > button { margin-left: auto; flex-shrink: 0; min-width: 126px; min-height: 36px; font-size: .75rem; border-color: var(--line); background: #fafbf8 }
 .studio-bottom-note { display: flex; align-items: center; justify-content: center; gap: 10px; color: #8a9481; margin-top: 25px }
 .studio-bottom-note p { margin: 0; font-size: .7rem }
 .studio-footer { border-top: 1px solid #f0f2ec; padding: 18px 42px; display: flex; justify-content: space-between; gap: 20px; color: #707b63; font-size: .75rem }
@@ -333,7 +333,7 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
   .welcome-band p { position: relative; z-index: 1; font-size: .8rem }
   .setup-row { gap: 12px; flex-wrap: wrap; padding: 22px 0 }
   .setup-row > div { flex: 1 }
-  .setup-row button { margin-left: 56px; min-width: 0; min-height: 36px }
+  .setup-row > button { margin-left: 56px; min-width: 0; min-height: 36px }
   .setup-row p { font-size: .74rem }
   .studio-bottom-note { align-items: flex-start }
   .studio-bottom-note > svg { flex-shrink: 0 }
@@ -395,3 +395,6 @@ button.select-trigger[aria-invalid="true"] { border-color:var(--danger) }
 .help-content {text-align:left}
 
 .select-label {display:flex;align-items:center}
+
+.conversation-requirements { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:20px 0;font-size:.78rem;color:var(--muted) }
+.conversation-requirements button { font-size:.78rem;min-height:36px }

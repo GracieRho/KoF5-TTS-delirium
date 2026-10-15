@@ -10,6 +10,7 @@ import { FamilyProfile } from './FamilyProfile'
 import { MemoryLibrary } from './MemoryLibrary'
 import { VoiceEnrollment } from './VoiceEnrollment'
 import { Conversation } from './Conversation'
+import { conversationReadiness } from './readiness'
 import { VoiceWave } from '../components/VoiceWave'
 import { studioRequest, type StudioState, type Profile, type MemoryInput } from './api'
 
@@ -92,13 +93,8 @@ export function Studio() {
       if (mounted.current) setBusy(false)
     }
   }
-  const done = state
-    ? [
-        Boolean(state.profile.guardian_name),
-        state.voice.status === 'created',
-        state.memories.some((m) => m.category !== 'avoid')
-      ]
-    : [false, false, false]
+  const readiness = state ? conversationReadiness(state) : null
+  const done = readiness?.steps ?? [false, false, false]
   const steps: { title: string; text: string; action: string; tab?: Tab }[] = [
     {
       title: '우리 가족 소개',
@@ -164,8 +160,8 @@ export function Studio() {
                     <br />
                     함께한 기억으로.
                   </h1>
-                  <button onClick={() => setTab('chat')} disabled={!done.every(Boolean)}>
-                    대화해보기
+                  <button onClick={() => setTab('chat')}>
+                    {readiness?.ready ? '대화해보기' : '대화 준비 확인'}
                     <Icon name="arrow" size={18} />
                   </button>
                 </div>
@@ -174,7 +170,7 @@ export function Studio() {
               <section className="setup-section">
                 <div className="section-heading">
                   <h2>
-                    {done.every(Boolean) ? '대화할 준비가 되었어요' : '우리의 이야기를 준비해요'}
+                    {readiness?.ready ? '대화 준비 완료' : done.every(Boolean) ? '서비스 연결 확인 필요' : '가족 자료 준비'}
                   </h2>
                   <span className="compact">{done.filter(Boolean).length} / 3 준비 완료</span>
                 </div>
@@ -231,7 +227,12 @@ export function Studio() {
             />
           )}
           {tab === 'chat' && (
-            <Conversation state={state} report={(message) => setNotice(message)} />
+            <Conversation
+              state={state}
+              report={(message) => setNotice(message)}
+              prepare={(target) => target === 'profile' ? setProfileOpen(true) : setTab(target)}
+              refresh={() => void refresh()}
+            />
           )}
           <ResponsiveSheet
             open={profileOpen}

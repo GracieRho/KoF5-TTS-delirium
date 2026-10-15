@@ -3,15 +3,20 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Icon } from '../../shared/components/Icon'
 import { wavBase64 } from '../guardian/utils/voiceAudio'
 import { useRecorder } from './useRecorder'
+import { conversationReadiness } from './readiness'
 import { studioRequest, type StudioState, type TurnResult } from './api'
 
 type Message = { question: string; reply: string; url: string; count: number }
 export function Conversation({
   state,
-  report
+  report,
+  prepare,
+  refresh
 }: {
   state: StudioState
   report: (message: string) => void
+  prepare?: (target: 'profile' | 'voice' | 'memory') => void
+  refresh?: () => void
 }) {
   const [text, setText] = useState('')
   const [consent, setConsent] = useState(false)
@@ -23,12 +28,7 @@ export function Conversation({
   const inFlight = useRef(false)
   const epoch = useRef(0)
   const recorder = useRecorder()
-  const hasMemory = state.memories.some((m) => m.category !== 'avoid')
-  const ready =
-    state.voice.status === 'created' &&
-    state.providers.conversation &&
-    state.providers.voice &&
-    hasMemory
+  const { ready, missing } = conversationReadiness(state)
   useEffect(
     () => () => {
       mounted.current = false
@@ -138,7 +138,7 @@ export function Conversation({
           <h1>목소리로 대화하기</h1>
 
         </div>
-        <span className="state-label">{ready ? '대화 준비 완료' : '등록 후 사용할 수 있어요'}</span>
+        <span className="state-label">{ready ? '대화 준비 완료' : '대화 준비 필요'}</span>
       </div>
       <div className="conversation-panel">
         <div className="conversation-intro">
@@ -164,9 +164,19 @@ export function Conversation({
           </div>
         )}
         {!ready && (
-          <p className="blocking-note">
-            가족 소개, 일반 기억 한 건, 복제 음성과 공급자 연결을 먼저 준비해주세요.
-          </p>
+          <div className="conversation-requirements" aria-label="대화에 필요한 준비">
+            {missing.map((item) => {
+              const target = item.target
+              return target && prepare ? (
+                <button key={item.label} type="button" onClick={() => prepare(target)}>
+                  {item.label}<Icon name="arrow" size={16} />
+                </button>
+              ) : <span key={item.label}>{item.label}</span>
+            })}
+            {missing.some((item) => !item.target) && refresh && (
+              <button type="button" onClick={refresh}>연결 다시 확인</button>
+            )}
+          </div>
         )}
         <form onSubmit={(event) => void submit(event)} className="conversation-form">
           <label className="check-field">
@@ -205,9 +215,9 @@ export function Conversation({
               {recorder.recording ? `녹음 마치고 전사 · ${recorder.seconds}초` : '말로 질문'}
             </button>
             <span>
-              {state.providers.transcription
+              {ready && (state.providers.transcription
                 ? '전사 후 내용을 확인하고 보내세요'
-                : '지금은 글로 질문할 수 있어요'}
+                : '글로 질문할 수 있어요')}
             </span>
             <button
               className="primary"

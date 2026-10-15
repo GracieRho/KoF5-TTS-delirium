@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Studio } from './Studio'
 import { MemoryLibrary } from './MemoryLibrary'
 import { Conversation } from './Conversation'
+import { conversationReadiness } from './readiness'
 import { studioRequest, type StudioState } from './api'
 
 vi.mock('../../shared/auth/AuthContext', () => ({ useAuth: () => ({ signOut: vi.fn() }) }))
@@ -115,6 +116,47 @@ describe('가족 시연 공간', () => {
     expect(sent).toEqual({ text: '제주도 기억나?', provider_processing_consent: true })
     fireEvent.click(screen.getByRole('checkbox'))
     expect(screen.queryByText('함께 산책했어요.')).not.toBeInTheDocument()
+  })
+
+  it('등록 자료가 있어도 공급자가 없으면 홈과 대화 모두 준비 필요로 표시한다', async () => {
+    const prepared = { ...state, voice: { status: 'created' as const } }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => prepared }))
+    render(<Studio />)
+    expect(await screen.findByText('3 / 3 준비 완료')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '서비스 연결 확인 필요' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /대화 준비 확인/ }))
+    expect(screen.getByLabelText('대화할 질문')).toBeDisabled()
+    expect(screen.getByText('음성 서비스 연결 필요')).toBeInTheDocument()
+    expect(screen.getByText('대화 서비스 연결 필요')).toBeInTheDocument()
+    expect(screen.queryByText('글로 질문할 수 있어요')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '가족 기억 추가' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '연결 다시 확인' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+  })
+
+  it('부족한 가족 자료만 표시하고 해당 입력 화면으로 이동한다', () => {
+    const prepare = vi.fn()
+    render(<Conversation state={{ ...state, memories: [] }} report={vi.fn()} prepare={prepare} />)
+    expect(screen.queryByText('가족 소개 입력')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /가족 기억 추가/ }))
+    expect(prepare).toHaveBeenCalledWith('memory')
+    fireEvent.click(screen.getByRole('button', { name: /목소리 등록 확인/ }))
+    expect(prepare).toHaveBeenCalledWith('voice')
+  })
+
+  it('준비 상태는 소개·일반 기억·음성과 필수 공급자를 모두 검사하고 전사는 선택 사항이다', () => {
+    const ready: StudioState = {
+      ...state, voice: { status: 'created' },
+      providers: { voice: true, conversation: true, transcription: false }
+    }
+    expect(conversationReadiness(ready).ready).toBe(true)
+    expect(conversationReadiness({ ...ready, profile: { ...ready.profile, relationship: ' ' } }).ready).toBe(false)
+    expect(conversationReadiness({ ...ready, memories: [{ ...state.memories[0], category: 'avoid' }] }).ready).toBe(false)
+    for (const status of ['none', 'pending', 'verification_pending', 'deletion_pending', 'failed', 'deleted'] as const) {
+      expect(conversationReadiness({ ...ready, voice: { status } }).ready).toBe(false)
+    }
+    expect(conversationReadiness({ ...ready, providers: { ...ready.providers, voice: false } }).ready).toBe(false)
+    expect(conversationReadiness({ ...ready, providers: { ...ready.providers, conversation: false } }).ready).toBe(false)
   })
 
   it('API는 전용 헤더를 보내고 서버의 오류를 전달한다', async () => {
