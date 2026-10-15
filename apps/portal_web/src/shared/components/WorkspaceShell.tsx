@@ -7,8 +7,8 @@ type Props = {
   title: string
   subtitle: string
   current: string
-  status: string
-  note: ReactNode
+  status?: string
+  note?: ReactNode
   navigation: ReactNode
   children: ReactNode
   homeHref?: string
@@ -30,17 +30,18 @@ export function WorkspaceShell({
       <AppHeader area={area} homeHref={homeHref} />
       <aside className="studio-nav">
         <div className="studio-space">
-          <span className="space-avatar">F</span>
           <div>
             <strong>{title}</strong>
             <span>{subtitle}</span>
           </div>
         </div>
         <nav aria-label={`${title} 메뉴`}>{navigation}</nav>
-        <div className="studio-nav-bottom">
-          <Icon name="shield" size={18} />
-          <span>{note}</span>
-        </div>
+        {note && (
+          <div className="studio-nav-bottom">
+            <Icon name="shield" size={18} />
+            <span>{note}</span>
+          </div>
+        )}
       </aside>
       <main className="studio-workspace">
         <header className="studio-topbar">
@@ -49,7 +50,7 @@ export function WorkspaceShell({
             <span className="breadcrumb-separator">/</span>
             {current}
           </span>
-          <span className="local-label">{status}</span>
+          {status && <span className="workspace-status">{status}</span>}
         </header>
         <div className="studio-content">{children}</div>
         <footer className="studio-footer">

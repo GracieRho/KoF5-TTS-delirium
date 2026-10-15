@@ -37,7 +37,7 @@ export function Studio() {
     } catch {
       if (mounted.current)
         setError(
-          '로컬 시연 서버에 연결되지 않았습니다. 실행 안내에 따라 서버를 켠 뒤 다시 연결해주세요.'
+          '서비스에 연결하지 못했습니다. 잠시 후 다시 연결해주세요.'
         )
     } finally {
       if (mounted.current) setLoading(false)
@@ -111,14 +111,6 @@ export function Studio() {
       title="가족의 공간"
       subtitle="목소리와 기억을 함께"
       current={tabs[tab]}
-      status="로컬 시연"
-      note={
-        <>
-          성인 본인 음성 · 가상 가족 자료
-          <br />
-          로컬 시연 공간
-        </>
-      }
       navigation={
         <>
           {(Object.keys(tabs) as Tab[]).map((key) => (
@@ -141,7 +133,7 @@ export function Studio() {
       {error && (
         <div className="studio-empty" role="alert">
           <Icon name="shield" size={32} />
-          <h1>시연 서버 연결이 필요해요</h1>
+          <h1>연결을 확인해주세요</h1>
           <p>{error}</p>
           <button onClick={() => void refresh()}>다시 연결</button>
         </div>

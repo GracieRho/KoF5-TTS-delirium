@@ -184,8 +184,8 @@ export function VoiceEnrollment({ state, busy, enroll, action, report }: Props) 
           <div className="guide-rule">
             <Icon name="shield" />
             <p>
-              동의한 성인 본인의 목소리와 가상 가족 정보로 시연합니다. 원본 녹음은 서버에 저장하지
-              않습니다.
+              현재는 동의한 성인 본인의 목소리와 가상 가족 정보만 사용할 수 있습니다. 실제 환자
+              대상 사용은 지원하지 않으며 원본 녹음은 서버에 저장하지 않습니다.
             </p>
           </div>
         </aside>

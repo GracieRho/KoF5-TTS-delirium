@@ -60,7 +60,7 @@ describe('가족 시연 공간', () => {
     vi.stubGlobal('fetch', fetch)
     render(<Studio />)
     expect(
-      await screen.findByRole('heading', { name: '시연 서버 연결이 필요해요' })
+      await screen.findByRole('heading', { name: '연결을 확인해주세요' })
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '다시 연결' }))
     expect(await screen.findByText('2 / 3 준비 완료')).toBeInTheDocument()

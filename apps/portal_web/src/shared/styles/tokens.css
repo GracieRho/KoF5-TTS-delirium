@@ -208,7 +208,6 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
 .workspace-shell .app-header .workspace-label, .workspace-shell .app-header nav { display: none }
 .studio-nav { position: fixed; top: 98px; bottom: 0; left: 0; width: 248px; padding: 8px 16px 24px; display: flex; flex-direction: column; z-index: 8 }
 .studio-space { display: flex; align-items: center; gap: 11px; padding: 12px 10px 28px }
-.space-avatar { width: 36px; height: 36px; display: grid; place-items: center; color: var(--brand); background: #e0e8d6; border-radius: 11px; font-weight: 700 }
 .studio-space strong, .studio-space div > span { display: block }
 .studio-space strong { font-size: .88rem }
 .studio-space div > span { color: var(--muted); font-size: .73rem; margin-top: 4px }
@@ -221,7 +220,7 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
 .studio-workspace { min-height: calc(100dvh - 12px); margin-left: 248px; margin-top: 12px; border: 1px solid var(--line); border-right: 0; border-bottom: 0; border-radius: 22px 0 0; background: white; display: flex; flex-direction: column }
 .studio-topbar { min-height: 68px; padding: 18px 42px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f2ec; color: #838b7c; font-size: .76rem }
 .breadcrumb-separator { padding: 0 12px; color: #c7cdbf }
-.local-label { color: var(--palette-moss); font-size: .7rem }
+.workspace-status { color: var(--palette-moss); font-size: .7rem }
 .studio-content { width: 100%; max-width: 1180px; margin: 0 auto; padding: 36px 48px 52px; flex: 1 }
 .welcome-band { min-height: 286px; display: flex; align-items: center; justify-content: space-between; padding: 36px 42px; overflow: hidden; border-radius: 18px; background: var(--family-gradient); position: relative }
 .welcome-band h1 { font-size: 2.15rem; line-height: 1.35; letter-spacing: -.04em; font-weight: 700; color: #37482c; margin-bottom: 14px }
