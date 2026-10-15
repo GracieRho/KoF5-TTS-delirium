@@ -292,3 +292,14 @@ button.care-name {border:0;background:transparent;padding:0;min-height:28px;font
  .care-readiness {padding:12px;margin:12px 0}
  .care-back {margin-bottom:10px}
 }
+.hospital-theme .queue-row {grid-template-columns:120px minmax(0,1fr) 156px auto;gap:16px}
+.hospital-theme .queue-row>button {white-space:nowrap}
+@media(max-width:1150px) and (min-width:761px) {
+ .hospital-theme .queue-row {grid-template-columns:120px minmax(0,1fr)}
+ .hospital-theme .queue-row>time {grid-column:1}
+ .hospital-theme .queue-row>button {grid-column:2;justify-self:end}
+}
+@media(max-width:760px) {
+ .hospital-theme .queue-row {grid-template-columns:1fr;gap:8px}
+ .hospital-theme .queue-row>button {justify-self:start}
+}
