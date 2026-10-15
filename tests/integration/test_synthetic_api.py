@@ -143,6 +143,12 @@ class SyntheticApiTests(unittest.TestCase):
         }).status_code, 409)
         self.assertEqual(self.client.post(f"{root}/end").json()["state"], "IDLE")
 
+    def test_portal_allows_only_local_blob_audio_for_recording_and_tts(self):
+        from kof5_tts.api import _PORTAL_HEADERS
+        policy = _PORTAL_HEADERS['Content-Security-Policy']
+        self.assertIn("media-src 'self' blob:;", policy)
+        self.assertIn("script-src 'self';", policy)
+
     def test_guardian_portal_exposes_only_a_dedicated_public_supabase_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             portal_dist = Path(temporary_directory)
@@ -153,7 +159,7 @@ class SyntheticApiTests(unittest.TestCase):
             (assets / "index-a1b2c3.js").write_text("export {};", encoding="utf-8")
             (assets / "index-a1b2c3.js.map").write_text("{}", encoding="utf-8")
             with patch("kof5_tts.api.PORTAL_DIST", portal_dist):
-                for route in ("/guardian", "/hospital", "/guardian/patients/1",
+                for route in ("/studio", "/guardian", "/hospital", "/guardian/patients/1",
                               "/hospital/alerts"):
                     portal = self.client.get(route)
                     self.assertEqual(portal.status_code, 200)

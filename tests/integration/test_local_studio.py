@@ -125,6 +125,16 @@ class LocalStudioTests(unittest.TestCase):
             self.assertEqual(tts.call_args.args[2].voice_id, 'fakevoice')
         self.assertNotIn(turn['text'], str(studio.load()))
 
+    def test_transcription_is_optional_and_requires_audio_processing_consent(self):
+        payload = {'wav_base64': base64.b64encode(make_synthetic_wav(seconds=1)).decode(), 'provider_processing_consent': True}
+        self.assertEqual(self.client.post('/local-studio/transcribe', json=payload).status_code, 503)
+        with patch.dict(os.environ, {'DEEPGRAM_API_KEY': 'fake-stt'}), patch.object(studio, 'transcribe_wav', return_value='제주도 기억나?') as transcribe:
+            self.assertEqual(self.client.post('/local-studio/transcribe', json={**payload, 'provider_processing_consent': False}).status_code, 422)
+            transcribe.assert_not_called()
+            response = self.client.post('/local-studio/transcribe', json=payload)
+            self.assertEqual(response.json(), {'text': '제주도 기억나?'})
+        self.assertNotIn('제주도 기억나?', str(studio.load()))
+
     def test_delete_blocks_use_immediately_and_checks_remote_absence(self):
         self.setup_voice()
         with patch.object(studio, 'delete_test_voice'), patch.object(studio, 'test_voice_present', return_value=True):

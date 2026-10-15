@@ -62,7 +62,7 @@ _PORTAL_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
         "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-        "font-src 'self' data:; connect-src 'self' https://*.supabase.co "
+        "media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co "
         "wss://*.supabase.co http://127.0.0.1:54341 ws://127.0.0.1:54341"
     ),
     "X-Content-Type-Options": "nosniff",
