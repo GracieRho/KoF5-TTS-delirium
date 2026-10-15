@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { VoiceStatus } from '../../shared/types/domain'
+import type { VoiceStatus } from '../../../shared/types/domain'
 import { submitFreshVoiceEnrollment } from './useGuardianVoiceTrial'
 
 const consent = '00000000-0000-4000-8000-000000000001'

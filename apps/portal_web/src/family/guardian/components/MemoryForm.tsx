@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { FamilyFact } from '../../shared/types/domain'
-import { FAMILY_LABELS } from '../../shared/types/constants'
+import type { FamilyFact } from '../../../shared/types/domain'
+import { FAMILY_LABELS } from '../../../shared/types/constants'
 
 const prompts: [string, string][] = [['relationship','환자분과 어떤 관계인가요?'],['family','가족과 함께한 이야기가 있나요?'],['hometown','고향은 어디였나요?'],['occupation','예전에 어떤 일을 하셨나요?'],['food','좋아하는 음식은 무엇인가요?'],['hobby','좋아하는 음악이나 취미는 무엇인가요?'],['daily_routine','평소 하루 일과는 어땠나요?'],['comfort_topic','환자분을 안심시키는 이야기는 무엇인가요?'],['avoid_topic','대화에서 피해야 할 이야기가 있나요?']]
 

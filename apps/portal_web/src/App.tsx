@@ -1,5 +1,5 @@
-import { Studio } from './studio/Studio'
-import { GuardianPortal } from './guardian/pages/GuardianPortal'
+import { Studio } from './family/studio/Studio'
+import { GuardianPortal } from './family/guardian/pages/GuardianPortal'
 import { HospitalPortal } from './hospital/pages/HospitalPortal'
 
 export function App() {

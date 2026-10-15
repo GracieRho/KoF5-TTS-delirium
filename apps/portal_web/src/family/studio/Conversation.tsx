@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Icon } from '../shared/components/Icon'
+import { Icon } from '../../shared/components/Icon'
 import { wavBase64 } from '../guardian/utils/voiceAudio'
 import { useRecorder } from './useRecorder'
 import { studioRequest, type StudioState, type TurnResult } from './api'

@@ -1,5 +1,6 @@
-type Name = 'home' | 'voice' | 'memory' | 'chat' | 'plus' | 'arrow' | 'check' | 'close' | 'shield'
+type Name = 'home' | 'voice' | 'memory' | 'chat' | 'plus' | 'arrow' | 'check' | 'close' | 'shield' | 'patient'
 const paths: Record<Name, string> = {
+  patient: 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a8 8 0 0 1 16 0v2',
   home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
   voice:
     'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8',

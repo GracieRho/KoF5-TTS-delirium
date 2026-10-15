@@ -1,5 +1,5 @@
-import type { SupabaseRest } from '../../shared/api/supabase'
-import type { FamilyFact, GuardianLink } from '../../shared/types/domain'
+import type { SupabaseRest } from '../../../shared/api/supabase'
+import type { FamilyFact, GuardianLink } from '../../../shared/types/domain'
 
 export const guardianApi = {
   links: (api: SupabaseRest, token: string) => api.request<GuardianLink[]>('/rest/v1/guardian_links?select=patient_id,relationship,access_status,effective_at,expires_at', { token, schema: 'api' }),

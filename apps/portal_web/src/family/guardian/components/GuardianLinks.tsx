@@ -1,4 +1,4 @@
-import type { GuardianLink } from '../../shared/types/domain'
+import type { GuardianLink } from '../../../shared/types/domain'
 import { validLink } from '../api/guardianApi'
 
 export function GuardianLinks({ links, selected, onSelect }: { links: GuardianLink[]; selected: string; onSelect: (id: string) => void }) {

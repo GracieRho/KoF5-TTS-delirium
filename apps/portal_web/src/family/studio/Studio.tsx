@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { WorkspaceShell } from '../shared/components/WorkspaceShell'
-import { Icon } from '../shared/components/Icon'
-import { ResponsiveSheet } from '../shared/components/ResponsiveSheet'
-import { StatusMessage } from '../shared/components/StatusMessage'
+import { WorkspaceShell } from '../../shared/components/WorkspaceShell'
+import { Icon } from '../../shared/components/Icon'
+import { ResponsiveSheet } from '../../shared/components/ResponsiveSheet'
+import { StatusMessage } from '../../shared/components/StatusMessage'
 import { FamilyProfile } from './FamilyProfile'
 import { MemoryLibrary } from './MemoryLibrary'
 import { VoiceEnrollment } from './VoiceEnrollment'
 import { Conversation } from './Conversation'
+import { VoiceWave } from '../components/VoiceWave'
 import { studioRequest, type StudioState, type Profile, type MemoryInput } from './api'
 
 type Tab = 'home' | 'voice' | 'memory' | 'chat'
@@ -159,15 +160,7 @@ export function Studio() {
                     <Icon name="arrow" size={18} />
                   </button>
                 </div>
-                <div className="welcome-art" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </div>
+                <VoiceWave />
               </div>
               <section className="setup-section">
                 <div className="section-heading">

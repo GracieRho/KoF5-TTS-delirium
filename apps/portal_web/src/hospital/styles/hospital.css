@@ -1,0 +1,178 @@
+.hospital-theme {
+  --hospital-indigo: #2f39a9;
+  --hospital-blue: #2e6fa0;
+  --hospital-cyan: #49a4bb;
+  --hospital-mint: #15d8b3;
+  --ink: #233449;
+  --muted: #65788d;
+  --brand: var(--hospital-indigo);
+  --brand-hover: #252e8d;
+  --brand-soft: #edf1fc;
+  --rail: #eff4f8;
+  --line: #e0e8ef;
+  --line-strong: #bfcedc;
+  --palette-moss: #2e6fa0;
+  color: var(--ink);
+}
+.hospital-theme :focus-visible {
+  outline-color: var(--hospital-blue);
+}
+.hospital-theme .studio-nav nav a {
+  color: #65788d;
+}
+.hospital-theme .studio-nav nav a:hover {
+  background: #e2ebf5;
+}
+.hospital-theme .studio-nav nav a[aria-current='page'] {
+  color: var(--hospital-indigo);
+}
+.hospital-theme .studio-nav-bottom {
+  color: #526b83;
+  border-color: var(--line);
+}
+.hospital-theme .studio-topbar,
+.hospital-theme .studio-footer {
+  color: var(--muted);
+  border-color: #edf1f5;
+}
+.hospital-theme .breadcrumb-separator {
+  color: #bdcad6;
+}
+.hospital-theme .studio-content {
+  max-width: 1350px;
+}
+.hospital-theme .hospital-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+  padding: 34px 36px;
+  border-radius: 18px;
+  background: linear-gradient(115deg, #eef0fb 0%, #e6f1f8 58%, #e1f6f0 100%);
+}
+.hospital-intro h1 {
+  margin: 0 0 16px;
+  font-size: 1.85rem;
+  line-height: 1.4;
+  letter-spacing: -0.035em;
+  color: #263c70;
+}
+.hospital-intro p {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.85;
+  color: #526b83;
+}
+.hospital-workflow {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hospital-workflow li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--hospital-blue);
+}
+.hospital-workflow li > svg {
+  flex-shrink: 0;
+}
+.hospital-workflow strong,
+.hospital-workflow span {
+  display: block;
+}
+.hospital-workflow strong {
+  font-size: 0.83rem;
+  font-weight: 650;
+  color: #304c72;
+}
+.hospital-workflow span {
+  margin-top: 3px;
+  font-size: 0.71rem;
+  color: #627b8c;
+}
+.hospital-theme .auth-layout {
+  max-width: none;
+  margin: 28px 0 0;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 28px;
+}
+.hospital-theme .auth-layout .panel {
+  padding: 28px;
+  border-color: var(--line);
+}
+.hospital-theme .auth-layout .panel h2 {
+  color: #2b4162;
+}
+.hospital-theme .auth-layout .boundary {
+  background: #f6f9fc;
+}
+.hospital-theme .boundary p {
+  color: #536b82;
+  font-size: 0.84rem;
+  line-height: 1.9;
+}
+.hospital-theme .blocking-note {
+  background: #f0f4fa;
+  border-color: var(--line);
+  color: #526b83;
+}
+.hospital-theme .hospital-sidebar {
+  border-color: var(--line);
+}
+.hospital-theme .side-nav button[aria-pressed='true'],
+.hospital-theme .patient-button[aria-pressed='true'] {
+  background: var(--brand-soft);
+  border-color: #c8d3f0;
+  color: var(--brand);
+}
+.hospital-theme .tabs button[aria-selected='true'] {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+@media (max-width: 1100px) {
+  .hospital-theme .hospital-intro {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 28px;
+  }
+  .hospital-workflow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .hospital-workflow li {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .hospital-theme .auth-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .hospital-theme .hospital-intro {
+    padding: 26px 22px;
+  }
+  .hospital-intro h1 {
+    font-size: 1.55rem;
+  }
+  .hospital-intro p {
+    font-size: 0.76rem;
+  }
+  .hospital-workflow {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .hospital-workflow li {
+    align-items: center;
+    gap: 14px;
+  }
+  .hospital-theme .auth-layout {
+    gap: 18px;
+    margin-top: 20px;
+  }
+  .hospital-theme .auth-layout .panel {
+    padding: 22px;
+  }
+}

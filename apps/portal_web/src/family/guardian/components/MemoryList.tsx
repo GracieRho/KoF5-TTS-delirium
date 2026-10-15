@@ -1,6 +1,6 @@
-import type { FamilyFact } from '../../shared/types/domain'
-import { FAMILY_LABELS } from '../../shared/types/constants'
-import { EmptyState } from '../../shared/components/EmptyState'
+import type { FamilyFact } from '../../../shared/types/domain'
+import { FAMILY_LABELS } from '../../../shared/types/constants'
+import { EmptyState } from '../../../shared/components/EmptyState'
 
 export function MemoryList({ facts, category, onEdit }: { facts: FamilyFact[]; category: 'memory' | 'avoid'; onEdit: (fact: FamilyFact) => void }) {
   const rows = facts.filter(fact => category === 'avoid' ? fact.category === 'avoid_topic' : fact.category !== 'avoid_topic')

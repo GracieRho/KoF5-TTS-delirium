@@ -66,7 +66,7 @@
 | `--rail` | `#F0F3ED` | 사이드바 |
 | `--paper` | `#FFFFFF` | 작업면 |
 
-- 네 원색을 섞은 유사색 그라데이션을 환영 배경과 정적인 음성 파형 그래픽에 사용한다. 배경은 밝게 희석하고 네 색의 비중이 자연스럽게 이어지게 한다.
+- 네 원색을 섞은 유사색 그라데이션을 환영 배경과 음성 파형 그래픽에 사용한다. 배경은 밝게 희석하고 네 색의 비중이 자연스럽게 이어지게 한다.
 - 본문·버튼·테두리의 그라데이션은 사용하지 않는다. 라임 위 흰 글자는 사용하지 않는다.
 - 성공/오류는 문구와 함께 표현하며 팔레트만으로 상태를 구분하지 않는다.
 
@@ -77,7 +77,7 @@
 - `word-break: keep-all`, 긴 URL/식별자만 `overflow-wrap: anywhere`.
 - 4/8px 간격 체계. 데스크톱 rail 248px, 중간 폭 218px. 작업면 최대 1180px, 안쪽 여백 48px/30px/20px.
 - 작업면 모서리 22px, 큰 브랜드 영역 18px, 반복 콘텐츠 13–16px, 입력/버튼 10px. 과도한 그림자 없이 경계로 구분한다.
-- Motion: 입력 피드백 150ms. 파형은 정적이며 실제 녹음/재생 상태를 흉내 내지 않는다.
+- Motion: 입력 피드백 150ms. 가족 환영 파형은 4.8초 ease-in-out, 높이 78–104%와 수직 이동 ±3px의 잔잔한 위상차 애니메이션이다. 실제 녹음/재생 상태를 뜻하지 않으며, 멈춤/재생 제어와 `prefers-reduced-motion` 정적 대체를 제공한다. 병원 업무면·환자 화면에는 장식적 반복 모션을 넣지 않는다.
 
 ## Components
 
@@ -88,15 +88,18 @@
 | `shared/components/Panel` | 기존 역할별 정보 영역 | 보호자·병원 |
 | `shared/components/ResponsiveSheet` | 제목·닫기·Escape·포커스 복귀를 갖춘 편집 시트 | 공통 |
 | `shared/components/StatusMessage` | 접근성 있는 단일 토스트 | 공통 |
-| `studio/Studio` | 진행 상태·탭·API 상태 동기화 | 시연 |
-| `studio/FamilyProfile` | 가족 소개 폼 | 시연 |
-| `studio/MemoryLibrary` | 분류·기억 카드·생성/수정/삭제 시트 | 시연 |
-| `studio/VoiceEnrollment` | 동의·샘플 세 개·생성/확인/삭제 상태 | 시연 |
-| `studio/Conversation` | 질문·전사 확인·음성 답변·전송 동의 | 시연 |
-| `studio/useRecorder` | 한 번의 마이크 소유권·PCM WAV·중단/정리 | 녹음과 질문 |
-| `studio/api` | 시연 API 타입과 오류 전달 | 시연 |
+| `family/studio/Studio` | 진행 상태·탭·API 상태 동기화 | 시연 |
+| `family/studio/FamilyProfile` | 가족 소개 폼 | 시연 |
+| `family/studio/MemoryLibrary` | 분류·기억 카드·생성/수정/삭제 시트 | 시연 |
+| `family/studio/VoiceEnrollment` | 동의·샘플 세 개·생성/확인/삭제 상태 | 시연 |
+| `family/studio/Conversation` | 질문·전사 확인·음성 답변·전송 동의 | 시연 |
+| `family/studio/useRecorder` | 한 번의 마이크 소유권·PCM WAV·중단/정리 | 녹음과 질문 |
+| `family/studio/api` | 시연 API 타입과 오류 전달 | 시연 |
 
-- 스타일과 공통 색상은 `shared/styles/tokens.css`가 소유한다. 역할별 컴포넌트에 hex 색상과 별도 셸을 복제하지 않는다.
+- 역할 폴더는 `family/`(보호자와 가족 기억·음성), `hospital/`(직원 업무)로 분리한다. `shared/`는 인증·타입·공용 셸·폼·시트와 기본 토큰만 소유한다. 실행 앱/라우트/API는 기존 구성을 재사용한다.
+- 가족 모션은 `family/components/VoiceWave`와 `family/styles/motion.css`, 병원 팔레트와 화면별 규칙은 `hospital/styles/hospital.css`가 소유한다. 별도 npm 앱·인증 구현·복제 셸을 만들지 않는다.
+- 병원 전용 팔레트: 인디고 `#2F39A9`(주요 행동/선택), 블루 `#2E6FA0`(보조 강조), 시안 `#49A4BB`와 민트 `#15D8B3`(심볼/옅은 배경). 본문 `#233449`, rail `#EFF4F8`, 경계 `#E0E8EF`, 흰 작업면을 사용한다. 밝은 민트 위 흰 본문은 금지한다. 병원 심볼은 같은 대화 고리를 이 네 색으로 바꾸며 형상과 워드마크는 공유한다.
+- 병원 로그인 전에는 담당 환자·승인 정보·전달 관리의 업무 안내와 실제 연결 상태를 보여준다. 로그인 후 기존 담당 환자·현재 입원·승인 맥락·대기 목록 기능을 유지하며, 미연결 환경을 가짜 환자/성공 수치로 채우지 않는다.
 - API 상태와 화면 상태를 분리한다. `created`와 `pending`, `verification_pending`, `deletion_pending`은 같은 성공 상태가 아니다.
 - 기능별 파일을 유지하며 대형 UI 패키지나 별도 토큰 생성 체계는 추가하지 않는다.
 

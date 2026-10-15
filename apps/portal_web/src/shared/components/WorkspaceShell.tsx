@@ -12,6 +12,7 @@ type Props = {
   navigation: ReactNode
   children: ReactNode
   homeHref?: string
+  brandSymbol?: string
 }
 
 export function WorkspaceShell({
@@ -23,11 +24,12 @@ export function WorkspaceShell({
   note,
   navigation,
   children,
-  homeHref
+  homeHref,
+  brandSymbol
 }: Props) {
   return (
-    <div className="workspace-shell">
-      <AppHeader area={area} homeHref={homeHref} />
+    <div className={`workspace-shell ${area === '병원' ? 'hospital-theme' : 'family-theme'}`}>
+      <AppHeader area={area} homeHref={homeHref} brandSymbol={brandSymbol} />
       <aside className="studio-nav">
         <div className="studio-space">
           <div>

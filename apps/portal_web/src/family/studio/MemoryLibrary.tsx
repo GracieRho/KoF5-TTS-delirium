@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { ResponsiveSheet } from '../shared/components/ResponsiveSheet'
-import { Icon } from '../shared/components/Icon'
+import { ResponsiveSheet } from '../../shared/components/ResponsiveSheet'
+import { Icon } from '../../shared/components/Icon'
 import type { Memory, MemoryInput } from './api'
 
 export const categories = {

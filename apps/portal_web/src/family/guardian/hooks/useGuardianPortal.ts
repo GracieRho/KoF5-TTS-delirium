@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAuth } from '../../shared/auth/AuthContext'
-import { RequestEpoch } from '../../shared/hooks/requestEpoch'
-import type { FamilyFact, GuardianLink } from '../../shared/types/domain'
+import { useAuth } from '../../../shared/auth/AuthContext'
+import { RequestEpoch } from '../../../shared/hooks/requestEpoch'
+import type { FamilyFact, GuardianLink } from '../../../shared/types/domain'
 import { guardianApi, validLink } from '../api/guardianApi'
 
 export function useGuardianPortal() {

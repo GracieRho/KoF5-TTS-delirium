@@ -1,4 +1,4 @@
-import { StatusMessage } from '../../shared/components/StatusMessage'
+import { StatusMessage } from '../../../shared/components/StatusMessage'
 import { useGuardianVoiceTrial } from '../hooks/useGuardianVoiceTrial'
 
 export function VoiceTrial({ patientId, token }: { patientId: string; token: string }) {

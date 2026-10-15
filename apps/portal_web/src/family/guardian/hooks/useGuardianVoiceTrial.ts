@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAuth } from '../../shared/auth/AuthContext'
-import { RequestEpoch, retainOwnedStream } from '../../shared/hooks/requestEpoch'
-import type { VoiceStatus } from '../../shared/types/domain'
-import { UUID } from '../../shared/types/constants'
+import { useAuth } from '../../../shared/auth/AuthContext'
+import { RequestEpoch, retainOwnedStream } from '../../../shared/hooks/requestEpoch'
+import type { VoiceStatus } from '../../../shared/types/domain'
+import { UUID } from '../../../shared/types/constants'
 import { pcm16Wav, wavBase64 } from '../utils/voiceAudio'
 
 type Sample = { durationMs: number; wav: Uint8Array }

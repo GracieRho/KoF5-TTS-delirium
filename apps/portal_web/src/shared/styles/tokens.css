@@ -227,11 +227,6 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
 .welcome-band p { font-size: .88rem; color: #536344; margin-bottom: 22px }
 .welcome-band button { min-height: 37px; padding: .5rem 1rem; border: 1px solid #a8b98d; background: rgb(255 255 255 / .45); color: #3f522d; font-size: .76rem }
 .welcome-band button:disabled { opacity: .65 }
-.welcome-art { width: 240px; height: 190px; display: flex; align-items: center; justify-content: center; gap: 11px; transform: rotate(-8deg); margin: 0 18px; flex-shrink: 0 }
-.welcome-art span { display: block; width: 20px; border-radius: 20px; background: linear-gradient(180deg, var(--palette-leaf), var(--palette-lime) 48%, var(--palette-olive) 78%, var(--palette-moss)); opacity: .65; height: 60px; box-shadow: inset 1px 1px 1px rgb(255 255 255 / .4) }
-.welcome-art span:nth-child(2), .welcome-art span:nth-child(6) { height: 112px; opacity: .55 }
-.welcome-art span:nth-child(3), .welcome-art span:nth-child(5) { height: 156px; opacity: .8 }
-.welcome-art span:nth-child(4) { height: 190px }
 .setup-section { margin-top: 36px }
 .setup-section .section-heading { margin: 0 0 12px; min-height: 38px }
 .setup-section h2 { font-size: 1.05rem; font-weight: 700 }
@@ -316,8 +311,6 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
   .studio-topbar { padding-inline: 30px }
   .welcome-band { padding: 30px }
   .welcome-band h1 { font-size: 1.9rem }
-  .welcome-art { width: 180px; gap: 8px; margin-right: 0 }
-  .welcome-art span { width: 17px }
   .memory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .voice-layout { grid-template-columns: 1fr }
 }
@@ -333,7 +326,6 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
   .studio-content { padding: 24px 20px 36px }
   .welcome-band { min-height: 255px; padding: 28px 26px }
   .welcome-band h1 { font-size: 1.8rem; position: relative; z-index: 1 }
-  .welcome-art { position: absolute; right: -52px; bottom: 38px; opacity: .28; transform: rotate(-15deg) scale(.9) }
   .welcome-band p { position: relative; z-index: 1; font-size: .8rem }
   .setup-row { gap: 12px; flex-wrap: wrap; padding: 22px 0 }
   .setup-row > div { flex: 1 }
