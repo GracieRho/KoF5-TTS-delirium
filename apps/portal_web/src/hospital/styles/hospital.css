@@ -276,3 +276,19 @@ button.care-name {border:0;background:transparent;padding:0;min-height:28px;font
  .care-patient-table td[data-label]::before {content:attr(data-label);display:block;color:var(--muted);font-size:.7rem;margin-bottom:8px}
  .care-patient-table td:last-child button {width:100%}
 }
+.care-voice-switch {margin-bottom:24px}
+.care-voice-switch button[aria-pressed='true'] {color:var(--brand);border-color:var(--brand);background:var(--brand-soft)}
+.care-history {margin-top:24px;border-top:1px solid var(--line);padding-top:16px}
+.care-history summary {cursor:pointer;color:var(--muted);font-size:.85rem;padding:8px 0}
+.care-records>li:focus,.care-task-list>li:focus {outline:2px solid var(--focus-ring);outline-offset:4px;background:var(--surface-hover)}
+@media(max-width:760px) {
+ .hospital-theme .studio-nav nav {display:flex;flex-wrap:wrap;overflow:visible;gap:4px}
+ .hospital-theme .studio-nav nav button {flex:1 1 28%;min-width:0;min-height:48px;font-size:.72rem;padding:8px 5px}
+ .hospital-theme .studio-nav nav button:nth-last-child(-n+2) {flex-basis:40%;min-height:36px}
+ .care-patient-heading {margin-bottom:16px}
+ .care-patient-heading h1 {margin-bottom:6px}
+ .care-tabs {gap:16px;scrollbar-width:thin;padding-bottom:8px;margin-bottom:16px}
+ .care-tabs button {flex-shrink:0}
+ .care-readiness {padding:12px;margin:12px 0}
+ .care-back {margin-bottom:10px}
+}
