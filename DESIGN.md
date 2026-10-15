@@ -4,7 +4,7 @@
 
 - Status: Active
 - Last refreshed: 2026-10-15
-- Primary product surfaces: 보호자·병원 웹, 로컬 가족 음성 시연 `/studio`, 환자 병상 iPad.
+- Primary product surfaces: 보호자 웹 `/studio`, 병원 웹 `/hospital`, 환자 병상 iPad.
 - Evidence reviewed: `apps/portal_web/src/`, `docs/delirium-familiar-voice/03-context-and-guardian.md`, `07-pre-patient-trial-safety-ethics-gate.md`, 기존 환자 iPad 규격, 사용자 제공 팔레트 이미지.
 - 새 웹 레퍼런스: 사용자 제공 `/Users/maxkim/recon/rozeta/rozeta-design-audit/COMPONENT-SPEC.md`, `screenshots/03-subject-notes.png`, `SCREENSHOTS.ko.md`. 이 절대 경로는 개발 머신의 참고 자료이며 빌드 의존성이 아니다.
 - Rozeta에서 차용하는 것은 고정 사이드바·흰 작업면·경량 탭·목록/노트·독립 편집 시트의 구성이다. 원본 로고·계정·문서 내용·퍼플 팔레트는 사용하지 않는다. 기존 Acctual 단일 웹 참조는 이 결정으로 대체한다.
@@ -36,9 +36,12 @@
 
 ## Information architecture
 
-- `/studio`: 로컬 단일 운영자 시연. 함께 시작하기 / 목소리 등록 / 가족의 기억 / 대화해보기.
-- `/guardian`: Supabase 보호자 로그인·검증된 환자 연결·기억과 기존 합성 음성 시험.
-- `/hospital`: 직원 로그인·담당 환자·메시지·승인·안전/기기 업무.
+- `/studio`: 보호자 로그인을 거치는 유일한 가족 작업 공간. 함께 시작하기 / 목소리 등록 / 가족의 기억 / 대화해보기 / 병원 연결.
+- `/guardian`: 독립 페이지가 아닌 이전 주소. `/studio?tab=linked`로 이동해 연결 상태만 표시한다. 기억 편집기는 중복 배치하지 않는다.
+- `/hospital`: 직원 로그인·담당 환자 / 전체 전달 대기 / 환자 등록. 환자 검색·선택은 목록 영역에, 상세 작업은 본문에 둔다.
+- 로그인 전 자료 컴포넌트를 마운트하지 않는다. 상대 역할의 URL을 직접 열면 접근 거부와 본인 공간 링크만 표시한다.
+- 헤더·사이드바에 다른 역할 공간으로 가는 링크를 넣지 않는다. 병원 메뉴에서 보호자 스튜디오를 열 수 없다.
+- 역할은 서버의 유효한 보호자 연결·직원 승인과 현재 세션으로 판정한다. 클라이언트 프로필 값으로 권한을 만들지 않는다.
 - 단계 순서: 가족 소개, 목소리, 일반 기억. 기억과 목소리 작업은 소개 이후 별도로 진행할 수 있다.
 - 환자 기기와 병원 승인 데이터는 로컬 시연 데이터에 연결하지 않는다.
 

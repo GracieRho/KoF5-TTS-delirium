@@ -26,7 +26,7 @@ LOCK = RLock()
 MAX_BODY = 8_100_000
 
 
-def authorize(request: Request) -> None:
+async def authorize(request: Request) -> None:
     host = request.url.hostname
     origin = request.headers.get('origin')
     if (os.environ.get('KOF5_LOCAL_STUDIO') != '1' or os.environ.get('VERCEL')
@@ -36,13 +36,34 @@ def authorize(request: Request) -> None:
             or (origin and origin != f'{request.url.scheme}://{request.url.netloc}')):
         raise HTTPException(403, '로컬 시연 서버에서만 사용할 수 있습니다.')
 
+    owner = os.environ.get('KOF5_STUDIO_GUARDIAN_USER_ID', '')
+    url = os.environ.get('KOF5_SUPABASE_URL', '').rstrip('/')
+    key = os.environ.get('KOF5_SUPABASE_PUBLISHABLE_KEY', '')
+    token = request.headers.get('authorization', '')
+    if not owner or url != 'http://127.0.0.1:54341' or not key.startswith('sb_publishable_'):
+        raise HTTPException(503, '보호자 계정 연결이 아직 준비되지 않았습니다.')
+    if not token.startswith('Bearer ') or not 10 < len(token) < 8192:
+        raise HTTPException(401, '보호자 로그인이 필요합니다.')
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.post(f'{url}/rest/v1/rpc/portal_access', headers={
+                'apikey': key, 'Authorization': token, 'Content-Profile': 'api'}, json={})
+        if response.status_code in (401, 403):
+            raise HTTPException(401, '로그인을 다시 확인해주세요.')
+        response.raise_for_status()
+        access = response.json()
+    except (httpx.HTTPError, ValueError) as error:
+        raise HTTPException(503, '로그인 권한을 확인하지 못했습니다.') from error
+    if not isinstance(access, dict) or not access.get('guardian') or access.get('user_id') != owner:
+        raise HTTPException(403, '이 보호자 공간에 접근할 수 없습니다.')
+
 
 class StudioRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
 
         async def bounded(request: Request):
-            authorize(request)
+            await authorize(request)
             body = bytearray()
             async for chunk in request.stream():
                 if len(body) + len(chunk) > MAX_BODY:
@@ -60,7 +81,7 @@ router = APIRouter(prefix='/local-studio', route_class=StudioRoute)
 
 @contextmanager
 def database():
-    # shortcut: one operator/process; use authenticated Supabase workflows before remote hosting.
+    # shortcut: one configured guardian/process; migrate workspace ownership before adding more guardians.
     path = Path(os.environ.get('KOF5_STUDIO_DB', 'runs/local-studio/workspace.sqlite3'))
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     connection = sqlite3.connect(path)
@@ -68,6 +89,13 @@ def database():
     connection.execute('CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
     try:
         with connection:
+            connection.execute('CREATE TABLE IF NOT EXISTS workspace_owner (id INTEGER PRIMARY KEY CHECK(id=1), user_id TEXT NOT NULL)')
+            owner = os.environ.get('KOF5_STUDIO_GUARDIAN_USER_ID', '')
+            existing = connection.execute('SELECT user_id FROM workspace_owner WHERE id=1').fetchone()
+            if existing and existing[0] != owner:
+                raise HTTPException(409, '다른 보호자의 저장 공간입니다. 서버 설정을 확인해주세요.')
+            if not existing and owner:
+                connection.execute('INSERT INTO workspace_owner VALUES (1, ?)', (owner,))
             yield connection
     finally:
         connection.close()

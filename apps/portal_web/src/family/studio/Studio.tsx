@@ -1,3 +1,5 @@
+import { useAuth } from '../../shared/auth/AuthContext'
+import { GuardianPortal } from '../guardian/pages/GuardianPortal'
 import { useEffect, useRef, useState } from 'react'
 import { WorkspaceShell } from '../../shared/components/WorkspaceShell'
 import { Icon } from '../../shared/components/Icon'
@@ -10,16 +12,18 @@ import { Conversation } from './Conversation'
 import { VoiceWave } from '../components/VoiceWave'
 import { studioRequest, type StudioState, type Profile, type MemoryInput } from './api'
 
-type Tab = 'home' | 'voice' | 'memory' | 'chat'
+type Tab = 'home' | 'voice' | 'memory' | 'chat' | 'linked'
 const tabs = {
   home: '함께 시작하기',
   voice: '목소리 등록',
   memory: '가족의 기억',
-  chat: '대화해보기'
+  chat: '대화해보기',
+  linked: '병원 연결'
 } as const
 export function Studio() {
+  const auth = useAuth()
   const [state, setState] = useState<StudioState | null>(null)
-  const [tab, setTab] = useState<Tab>('home')
+  const [tab, setTab] = useState<Tab>(new URLSearchParams(window.location.search).get('tab') === 'linked' ? 'linked' : 'home')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -120,18 +124,20 @@ export function Studio() {
               aria-current={tab === key ? 'page' : undefined}
               onClick={() => setTab(key)}
             >
-              <Icon name={key} />
+              <Icon name={key === 'linked' ? 'shield' : key} />
               {tabs[key]}
               {key === 'memory' && state && (
                 <span className="nav-count">{state.memories.length}</span>
               )}
             </button>
           ))}
+          <button onClick={auth.signOut}>로그아웃</button>
         </>
       }
     >
-      {loading && <p role="status">가족의 공간을 준비하고 있어요…</p>}
-      {error && (
+      {tab === 'linked' && <GuardianPortal />}
+      {tab !== 'linked' && loading && <p role="status">가족의 공간을 준비하고 있어요…</p>}
+      {tab !== 'linked' && error && (
         <div className="studio-empty" role="alert">
           <Icon name="shield" size={32} />
           <h1>연결을 확인해주세요</h1>
@@ -139,7 +145,7 @@ export function Studio() {
           <button onClick={() => void refresh()}>다시 연결</button>
         </div>
       )}
-      {state && !error && (
+      {tab !== 'linked' && state && !error && (
         <>
           {tab === 'home' && (
             <>

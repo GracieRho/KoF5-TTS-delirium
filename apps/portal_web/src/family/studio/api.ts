@@ -31,6 +31,7 @@ export async function studioRequest<T>(path: string, method = 'GET', data?: unkn
     method,
     headers: {
       'X-Kof5-Studio': '1',
+      Authorization: `Bearer ${sessionStorage.getItem('favilium.session') ?? ''}`,
       ...(data === undefined ? {} : { 'Content-Type': 'application/json' })
     },
     body: data === undefined ? undefined : JSON.stringify(data),

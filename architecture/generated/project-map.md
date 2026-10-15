@@ -35,7 +35,7 @@ flowchart LR
 
 - Python 모듈: **8**
 - 설정 파일: **0**
-- 프로젝트 실행 스크립트: **7**
+- 프로젝트 실행 스크립트: **8**
 
 ### Python 모듈
 
@@ -64,6 +64,7 @@ flowchart LR
 | `scripts/demo_voice_enrollment.py` |
 | `scripts/download_aihub.py` |
 | `scripts/run_backend.py` |
+| `scripts/run_local_portal.py` |
 | `scripts/run_preprocessing_pipeline.py` |
 
 ## 분석 한계

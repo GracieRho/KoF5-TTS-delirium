@@ -109,6 +109,7 @@
     "scripts/demo_voice_enrollment.py",
     "scripts/download_aihub.py",
     "scripts/run_backend.py",
+    "scripts/run_local_portal.py",
     "scripts/run_preprocessing_pipeline.py"
   ],
   "limitations": [

@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import httpx
 from fastapi.testclient import TestClient
@@ -20,14 +20,36 @@ from tests.synthetic_wav import make_synthetic_wav
 class LocalStudioTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.env = patch.dict(os.environ, {'KOF5_LOCAL_STUDIO': '1', 'KOF5_STUDIO_DB': str(Path(self.temp.name) / 'state.db'), 'ELEVENLABS_API_KEY': 'test-only', 'OPENAI_API_KEY': 'test-only'}, clear=True)
+        self.env = patch.dict(os.environ, {'KOF5_LOCAL_STUDIO': '1', 'KOF5_SUPABASE_URL': 'http://127.0.0.1:54341', 'KOF5_SUPABASE_PUBLISHABLE_KEY': 'sb_publishable_test', 'KOF5_STUDIO_GUARDIAN_USER_ID': 'guardian-owner', 'KOF5_STUDIO_DB': str(Path(self.temp.name) / 'state.db'), 'ELEVENLABS_API_KEY': 'test-only', 'OPENAI_API_KEY': 'test-only'}, clear=True)
         self.env.start()
-        self.client = TestClient(app, base_url='http://127.0.0.1', headers={'X-Kof5-Studio': '1'})
+        self.auth_response = httpx.Response(200, json={'guardian': True, 'hospital': False, 'user_id': 'guardian-owner'}, request=httpx.Request('POST', 'http://127.0.0.1:54341'))
+        self.auth_patch = patch.object(httpx.AsyncClient, 'post', new_callable=AsyncMock, return_value=self.auth_response)
+        self.auth_request = self.auth_patch.start()
+        self.client = TestClient(app, base_url='http://127.0.0.1', headers={'X-Kof5-Studio': '1', 'Authorization': 'Bearer test-session-token'})
 
     def tearDown(self):
         self.client.close()
+        self.auth_patch.stop()
         self.env.stop()
         self.temp.cleanup()
+
+    def test_requires_live_guardian_owner_for_every_route(self):
+        self.assertEqual(self.client.get('/local-studio/state', headers={'Authorization': ''}).status_code, 401)
+        for access in [None, {'guardian': False, 'hospital': True, 'user_id': 'staff'}, {'guardian': True, 'user_id': 'different-owner'}]:
+            self.auth_request.return_value = httpx.Response(200, content=b'null', request=self.auth_response.request) if access is None else httpx.Response(200, json=access, request=self.auth_response.request)
+            for method, path in [('GET', '/state'), ('PUT', '/profile'), ('POST', '/memories'), ('POST', '/voice'), ('POST', '/turn'), ('POST', '/transcribe'), ('DELETE', '/voice')]:
+                response = self.client.request(method, '/local-studio' + path, json={})
+                self.assertEqual(response.status_code, 403, (method, path))
+        self.assertFalse(Path(os.environ['KOF5_STUDIO_DB']).exists())
+        self.auth_request.side_effect = httpx.ConnectError('offline')
+        self.assertEqual(self.client.get('/local-studio/state').status_code, 503)
+
+    def test_persisted_workspace_cannot_be_reassigned_to_another_owner(self):
+        studio.save(studio.load())
+        with patch.dict(os.environ, {'KOF5_STUDIO_GUARDIAN_USER_ID': 'another-owner'}):
+            self.auth_request.return_value = httpx.Response(200, json={'guardian': True, 'user_id': 'another-owner'}, request=self.auth_response.request)
+            self.assertEqual(self.client.get('/local-studio/state').status_code, 409)
+        self.assertEqual(studio.load()['memories'], [])
 
     def setup_profile(self):
         return self.client.put('/local-studio/profile', json={'guardian_name': '시험자', 'patient_alias': '가상 가족', 'relationship': '딸', 'address_as': '아빠'})
@@ -48,7 +70,7 @@ class LocalStudioTests(unittest.TestCase):
                 self.assertEqual(self.client.get('/local-studio/state').status_code, 403)
         for headers in [{'Origin': 'https://other.example'}, {'Host': 'external.example'}, {'X-Kof5-Studio': ''}]:
             self.assertEqual(self.client.get('/local-studio/state', headers=headers).status_code, 403)
-        with TestClient(app, base_url='http://127.0.0.1', client=('192.0.2.1', 1234), headers={'X-Kof5-Studio': '1'}) as remote:
+        with TestClient(app, base_url='http://127.0.0.1', client=('192.0.2.1', 1234), headers={'X-Kof5-Studio': '1', 'Authorization': 'Bearer test-session-token'}) as remote:
             self.assertEqual(remote.get('/local-studio/state').status_code, 403)
         self.assertFalse(Path(os.environ['KOF5_STUDIO_DB']).exists())
 
@@ -59,7 +81,7 @@ class LocalStudioTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         memory_id = result.json()['memories'][0]['id']
         self.assertEqual(self.client.put(f'/local-studio/memories/{memory_id}', json={**memory, 'content': '함께 산책했다.'}).status_code, 200)
-        with TestClient(app, base_url='http://127.0.0.1', headers={'X-Kof5-Studio': '1'}) as reloaded:
+        with TestClient(app, base_url='http://127.0.0.1', headers={'X-Kof5-Studio': '1', 'Authorization': 'Bearer test-session-token'}) as reloaded:
             state = reloaded.get('/local-studio/state')
             self.assertEqual(state.json()['memories'][0]['content'], '함께 산책했다.')
             self.assertEqual(state.headers['cache-control'], 'no-store')

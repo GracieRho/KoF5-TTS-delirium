@@ -55,27 +55,16 @@ export function HospitalPortal() {
       area="병원"
       title="병원 업무"
       subtitle="승인된 정보와 전달 관리"
-      current={auth.token ? '담당 환자' : '로그인'}
+      current={auth.token ? (view === 'queue' ? '전체 전달 대기' : '담당 환자') : '로그인'}
       status="승인 계정 전용"
       note="기관 승인과 동의가 확인된 범위에서 사용합니다."
-      navigation={
-        <>
-          <a href="/guardian" aria-current="false">
-            <Icon name="memory" />
-            보호자 기억
-          </a>
-          <a href="/hospital" aria-current="page">
-            <Icon name="shield" />
-            병원 업무
-          </a>
-          {['localhost', '127.0.0.1'].includes(window.location.hostname) && (
-            <a href="/studio">
-              <Icon name="voice" />
-              가족의 공간
-            </a>
-          )}
-        </>
-      }
+      homeHref="/hospital"
+      navigation={auth.token ? <>
+        <button aria-current={view === 'patients' ? 'page' : undefined} onClick={() => { setView('patients'); setTab('summary') }}><Icon name="shield" />담당 환자</button>
+        <button aria-current={view === 'queue' ? 'page' : undefined} onClick={() => setView('queue')}><Icon name="chat" />전체 전달 대기 <span className="nav-count">{portal.queue.length}</span></button>
+        <button onClick={() => setRegistrationOpen(true)}><Icon name="memory" />환자 등록</button>
+        <button onClick={auth.signOut}>로그아웃</button>
+      </> : null}
     >
       <div className="portal-content">
         {!auth.token ? (
@@ -102,24 +91,17 @@ export function HospitalPortal() {
           </>
         ) : (
           <>
-            <div className={`hospital-grid ${showWorkspace ? 'show-workspace' : ''}`}>
-              <HospitalSidebar
-                view={view}
+            <div className={`hospital-grid ${view === 'queue' ? 'queue-view' : ''} ${showWorkspace ? 'show-workspace' : ''}`}>
+              {view === 'patients' && <HospitalSidebar
                 patients={portal.patients}
                 selectedId={portal.selected?.patient_id}
-                queueCount={portal.queue.length}
-                onView={(next) => {
-                  setView(next)
-                  if (next === 'patients') setTab('summary')
-                }}
                 onSelect={(id) => {
                   setView('patients')
                   setTab('summary')
                   void portal.select(id)
                 }}
-                onRegister={() => setRegistrationOpen(true)}
-                onSignOut={auth.signOut}
-              />
+
+              />}
               <section className="hospital-workspace">
                 <button
                   className="mobile-back"
@@ -161,7 +143,8 @@ export function HospitalPortal() {
                       aria-labelledby={`hospital-tab-${tab}`}
                       tabIndex={0}
                     >
-                      {tab === 'summary' && (
+                      {portal.busy && <p role="status">입원 안내를 불러오고 있습니다…</p>}
+                      {!portal.busy && tab === 'summary' && (
                         <PatientSummary facts={portal.facts} messages={portal.messages} />
                       )}
                       {synthetic && portal.api && portal.token && tab === 'messages' && (

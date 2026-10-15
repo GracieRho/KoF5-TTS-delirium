@@ -5,6 +5,8 @@ import { MemoryLibrary } from './MemoryLibrary'
 import { Conversation } from './Conversation'
 import { studioRequest, type StudioState } from './api'
 
+vi.mock('../../shared/auth/AuthContext', () => ({ useAuth: () => ({ signOut: vi.fn() }) }))
+
 const state: StudioState = {
   profile: {
     guardian_name: '시험자',
