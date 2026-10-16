@@ -5,6 +5,7 @@
 - This Korean TTS project supports non-pharmacological interventions for patients experiencing delirium.
 - Keep project documentation and user-facing product content in Korean by default; agent instruction files are maintained in English.
 - Do not select models, frameworks, or hardware without supporting evidence while the project is in its early stage.
+- Keep product branding, status badges, and footers free of decorative implementation labels such as local, demo, or trial (로컬, 데모, 시연). Keep meaningful AI identity disclosures, consent, actual usage restrictions, and connection errors beside the relevant action; never imply connection, approval, or completion by hiding a label. Show the brand mark once rather than repeating an initial avatar beside the workspace title.
 
 ## Repository Workflow
 

@@ -72,7 +72,8 @@ def transcribe_wav(client: httpx.Client, wav: bytes, key: str) -> str:
     return transcript.strip()
 
 
-def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str, key: str) -> str:
+def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str, key: str,
+                         *, extra_instructions: str = "") -> str:
     """A stateless synthetic Korean reply; output still needs human review."""
     if not transcript.strip() or not known_fact.strip():
         raise ValueError("speech and a verified synthetic fact are required")
@@ -88,7 +89,7 @@ def generate_short_reply(client: httpx.Client, transcript: str, known_fact: str,
                 "SAFETY: 의료 진단·약물 결정 금지. 병원·가족 사실을 추측하지 않는다. 모르면 모른다고 한다. "
                 "KNOWN FACTS: 아래 확인된 합성 사실만 참고한다. "
                 "CONVERSATION: 1~2개의 짧은 문장으로 답한다."
-            ),
+            ) + extra_instructions,
             "input": f"확인된 합성 사실: {known_fact}\n환자 역할 발화: {transcript}",
         },
     )

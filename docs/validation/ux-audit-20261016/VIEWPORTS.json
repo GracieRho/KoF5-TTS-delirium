@@ -1,0 +1,13 @@
+{
+  "verifiedMobile": {
+    "width": 390,
+    "height": 844
+  },
+  "hospitalImages": [
+    "21-mobile-dashboard",
+    "22-mobile-voice",
+    "23-mobile-patient-voice"
+  ],
+  "familyImage": "24-mobile-family-memories",
+  "note": "Hospital mobile screenshots recaptured in temporary managed tab with same app and hospital account; original user tab stays at desktop width."
+}

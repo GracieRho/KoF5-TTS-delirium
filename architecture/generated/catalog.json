@@ -53,7 +53,8 @@
         "layer": "api",
         "imports": [
           "kof5_tts.cloud_prototype",
-          "kof5_tts.companion"
+          "kof5_tts.companion",
+          "kof5_tts.local_studio"
         ]
       },
       {
@@ -69,6 +70,14 @@
         "path": "src/kof5_tts/companion.py",
         "layer": "companion",
         "imports": []
+      },
+      {
+        "module": "kof5_tts.local_studio",
+        "path": "src/kof5_tts/local_studio.py",
+        "layer": "local_studio",
+        "imports": [
+          "kof5_tts.cloud_prototype"
+        ]
       },
       {
         "module": "kof5_tts.preprocessing",
@@ -100,6 +109,7 @@
     "scripts/demo_voice_enrollment.py",
     "scripts/download_aihub.py",
     "scripts/run_backend.py",
+    "scripts/run_local_portal.py",
     "scripts/run_preprocessing_pipeline.py"
   ],
   "limitations": [

@@ -1,0 +1,149 @@
+{
+  "captured": "2026-10-16 Asia/Seoul",
+  "screens": [
+    {
+      "id": "01-hospital-dashboard",
+      "viewport": "screenshots/01-hospital-dashboard.png",
+      "full": "screenshots/01-hospital-dashboard-full.png",
+      "accessibility": "screenshots/01-hospital-dashboard.ax.md"
+    },
+    {
+      "id": "02-hospital-patients",
+      "viewport": "screenshots/02-hospital-patients.png",
+      "full": "screenshots/02-hospital-patients-full.png",
+      "accessibility": "screenshots/02-hospital-patients.ax.md"
+    },
+    {
+      "id": "03-hospital-voice",
+      "viewport": "screenshots/03-hospital-voice.png",
+      "full": "screenshots/03-hospital-voice-full.png",
+      "accessibility": "screenshots/03-hospital-voice.ax.md"
+    },
+    {
+      "id": "04-hospital-handoff",
+      "viewport": "screenshots/04-hospital-handoff.png",
+      "full": "screenshots/04-hospital-handoff-full.png",
+      "accessibility": "screenshots/04-hospital-handoff.ax.md"
+    },
+    {
+      "id": "05-voice-manage-destination",
+      "viewport": "screenshots/05-voice-manage-destination.png",
+      "full": "screenshots/05-voice-manage-destination-full.png",
+      "accessibility": "screenshots/05-voice-manage-destination.ax.md"
+    },
+    {
+      "id": "06-patient-overview",
+      "viewport": "screenshots/06-patient-overview.png",
+      "full": "screenshots/06-patient-overview-full.png",
+      "accessibility": "screenshots/06-patient-overview.ax.md"
+    },
+    {
+      "id": "07-patient-observations",
+      "viewport": "screenshots/07-patient-observations.png",
+      "full": "screenshots/07-patient-observations-full.png",
+      "accessibility": "screenshots/07-patient-observations.ax.md"
+    },
+    {
+      "id": "08-patient-care",
+      "viewport": "screenshots/08-patient-care.png",
+      "full": "screenshots/08-patient-care-full.png",
+      "accessibility": "screenshots/08-patient-care.ax.md"
+    },
+    {
+      "id": "09-patient-voice",
+      "viewport": "screenshots/09-patient-voice.png",
+      "full": "screenshots/09-patient-voice-full.png",
+      "accessibility": "screenshots/09-patient-voice.ax.md"
+    },
+    {
+      "id": "10-patient-handoff",
+      "viewport": "screenshots/10-patient-handoff.png",
+      "full": "screenshots/10-patient-handoff-full.png",
+      "accessibility": "screenshots/10-patient-handoff.ax.md"
+    },
+    {
+      "id": "11-assessment-form",
+      "viewport": "screenshots/11-assessment-form.png",
+      "full": "screenshots/11-assessment-form-full.png",
+      "accessibility": "screenshots/11-assessment-form.ax.md"
+    },
+    {
+      "id": "12-care-task-form",
+      "viewport": "screenshots/12-care-task-form.png",
+      "full": "screenshots/12-care-task-form-full.png",
+      "accessibility": "screenshots/12-care-task-form.ax.md"
+    },
+    {
+      "id": "13-voice-plan-form",
+      "viewport": "screenshots/13-voice-plan-form.png",
+      "full": "screenshots/13-voice-plan-form-full.png",
+      "accessibility": "screenshots/13-voice-plan-form.ax.md"
+    },
+    {
+      "id": "14-patient-registration",
+      "viewport": "screenshots/14-patient-registration.png",
+      "full": "screenshots/14-patient-registration-full.png",
+      "accessibility": "screenshots/14-patient-registration.ax.md"
+    },
+    {
+      "id": "15-family-home",
+      "viewport": "screenshots/15-family-home.png",
+      "full": "screenshots/15-family-home-full.png",
+      "accessibility": "screenshots/15-family-home.ax.md"
+    },
+    {
+      "id": "16-family-enrollment",
+      "viewport": "screenshots/16-family-enrollment.png",
+      "full": "screenshots/16-family-enrollment-full.png",
+      "accessibility": "screenshots/16-family-enrollment.ax.md"
+    },
+    {
+      "id": "17-family-memories",
+      "viewport": "screenshots/17-family-memories.png",
+      "full": "screenshots/17-family-memories-full.png",
+      "accessibility": "screenshots/17-family-memories.ax.md"
+    },
+    {
+      "id": "18-family-conversation",
+      "viewport": "screenshots/18-family-conversation.png",
+      "full": "screenshots/18-family-conversation-full.png",
+      "accessibility": "screenshots/18-family-conversation.ax.md"
+    },
+    {
+      "id": "19-family-hospital-link",
+      "viewport": "screenshots/19-family-hospital-link.png",
+      "full": "screenshots/19-family-hospital-link-full.png",
+      "accessibility": "screenshots/19-family-hospital-link.ax.md"
+    },
+    {
+      "id": "20-handoff-form",
+      "viewport": "screenshots/20-handoff-form.png",
+      "full": "screenshots/20-handoff-form-full.png",
+      "accessibility": "screenshots/20-handoff-form.ax.md"
+    },
+    {
+      "id": "21-mobile-dashboard",
+      "viewport": "screenshots/21-mobile-dashboard.png",
+      "full": "screenshots/21-mobile-dashboard-full.png",
+      "accessibility": "screenshots/21-mobile-dashboard.ax.md"
+    },
+    {
+      "id": "22-mobile-voice",
+      "viewport": "screenshots/22-mobile-voice.png",
+      "full": "screenshots/22-mobile-voice-full.png",
+      "accessibility": "screenshots/22-mobile-voice.ax.md"
+    },
+    {
+      "id": "23-mobile-patient-voice",
+      "viewport": "screenshots/23-mobile-patient-voice.png",
+      "full": "screenshots/23-mobile-patient-voice-full.png",
+      "accessibility": "screenshots/23-mobile-patient-voice.ax.md"
+    },
+    {
+      "id": "24-mobile-family-memories",
+      "viewport": "screenshots/24-mobile-family-memories.png",
+      "full": "screenshots/24-mobile-family-memories-full.png",
+      "accessibility": "screenshots/24-mobile-family-memories.ax.md"
+    }
+  ]
+}

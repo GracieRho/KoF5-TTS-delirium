@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   build: { outDir: 'dist', emptyOutDir: true },
-  server: { proxy: { '/portal': 'http://127.0.0.1:8000', '/guardian/config': 'http://127.0.0.1:8000', '/internal': 'http://127.0.0.1:8000' } },
+  server: { proxy: { '/local-studio': 'http://127.0.0.1:8000', '/portal': 'http://127.0.0.1:8000', '/guardian/config': 'http://127.0.0.1:8000', '/internal': 'http://127.0.0.1:8000' } },
   test: { environment: 'jsdom', setupFiles: './src/test/setup.ts', css: true },
 })

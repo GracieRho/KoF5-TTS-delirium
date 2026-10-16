@@ -4,7 +4,7 @@ import type { ContextDraft, HospitalFact, HospitalMessage, HospitalReadiness, Me
 const select = {
   patients: '/rest/v1/hospital_patient_list?select=patient_id,ehr_patient_ref,staff_display_name,encounter_id,ward_ref,room_ref,bed_ref',
   readiness: '/rest/v1/hospital_registration_ready?select=hospital_ref,ready',
-  queue: '/rest/v1/hospital_message_list?delivery_status=eq.pending&select=patient_id,encounter_id,approved_text,due_at,delivery_status&order=due_at.asc&limit=100',
+  queue: '/rest/v1/hospital_message_list?delivery_status=eq.pending&select=message_id,patient_id,encounter_id,approved_text,due_at,delivery_status&order=due_at.asc&limit=100',
 }
 
 export const hospitalApi = {

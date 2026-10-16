@@ -1,9 +1,14 @@
-import { GuardianPortal } from './guardian/pages/GuardianPortal'
+import { Studio } from './family/studio/Studio'
 import { HospitalPortal } from './hospital/pages/HospitalPortal'
+import { RoleGate } from './shared/auth/RoleGate'
 
 export function App() {
   const path = window.location.pathname.replace(/\/$/, '')
-  if (path === '/hospital') return <HospitalPortal/>
-  if (path === '/guardian' || path === '') return <GuardianPortal/>
-  return <main className="page"><h1>화면을 찾을 수 없습니다.</h1><p><a href="/guardian">보호자 화면</a> 또는 <a href="/hospital">병원 화면</a>으로 이동하세요.</p></main>
+  if (path === '/guardian' || path === '') {
+    window.location.replace(path === '/guardian' ? '/studio?tab=linked' : '/studio')
+    return null
+  }
+  if (path === '/studio') return <RoleGate role="guardian"><Studio /></RoleGate>
+  if (path === '/hospital') return <RoleGate role="hospital"><HospitalPortal /></RoleGate>
+  return <main className="page"><h1>화면을 찾을 수 없습니다.</h1><a href="/studio">시작 화면으로</a></main>
 }

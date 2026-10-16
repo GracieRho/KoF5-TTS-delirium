@@ -1,4 +1,4 @@
-# Familiar Voice 표면 디자인
+# Favilium 표면 디자인
 
 루트 [`DESIGN.md`](../../DESIGN.md)가 제품·안전 계약의 최종 기준이고, 이 문서는 구현용 시각 규칙만 좁혀 기록한다.
 
@@ -27,6 +27,7 @@ Acctual의 중립 작업면, 강한 제목/본문 계층, 절제된 경계·라�
 
 ## 공통 언어
 
+- 2026-10-15 Favilium 역할 변형: 아래 초기 Acctual 규칙과 충돌하면 루트 `DESIGN.md`의 최신 팔레트·모션·컴포넌트 규격을 우선한다. 가족 화면은 `src/family/`, 병원 화면은 `src/hospital/`, 공통 기반은 `src/shared/`로 분리한다. 가족 환영 파형에만 멈출 수 있는 장식 모션을 허용하고 병원은 인디고–블루–시안–민트를 사용한다.
 - 색상 역할: canvas `#F3F3F1`, workspace `#FFFFFF`, near-black 본문과 검정 primary CTA를 기본으로 한다. 경고·위험은 필요한 곳에서만 별도 의미색과 문구를 함께 쓴다.
 - 글꼴: 제목은 `Nanum Myeongjo`, 본문은 `Pretendard` 계열을 우선하고 설치되지 않으면 한국어 시스템 글꼴로 대체한다.
 - 형태: 4px/8px 간격, 절제된 라운드, hairline 경계, 그림자 최소화.
