@@ -5,8 +5,7 @@
       "root": ".",
       "framework": "fastapi",
       "entrypoint": "app:app",
-      "installCommand": "npm --prefix apps/portal_web ci",
-      "buildCommand": "npm --prefix apps/portal_web run build",
+      "buildCommand": "npm --prefix apps/portal_web ci && npm --prefix apps/portal_web run build && python -c \"from app import app; assert callable(app)\"",
       "functions": {
         "app.py": {
           "includeFiles": "apps/portal_web/dist/**",
@@ -24,4 +23,3 @@
     }
   ]
 }
-
