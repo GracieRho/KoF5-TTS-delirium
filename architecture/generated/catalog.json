@@ -76,6 +76,7 @@
         "path": "src/kof5_tts/local_studio.py",
         "layer": "local_studio",
         "imports": [
+          "kof5_tts.api",
           "kof5_tts.cloud_prototype"
         ]
       },

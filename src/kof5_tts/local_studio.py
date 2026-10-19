@@ -1,9 +1,10 @@
-"""Single-operator, loopback-only voice MVP; never a patient service."""
+"""Authenticated guardian workspace with local and Supabase persistence."""
 from __future__ import annotations
 
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 from hashlib import sha256
 import os
@@ -25,23 +26,31 @@ from kof5_tts.cloud_prototype import (
 
 LOCK = RLock()
 MAX_BODY = 8_100_000
+REMOTE_STORE: ContextVar[dict | None] = ContextVar('guardian_workspace_store', default=None)
 
 
 async def authorize(request: Request) -> None:
     host = request.url.hostname
     origin = request.headers.get('origin')
-    if (os.environ.get('KOF5_LOCAL_STUDIO') != '1' or os.environ.get('VERCEL')
-            or host not in {'127.0.0.1', 'localhost', '::1'}
-            or not request.client or request.client.host not in {'127.0.0.1', '::1', 'testclient'}
-            or request.headers.get('x-kof5-studio') != '1'
+    remote = os.environ.get('KOF5_REMOTE_STUDIO') == '1' and bool(os.environ.get('VERCEL'))
+    if (request.headers.get('x-kof5-studio') != '1'
             or (origin and origin != f'{request.url.scheme}://{request.url.netloc}')):
+        raise HTTPException(403, '요청 출처를 확인해주세요.')
+    if not remote and (os.environ.get('KOF5_LOCAL_STUDIO') != '1' or os.environ.get('VERCEL')
+            or host not in {'127.0.0.1', 'localhost', '::1'}
+            or not request.client or request.client.host not in {'127.0.0.1', '::1', 'testclient'}):
         raise HTTPException(403, '로컬 시연 서버에서만 사용할 수 있습니다.')
 
     owner = os.environ.get('KOF5_STUDIO_GUARDIAN_USER_ID', '')
     url = os.environ.get('KOF5_SUPABASE_URL', '').rstrip('/')
     key = os.environ.get('KOF5_SUPABASE_PUBLISHABLE_KEY', '')
     token = request.headers.get('authorization', '')
-    if not owner or url != 'http://127.0.0.1:54341' or not key.startswith('sb_publishable_'):
+    if remote:
+        from kof5_tts.api import guardian_config
+        guardian_config()
+        if not os.environ.get('KOF5_SUPABASE_SECRET_KEY', '').startswith('sb_secret_'):
+            raise HTTPException(503, '보호자 저장 공간 연결이 아직 준비되지 않았습니다.')
+    elif not owner or url != 'http://127.0.0.1:54341' or not key.startswith('sb_publishable_'):
         raise HTTPException(503, '보호자 계정 연결이 아직 준비되지 않았습니다.')
     if not token.startswith('Bearer ') or not 10 < len(token) < 8192:
         raise HTTPException(401, '보호자 로그인이 필요합니다.')
@@ -55,8 +64,14 @@ async def authorize(request: Request) -> None:
         access = response.json()
     except (httpx.HTTPError, ValueError) as error:
         raise HTTPException(503, '로그인 권한을 확인하지 못했습니다.') from error
-    if not isinstance(access, dict) or not access.get('guardian') or access.get('user_id') != owner:
+    if not isinstance(access, dict) or not access.get('guardian') or (not remote and access.get('user_id') != owner):
         raise HTTPException(403, '이 보호자 공간에 접근할 수 없습니다.')
+    if remote:
+        try:
+            owner = str(UUID(access['user_id']))
+        except (KeyError, ValueError, TypeError):
+            raise HTTPException(403, '보호자 계정을 확인하지 못했습니다.') from None
+        request.state.studio_store = {'owner': owner, 'revision': None}
 
 
 class StudioRoute(APIRoute):
@@ -71,9 +86,13 @@ class StudioRoute(APIRoute):
                     raise HTTPException(413, '음성 자료가 너무 큽니다.')
                 body.extend(chunk)
             request._body = bytes(body)
-            response = await handler(request)
-            response.headers['Cache-Control'] = 'no-store'
-            return response
+            context = REMOTE_STORE.set(getattr(request.state, 'studio_store', None))
+            try:
+                response = await handler(request)
+                response.headers['Cache-Control'] = 'no-store'
+                return response
+            finally:
+                REMOTE_STORE.reset(context)
         return bounded
 
 
@@ -103,18 +122,47 @@ def database():
 
 
 def load() -> dict:
-    with database() as connection:
-        row = connection.execute('SELECT body FROM workspace WHERE id=1').fetchone()
-    return json.loads(row[0]) if row else {
+    remote = REMOTE_STORE.get()
+    if remote is not None:
+        row = workspace_rpc('load_guardian_workspace', {'_guardian': remote['owner']})
+        remote['revision'] = row['revision'] if row else 0
+        if row:
+            return row['body']
+    else:
+        with database() as connection:
+            row = connection.execute('SELECT body FROM workspace WHERE id=1').fetchone()
+        if row:
+            return json.loads(row[0])
+    return {
         'profile': {'guardian_name': '', 'patient_alias': '', 'relationship': '', 'address_as': ''},
         'memories': [], 'voice': {'status': 'none', 'voice_id': None, 'name': None},
     }
 
 
 def save(state: dict) -> None:
+    remote = REMOTE_STORE.get()
+    if remote is not None:
+        if remote['revision'] is None:
+            raise HTTPException(409, '저장 전에 최신 자료를 조회해주세요.')
+        remote['revision'] = workspace_rpc('save_guardian_workspace', {
+            '_guardian': remote['owner'], '_expected': remote['revision'], '_body': state})
+        return
     with database() as connection:
         connection.execute('INSERT INTO workspace VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
                            (json.dumps(state, ensure_ascii=False),))
+
+
+def workspace_rpc(name: str, payload: dict):
+    try:
+        with httpx.Client(timeout=15) as client:
+            response = client.post(os.environ['KOF5_SUPABASE_URL'] + '/rest/v1/rpc/' + name,
+                headers={'apikey': os.environ['KOF5_SUPABASE_SECRET_KEY'], 'Content-Profile': 'api'}, json=payload)
+        if response.status_code == 409:
+            raise HTTPException(409, '다른 화면에서 자료가 변경됐습니다. 다시 조회한 뒤 저장해주세요.')
+        response.raise_for_status()
+        return response.json()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, '자료를 저장하거나 불러오지 못했습니다. 다시 시도해주세요.') from None
 
 
 def public_state(state: dict) -> dict:
