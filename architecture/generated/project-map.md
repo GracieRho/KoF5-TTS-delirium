@@ -27,6 +27,7 @@ flowchart LR
     layer_api --> layer_companion
     layer_api --> layer_local_studio
     layer_cloud_prototype --> layer_companion
+    layer_local_studio --> layer_api
     layer_local_studio --> layer_cloud_prototype
   end
 ```
@@ -45,7 +46,7 @@ flowchart LR
 | `kof5_tts.api` | api | `src/kof5_tts/api.py` | `kof5_tts.cloud_prototype`<br>`kof5_tts.companion`<br>`kof5_tts.local_studio` |
 | `kof5_tts.cloud_prototype` | cloud_prototype | `src/kof5_tts/cloud_prototype.py` | `kof5_tts.companion` |
 | `kof5_tts.companion` | companion | `src/kof5_tts/companion.py` | — |
-| `kof5_tts.local_studio` | local_studio | `src/kof5_tts/local_studio.py` | `kof5_tts.cloud_prototype` |
+| `kof5_tts.local_studio` | local_studio | `src/kof5_tts/local_studio.py` | `kof5_tts.api`<br>`kof5_tts.cloud_prototype` |
 | `kof5_tts.preprocessing` | preprocessing | `src/kof5_tts/preprocessing/__init__.py` | `kof5_tts.preprocessing.audio` |
 | `kof5_tts.preprocessing.aihub` | preprocessing | `src/kof5_tts/preprocessing/aihub.py` | — |
 | `kof5_tts.preprocessing.audio` | preprocessing | `src/kof5_tts/preprocessing/audio.py` | — |
