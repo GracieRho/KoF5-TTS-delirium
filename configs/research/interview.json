@@ -1,0 +1,361 @@
+{
+  "version": "kof5-interview-v1",
+  "description": "가상 가족의 표현 선택을 위한 3차원·8가설 연구용 질문 은행. signal과 lapse는 사전에 정한 가정이며, 실제 보호자 자료에서 추정한 진단력이나 인격 모델이 아닙니다. 미관측 질문의 선호 예측만 비교합니다.",
+  "dimensions": {
+    "address": [
+      "neutral",
+      "familiar"
+    ],
+    "ending": [
+      "polite",
+      "casual"
+    ],
+    "support": [
+      "acknowledge",
+      "plain"
+    ]
+  },
+  "model": {
+    "lapse": 0.1
+  },
+  "hypotheses": [
+    {
+      "id": "style_000",
+      "style": {
+        "address": "neutral",
+        "ending": "polite",
+        "support": "acknowledge"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_001",
+      "style": {
+        "address": "neutral",
+        "ending": "polite",
+        "support": "plain"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_002",
+      "style": {
+        "address": "neutral",
+        "ending": "casual",
+        "support": "acknowledge"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_003",
+      "style": {
+        "address": "neutral",
+        "ending": "casual",
+        "support": "plain"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_004",
+      "style": {
+        "address": "familiar",
+        "ending": "polite",
+        "support": "acknowledge"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_005",
+      "style": {
+        "address": "familiar",
+        "ending": "polite",
+        "support": "plain"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_006",
+      "style": {
+        "address": "familiar",
+        "ending": "casual",
+        "support": "acknowledge"
+      },
+      "prior": 0.125
+    },
+    {
+      "id": "style_007",
+      "style": {
+        "address": "familiar",
+        "ending": "casual",
+        "support": "plain"
+      },
+      "prior": 0.125
+    }
+  ],
+  "questions": [
+    {
+      "id": "greeting",
+      "split": "elicitation",
+      "scenario": "가상의 가족이 오랜만에 모였습니다. 첫인사를 어떻게 표현하겠어요?",
+      "signal": 0.3,
+      "options": [
+        {
+          "id": "a",
+          "text": "오늘 만나서 반가워요.",
+          "style": {
+            "address": "neutral"
+          }
+        },
+        {
+          "id": "b",
+          "text": "아빠, 오늘 만나서 반가워요.",
+          "style": {
+            "address": "familiar"
+          }
+        }
+      ]
+    },
+    {
+      "id": "short_reply",
+      "split": "elicitation",
+      "scenario": "가상의 가족과 오늘 나눈 이야기를 마무리합니다. 어떤 말끝이 더 자연스러워요?",
+      "signal": 0.4,
+      "options": [
+        {
+          "id": "a",
+          "text": "내일 또 이야기해요.",
+          "style": {
+            "ending": "polite"
+          }
+        },
+        {
+          "id": "b",
+          "text": "내일 또 이야기하자.",
+          "style": {
+            "ending": "casual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "new_place",
+      "split": "elicitation",
+      "scenario": "가상의 가족이 처음 가본 장소에서 낯설다고 말합니다. 어떤 표현을 먼저 고르겠어요?",
+      "signal": 0.45,
+      "options": [
+        {
+          "id": "a",
+          "text": "낯설게 느껴질 수 있겠어요. 천천히 함께 살펴봐요.",
+          "style": {
+            "support": "acknowledge"
+          }
+        },
+        {
+          "id": "b",
+          "text": "천천히 함께 살펴봐요.",
+          "style": {
+            "support": "plain"
+          }
+        }
+      ]
+    },
+    {
+      "id": "memory_name",
+      "split": "elicitation",
+      "scenario": "가상의 가족에게 예전에 함께 본 사진을 설명합니다. 어떤 호칭이 더 자연스러워요?",
+      "signal": 1.4,
+      "options": [
+        {
+          "id": "a",
+          "text": "그때 함께 사진을 찍었어요.",
+          "style": {
+            "address": "neutral"
+          }
+        },
+        {
+          "id": "b",
+          "text": "아빠, 그때 함께 사진을 찍었어요.",
+          "style": {
+            "address": "familiar"
+          }
+        }
+      ]
+    },
+    {
+      "id": "waiting",
+      "split": "elicitation",
+      "scenario": "가상의 가족이 기다리는 시간이 길게 느껴진다고 말합니다. 어떤 첫 문장을 선호해요?",
+      "signal": 1.8,
+      "options": [
+        {
+          "id": "a",
+          "text": "기다리는 게 답답하게 느껴질 수 있겠어요.",
+          "style": {
+            "support": "acknowledge"
+          }
+        },
+        {
+          "id": "b",
+          "text": "잠시 함께 이야기해요.",
+          "style": {
+            "support": "plain"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wrap_up",
+      "split": "elicitation",
+      "scenario": "가상의 가족과 짧은 통화를 끝냅니다. 어떤 말끝을 쓰겠어요?",
+      "signal": 1.6,
+      "options": [
+        {
+          "id": "a",
+          "text": "편할 때 다시 이야기해요.",
+          "style": {
+            "ending": "polite"
+          }
+        },
+        {
+          "id": "b",
+          "text": "편할 때 다시 이야기하자.",
+          "style": {
+            "ending": "casual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nickname",
+      "split": "elicitation",
+      "scenario": "가상의 가족에게 오늘 나눈 추억을 다시 꺼냅니다. 어떤 부름을 선호해요?",
+      "signal": 2.2,
+      "options": [
+        {
+          "id": "a",
+          "text": "아까 이야기한 추억이 생각나요.",
+          "style": {
+            "address": "neutral"
+          }
+        },
+        {
+          "id": "b",
+          "text": "아빠, 아까 이야기한 추억이 생각나요.",
+          "style": {
+            "address": "familiar"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gentle_close",
+      "split": "elicitation",
+      "scenario": "가상의 가족과 나눈 이야기를 잠시 멈춥니다. 어떤 문장이 평소 표현에 가까워요?",
+      "signal": 2.0,
+      "options": [
+        {
+          "id": "a",
+          "text": "이 이야기는 여기서 잠깐 쉬어요.",
+          "style": {
+            "ending": "polite"
+          }
+        },
+        {
+          "id": "b",
+          "text": "이 이야기는 여기서 잠깐 쉬자.",
+          "style": {
+            "ending": "casual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heldout_photo",
+      "split": "heldout",
+      "scenario": "가상의 가족이 여행 사진 속 장소를 함께 떠올리자고 합니다. 어떤 부름을 예상하나요?",
+      "signal": 1.7,
+      "options": [
+        {
+          "id": "a",
+          "text": "사진을 같이 살펴봐요.",
+          "style": {
+            "address": "neutral"
+          }
+        },
+        {
+          "id": "b",
+          "text": "아빠, 사진을 같이 살펴봐요.",
+          "style": {
+            "address": "familiar"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heldout_pause",
+      "split": "heldout",
+      "scenario": "가상의 가족이 이야기를 나중에 이어가자고 합니다. 어떤 말끝을 예상하나요?",
+      "signal": 1.7,
+      "options": [
+        {
+          "id": "a",
+          "text": "다음에 이어서 이야기해요.",
+          "style": {
+            "ending": "polite"
+          }
+        },
+        {
+          "id": "b",
+          "text": "다음에 이어서 이야기하자.",
+          "style": {
+            "ending": "casual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heldout_worry",
+      "split": "heldout",
+      "scenario": "가상의 가족이 약속을 놓칠까 걱정된다고 말합니다. 어떤 첫 문장을 예상하나요?",
+      "signal": 1.7,
+      "options": [
+        {
+          "id": "a",
+          "text": "걱정될 수 있겠어요. 함께 약속을 확인해 봐요.",
+          "style": {
+            "support": "acknowledge"
+          }
+        },
+        {
+          "id": "b",
+          "text": "함께 약속을 확인해 봐요.",
+          "style": {
+            "support": "plain"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heldout_silence",
+      "split": "heldout",
+      "scenario": "가상의 가족이 무슨 말을 할지 모르겠다고 합니다. 어떤 첫 문장을 예상하나요?",
+      "signal": 1.2,
+      "options": [
+        {
+          "id": "a",
+          "text": "말이 잘 떠오르지 않을 때도 있겠어요. 천천히 이야기해요.",
+          "style": {
+            "support": "acknowledge"
+          }
+        },
+        {
+          "id": "b",
+          "text": "천천히 이야기해요.",
+          "style": {
+            "support": "plain"
+          }
+        }
+      ]
+    }
+  ]
+}
