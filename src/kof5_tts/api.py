@@ -30,6 +30,7 @@ from kof5_tts.cloud_prototype import (
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
 from kof5_tts.local_studio import router as local_studio_router
+from kof5_tts.research.api import router as research_router
 
 SYNTHETIC_PATIENT = "synthetic_patient"
 SYNTHETIC_DB_PATIENT = "00000000-0000-4000-8000-000000000975"
@@ -51,6 +52,7 @@ app = FastAPI(title="Synthetic Familiar Voice MVP", docs_url=None, redoc_url=Non
 # ponytail: one in-memory synthetic patient; add authenticated persistence and per-patient serialization before real data.
 app.state.sessions = {}
 app.include_router(local_studio_router)
+app.include_router(research_router)
 
 PORTAL_DIST = Path(__file__).resolve().parents[2] / "apps" / "portal_web" / "dist"
 _PORTAL_ASSET_EXTENSIONS = frozenset({
