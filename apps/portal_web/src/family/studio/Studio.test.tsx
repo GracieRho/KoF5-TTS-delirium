@@ -47,7 +47,8 @@ describe('가족 시연 공간', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => state }))
     render(<Studio />)
     expect(await screen.findByText('2 / 3 준비 완료')).toBeInTheDocument()
-    fireEvent.click(screen.getAllByRole('button', { name: '목소리 등록' })[0])
+    expect(screen.getByRole('link', { name: '대화 맞춤' })).toHaveAttribute('href', '/studio?tab=personalize')
+    fireEvent.click(screen.getByRole('link', { name: '목소리 등록' }))
     expect(new URLSearchParams(window.location.search).get('tab')).toBe('voice')
     expect(
       await screen.findByText(

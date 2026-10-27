@@ -243,11 +243,11 @@ def score_responses(cases: list[dict], responses: list[dict]) -> dict:
 
 def run_benchmark(
     *, question_bank: dict | None = None, grounding_cases: list[dict] | None = None,
-    seed: int = 7, seeds: int = 3, max_budget: int = 5, bootstrap_samples: int = 1000,
+    seed: int = 7, seeds: int = 3, max_budget: int = 8, bootstrap_samples: int = 1000,
     latency_repeats: int = 3,
 ) -> dict:
     for name, value, maximum in [
-        ("seeds", seeds, 100), ("max_budget", max_budget, 8),
+        ("seeds", seeds, 100), ("max_budget", max_budget, 12),
         ("bootstrap_samples", bootstrap_samples, 10000), ("latency_repeats", latency_repeats, 100),
     ]:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:

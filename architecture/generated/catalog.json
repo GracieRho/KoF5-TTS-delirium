@@ -73,6 +73,12 @@
         "imports": []
       },
       {
+        "module": "kof5_tts.environment",
+        "path": "src/kof5_tts/environment.py",
+        "layer": "environment",
+        "imports": []
+      },
+      {
         "module": "kof5_tts.local_studio",
         "path": "src/kof5_tts/local_studio.py",
         "layer": "local_studio",
@@ -93,7 +99,9 @@
         "module": "kof5_tts.preprocessing.aihub",
         "path": "src/kof5_tts/preprocessing/aihub.py",
         "layer": "preprocessing",
-        "imports": []
+        "imports": [
+          "kof5_tts.environment"
+        ]
       },
       {
         "module": "kof5_tts.preprocessing.audio",
@@ -112,9 +120,12 @@
         "path": "src/kof5_tts/research/api.py",
         "layer": "research",
         "imports": [
+          "kof5_tts",
           "kof5_tts.api",
+          "kof5_tts.environment",
           "kof5_tts.research.grounding",
-          "kof5_tts.research.interview"
+          "kof5_tts.research.interview",
+          "kof5_tts.research.openrouter"
         ]
       },
       {
@@ -143,6 +154,12 @@
       {
         "module": "kof5_tts.research.interview",
         "path": "src/kof5_tts/research/interview.py",
+        "layer": "research",
+        "imports": []
+      },
+      {
+        "module": "kof5_tts.research.openrouter",
+        "path": "src/kof5_tts/research/openrouter.py",
         "layer": "research",
         "imports": []
       }

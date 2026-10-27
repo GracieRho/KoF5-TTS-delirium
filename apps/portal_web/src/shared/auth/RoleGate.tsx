@@ -5,6 +5,7 @@ import { WorkspaceShell } from '../components/WorkspaceShell'
 import { Panel } from '../components/Panel'
 import { LoginForm } from '../components/LoginForm'
 import hospitalSymbol from '../../hospital/assets/favilium-symbol.svg'
+import { FamilyNavigation } from '../../family/components/FamilyNavigation'
 
 export function RoleGate({ role, children }: { role: 'guardian' | 'hospital'; children: ReactNode }) {
   const auth = useAuth()
@@ -14,7 +15,7 @@ export function RoleGate({ role, children }: { role: 'guardian' | 'hospital'; ch
   if (allowed) return children
   return <WorkspaceShell area={hospital ? '병원' : '보호자'} brandSymbol={hospital ? hospitalSymbol : undefined}
     title={hospital ? '병원 업무' : '가족의 공간'}
-    current="로그인" navigation={null}>
+    current="로그인" navigation={hospital ? null : <FamilyNavigation current="home" />}>
     <div className="auth-layout"><Panel title={auth.token ? '접근 권한을 확인해주세요' : hospital ? '병원 직원 로그인' : '보호자 로그인'}
       description={auth.token ? '현재 계정에는 이 공간의 접근 권한이 없습니다.' : undefined}>
       {auth.token ? <><a href={auth.access?.hospital ? '/hospital' : '/studio'}>내 공간으로 이동</a><button onClick={auth.signOut}>로그아웃</button></> :

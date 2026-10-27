@@ -6,9 +6,14 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
+
+from kof5_tts import local_studio
+from kof5_tts.environment import load_server_env
+from kof5_tts.research.openrouter import FREE_MODEL, FREE_MODELS, OpenRouterError, classify_answer
 
 from kof5_tts.research.grounding import load_grounding_cases, plan_reply
-from kof5_tts.research.interview import interview_state
+from kof5_tts.research.interview import interview_state, load_question_bank
 
 STRATEGIES = ("fixed", "random", "adaptive")
 CONDITIONS = ("full_context", "rag", "no_time", "proposed")
@@ -30,7 +35,7 @@ class ResearchRoute(APIRoute):
                 raise HTTPException(403, "같은 연구 화면에서 다시 요청해주세요.")
             body = bytearray()
             async for chunk in request.stream():
-                if len(body) + len(chunk) > 16_384:
+                if len(body) + len(chunk) > 65_536:
                     raise HTTPException(413, "연구 요청이 너무 큽니다.")
                 body.extend(chunk)
             request._body = bytes(body)
@@ -50,14 +55,21 @@ class ResearchInput(BaseModel):
 
 class Answer(ResearchInput):
     question_id: str = Field(min_length=1, max_length=80)
-    option_id: str = Field(min_length=1, max_length=80)
+    option_id: str | None = Field(default=None, min_length=1, max_length=80)
+    text: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 class InterviewInput(ResearchInput):
-    answers: list[Answer] = Field(default_factory=list, max_length=8)
+    answers: list[Answer] = Field(default_factory=list, max_length=12)
     strategy: Literal["fixed", "random", "adaptive"] = "adaptive"
     seed: int = Field(default=0, ge=0, le=4_294_967_295, strict=True)
-    budget: int = Field(default=5, ge=1, le=8, strict=True)
+    budget: int = Field(default=8, ge=8, le=12, strict=True)
+
+
+class WrittenInput(InterviewInput):
+    model: str | None = Field(default=None, min_length=1, max_length=160)
+    text: str = Field(min_length=1, max_length=500)
+    provider_processing_consent: bool
 
 
 class Style(ResearchInput):
@@ -80,13 +92,16 @@ def research_page():
 
 @router.get("/research-api/catalog", include_in_schema=False)
 def catalog():
+    load_server_env(keys=("OPENROUTER_API_KEY",))
     return {
         "cases": [{"id": case["id"], "profile_id": case["profile_id"],
                    "question": case["question"], "description": case.get("description", case["question"])}
                   for case in load_grounding_cases()],
         "strategies": STRATEGIES,
         "conditions": CONDITIONS,
-        "default_budget": 5,
+        "default_budget": 8, "max_budget": 12,
+        "direct_input": {"available": bool(os.environ.get("OPENROUTER_API_KEY")), "model": FREE_MODEL,
+                         "models": [{"id": model, "name": name} for model, name in FREE_MODELS.items()]},
     }
 
 
@@ -94,11 +109,46 @@ def catalog():
 def interview(payload: InterviewInput):
     try:
         return interview_state(
-            [answer.model_dump() for answer in payload.answers], payload.strategy,
+            [answer.model_dump(exclude_none=True) for answer in payload.answers], payload.strategy,
             payload.seed, payload.budget,
         )
     except ValueError:
         raise HTTPException(422, "질문 순서와 선택지를 확인하거나 인터뷰를 초기화해주세요.") from None
+
+
+@router.post("/research-api/interpret", include_in_schema=False)
+async def interpret(payload: WrittenInput, request: Request):
+    if not payload.provider_processing_consent:
+        raise HTTPException(422, "입력 문장의 OpenRouter 전송에 동의해주세요.")
+    if payload.model is not None and payload.model not in FREE_MODELS:
+        raise HTTPException(422, "등록된 무료 모델을 선택해주세요.")
+    await local_studio.authorize(request)
+    with local_studio.LOCK:
+        saved = local_studio.load()
+    profile = saved.get("profile", {})
+    if (not all(profile.get(key) for key in ("guardian_name", "patient_alias", "relationship", "address_as"))
+            or profile.get("speech_style") not in {"polite", "casual", "mixed"}
+            or not any(memory.get("category") != "avoid" for memory in saved.get("memories", []))):
+        raise HTTPException(409, "가족의 기억에서 호칭·말투와 기억을 먼저 준비해주세요.")
+    answers = [answer.model_dump(exclude_none=True) for answer in payload.answers]
+    try:
+        bank = load_question_bank()
+        current = interview_state(answers, payload.strategy, payload.seed, payload.budget, bank)
+        if current["next_question"] is None:
+            raise ValueError("interview complete")
+    except ValueError:
+        raise HTTPException(422, "질문 순서와 응답을 확인해주세요.") from None
+    question = next(item for item in bank["questions"] if item["id"] == current["next_question"]["id"])
+    load_server_env(keys=("OPENROUTER_API_KEY",))
+    try:
+        interpretation = await run_in_threadpool(classify_answer, question, payload.text, model=payload.model)
+    except OpenRouterError as error:
+        raise HTTPException(503, {"message": str(error), "attempts": error.attempts}) from None
+    answer = {"question_id": question["id"], "text": payload.text}
+    if interpretation["option_id"] is not None:
+        answer["option_id"] = interpretation["option_id"]
+    result = interview_state([*answers, answer], payload.strategy, payload.seed, payload.budget, bank)
+    return {"answer": answer, "interview": result, "interpretation": interpretation}
 
 
 @router.post("/research-api/preview", include_in_schema=False)

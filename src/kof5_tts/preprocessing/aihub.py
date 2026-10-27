@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kof5_tts.environment import read_env_value as _read_env_value
+
 import fcntl
 import os
 import re
@@ -25,23 +27,6 @@ class DownloadResult:
     dataset_key: str
     file_keys: tuple[str, ...]
     output_dir: Path
-
-
-def _read_env_value(path: Path, key: str) -> str | None:
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        name, separator, raw_value = line.partition("=")
-        if not separator or name.strip() != key:
-            continue
-        value = raw_value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        return value
-    return None
 
 
 def environment_with_api_key(

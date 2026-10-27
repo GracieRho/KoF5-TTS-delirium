@@ -30,44 +30,58 @@ class ResearchInterviewTests(unittest.TestCase):
         self.assertAlmostEqual(state['uncertainty'], 1)
         self.assertEqual(set(state['next_question']), {'id', 'scenario', 'options'})
         for option in state['next_question']['options']:
-            self.assertEqual(set(option), {'id', 'text'})
+            self.assertEqual(set(option), {'id', 'text', 'casual_text', 'mixed_text'})
         self.assertEqual(len(state['heldout_predictions']), 4)
         self.assertTrue(all(abs(sum(p['probabilities'].values()) - 1) < 1e-12
                             for p in state['heldout_predictions']))
 
+    def binary_probe(self):
+        bank = deepcopy(self.bank)
+        bank['hypotheses'] = [h for h in bank['hypotheses'] if h['style']['initiative'] == 'ask'
+                              and h['style']['detail'] == 'brief']
+        question = {'id': 'probe', 'signal': 1.4, 'options': [
+            {'id': 'a', 'style': {'support': 'acknowledge'}},
+            {'id': 'b', 'style': {'support': 'plain'}},
+        ]}
+        return bank, question
+
     def test_discriminating_response_updates_only_observed_dimension(self):
+        question = self.binary_probe()[1]
         prior = initial_posterior(self.bank)
-        question = next(q for q in self.bank['questions'] if q['id'] == 'nickname')
-        posterior = update_posterior(self.bank, prior, question, 'b')
-        familiar = sum(posterior[h['id']] for h in self.bank['hypotheses'] if h['style']['address'] == 'familiar')
-        expected = .9 / (1 + math.exp(-4.4)) + .05
-        self.assertAlmostEqual(familiar, expected)
-        for key, value in [('ending', 'polite'), ('support', 'acknowledge')]:
+        posterior = update_posterior(self.bank, prior, question, 'a')
+        acknowledge = sum(posterior[h['id']] for h in self.bank['hypotheses'] if h['style']['support'] == 'acknowledge')
+        self.assertAlmostEqual(acknowledge, .9 / (1 + math.exp(-2.8)) + .05)
+        for key, value in [('initiative', 'ask'), ('detail', 'brief')]:
             marginal = sum(posterior[h['id']] for h in self.bank['hypotheses'] if h['style'][key] == value)
             self.assertAlmostEqual(marginal, .5)
         self.assertAlmostEqual(sum(posterior.values()), 1)
 
     def test_expected_information_gain_has_known_symmetric_binary_value(self):
-        bank = deepcopy(self.bank)
-        bank['hypotheses'] = [h for h in bank['hypotheses'] if h['style']['ending'] == 'polite'
-                              and h['style']['support'] == 'acknowledge']
+        bank, question = self.binary_probe()
         prior = initial_posterior(bank)
-        question = next(q for q in bank['questions'] if q['id'] == 'nickname')
-        p = .9 / (1 + math.exp(-4.4)) + .05
+        p = .9 / (1 + math.exp(-2.8)) + .05
         expected = 1 + p * math.log2(p) + (1-p) * math.log2(1-p)
         self.assertAlmostEqual(expected_information_gain(bank, prior, question), expected)
-        unrelated = next(q for q in bank['questions'] if q['id'] == 'waiting')
-        self.assertAlmostEqual(expected_information_gain(bank, prior, unrelated), 0)
 
-    def test_adaptive_uses_more_informative_question_before_fixed_order(self):
+    def test_adaptive_chooses_more_information_than_fixed_order(self):
         adaptive = interview_state([], 'adaptive', question_bank=self.bank)
         fixed = interview_state([], 'fixed', question_bank=self.bank)
-        self.assertEqual(adaptive['next_question']['id'], 'nickname')
-        self.assertEqual(fixed['next_question']['id'], 'greeting')
+        prior = initial_posterior(self.bank)
+        questions = {q['id']: q for q in self.bank['questions']}
+        self.assertGreater(expected_information_gain(self.bank, prior, questions[adaptive['next_question']['id']]),
+                           expected_information_gain(self.bank, prior, questions[fixed['next_question']['id']]))
         answers = self.answer_next([])
         after = interview_state(answers, question_bank=self.bank)
         self.assertLess(after['uncertainty'], adaptive['uncertainty'])
         self.assertNotEqual(after['next_question']['id'], answers[0]['question_id'])
+
+    def test_four_options_compare_expression_strategy_not_address_or_ending(self):
+        self.assertEqual(len([q for q in self.bank['questions'] if q['split'] == 'elicitation']), 12)
+        for question in self.bank['questions']:
+            self.assertEqual(len(question['options']), 4)
+            self.assertEqual(len({o['text'] for o in question['options']}), 4)
+            self.assertTrue(all(set(o['style']) == {'support', 'initiative', 'detail'} for o in question['options']))
+            self.assertTrue(all(o['casual_text'] and o['mixed_text'] for o in question['options']))
 
     def test_replay_determinism_all_budgets_and_no_heldout_selection(self):
         elicitation = {q['id'] for q in self.bank['questions'] if q['split'] == 'elicitation'}
@@ -97,7 +111,7 @@ class ResearchInterviewTests(unittest.TestCase):
         for q in changed['questions']:
             if q['split'] == 'heldout':
                 q['signal'] = 5
-                q['options'][0]['style'] = {'ending': 'casual'}
+                q['options'][0]['style'] = {'initiative': 'offer'}
         answers = self.answer_next([])
         original = interview_state(answers, question_bank=self.bank)
         modified = interview_state(answers, question_bank=changed)
@@ -107,7 +121,7 @@ class ResearchInterviewTests(unittest.TestCase):
     def test_forged_heldout_duplicate_or_unknown_response_rejected(self):
         valid = self.answer_next([])
         bad = [
-            [{'question_id': 'heldout_photo', 'option_id': 'a'}],
+            [{'question_id': 'heldout_gift', 'option_id': 'a'}],
             [{'question_id': 'greeting', 'option_id': 'a'}],
             [{'question_id': valid[0]['question_id'], 'option_id': 'secret'}],
             [{'question_id': valid[0]['question_id'], 'option_id': 'a', 'target': 'hidden'}],
@@ -119,12 +133,35 @@ class ResearchInterviewTests(unittest.TestCase):
 
     def test_explicit_zero_budget_prior_and_invalid_arguments(self):
         self.assertTrue(interview_state([], budget=0, question_bank=self.bank)['done'])
-        for kwargs in [{'budget': -1}, {'budget': 9}, {'budget': True}, {'budget': 1.5},
+        for kwargs in [{'budget': -1}, {'budget': 13}, {'budget': True}, {'budget': 1.5},
                        {'strategy': 'oracle'}, {'seed': True}, {'seed': 2**31}, {'seed': .2}]:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 interview_state([], question_bank=self.bank, **kwargs)
         with self.assertRaises(ValueError):
             interview_state(self.answer_next([]), budget=0, question_bank=self.bank)
+
+    def test_written_answer_is_preserved_without_guessing_its_style(self):
+        initial = interview_state([], budget=1, question_bank=self.bank)
+        answer = {'question_id': initial['next_question']['id'], 'text': '아빠, 그때 바다 정말 좋았지.'}
+        result = interview_state([answer], budget=1, question_bank=self.bank)
+        self.assertTrue(result['done'])
+        self.assertEqual(result['posterior'], initial['posterior'])
+        self.assertEqual(result['reflected_count'], 0)
+        self.assertEqual(result['written_answers'][0]['text'], answer['text'])
+        self.assertFalse(result['written_answers'][0]['reflected'])
+        answer['option_id'] = 'b'
+        confirmed = interview_state([answer], budget=1, question_bank=self.bank)
+        self.assertEqual(confirmed['posterior'], update_posterior(self.bank, initial['posterior'],
+                         next(q for q in self.bank['questions'] if q['id'] == answer['question_id']), 'b'))
+        self.assertEqual(confirmed['reflected_count'], 1)
+        self.assertTrue(confirmed['written_answers'][0]['reflected'])
+
+    def test_invalid_written_answers_fail_before_replay(self):
+        question_id = interview_state([], question_bank=self.bank)['next_question']['id']
+        for fields in [{'text': ''}, {'text': '   '}, {'text': 'x' * 501}, {'text': 7},
+                       {'text': '문장', 'option_id': 'missing'}, {'text': '문장', 'extra': True}]:
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                interview_state([{'question_id': question_id, **fields}], question_bank=self.bank)
 
     def test_malformed_question_banks_are_rejected(self):
         mutations = [

@@ -21,7 +21,7 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, default=Path("runs/research") / datetime.now(timezone.utc).strftime("benchmark-%Y%m%dT%H%M%S%fZ"))
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--seeds", type=int, default=3)
-    parser.add_argument("--max-budget", type=int, default=5)
+    parser.add_argument("--max-budget", type=int, default=8)
     parser.add_argument("--bootstrap-samples", type=int, default=1000)
     parser.add_argument("--latency-repeats", type=int, default=3)
     parser.add_argument("--question-bank", type=Path)

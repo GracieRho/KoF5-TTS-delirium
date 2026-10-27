@@ -2,8 +2,8 @@
 
 - 작성일: 2026-10-27
 - 발표 대상: 학부생·석사생 중심 AI 학회
-- 상태: 계획을 먼저 원격 게시한 뒤 구현·오프라인 검증 완료. [실제 결과](validation.md)와 [실행 안내](README.md)를 참조한다. 실제 참여자·LLM·음성·임상 실험은 미실행.
-- 가제: **같은 5분, 어떤 질문을 해야 가장 가족답게 위로할까?**
+- 상태: 최초 계획 게시 후 오프라인 구현 완료. 후속 v2에서 홈 메뉴 통합, 기본 8문항·4선택지·직접 입력·저장 자료 연동·명시적 동의 기반 OpenRouter 무료 해석을 추가했다. [현재 검증](validation-v2.md), [최초 v1 검증](validation.md), [실행 안내](README.md)를 구분한다. 실제 참여자·음성·임상 실험은 미실행.
+- 가제: **가족의 표현 방식은 어떤 상황 질문에서 드러날까?**
 
 ## 연구 질문과 주장 범위
 
@@ -20,7 +20,7 @@
 | 적응형 인터뷰 | 한국어 상황별 선택 질문 은행, 작은 선호 가설 모델, 베이즈 갱신·예상 정보이득 질문 선택, fixed/random/adaptive 조건 | 같은 응답 재생의 결정성, 중복·잘못된 응답 거부, heldout 질문 선택 금지, 예산 준수 테스트 |
 | 근거 기반 개인화 | 내용 계획 → 제한된 말투 적용 → 사용 근거 기록. 출처·시간·철회·상충·타 프로필 차단 | 손으로 라벨링한 반례에서 계획·근거 ID·답변 여부 검증, 개인화가 사실 부분을 바꾸지 않음 |
 | 비교 벤치마크 | 전체 문맥·검색·시간 제거·제안 방법 비교, 인터뷰 예산별 곡선, paired 구간추정·실행 시간·재현 메타데이터 | 오프라인 실행 한 번으로 JSON/CSV/한국어 보고서 생성, 외부 연결과 생성 비용 0 |
-| 발표 화면 | 별도 `/research`에서 질문 선택·응답·근거·정보 갱신 비교·초기화·내보내기 | 명시적 opt-in과 loopback 제한, 공급자·로그인 없이 가상 예시 실행, 키/참여자 자료 영속 저장 없음 |
+| 발표 화면 | 홈의 `대화 맞춤`에서 인터뷰·직접 입력·답변 확인·초기화·내보내기 | 명시적 opt-in과 loopback 제한, 저장 자료 조회에는 기존 보호자 인증 적용, 전송 동의한 직접 입력만 무료 모델 해석 |
 | 참여자 실험 | 동의·모집·무작위 배정·heldout·블라인드 평가·주석 양식과 분석 명령 | 실제 참여자 없이 빈 양식/합성 예시로 파이프라인 검증 |
 | 음성 검증 | 사람·장소·시간·부정 등 핵심 정보 보존 지표, 오디오 타임스탬프 분석 입력·보고 도구 | 합성 파일/수동 주석만으로 지표 검증. 실제 합성·전사 API 호출 없음 |
 | 요인실험 | 친숙/낯선 목소리 × 일반/개인화 내용 2×2 설계와 균형 배정표 | 참여자·음성 동의, 순서효과·기대효과·주관적 친숙함과 임상 효과 구분 |
@@ -34,8 +34,8 @@
 ### 인터뷰 모듈
 
 - 소유 파일: `src/kof5_tts/research/interview.py`, `configs/research/interview.json`, 관련 단위 테스트.
-- 공개 함수: `load_question_bank(path=None) -> dict`, `interview_state(answers, strategy="adaptive", seed=0, budget=5, question_bank=None) -> dict`.
-- 응답 기록: `[{"question_id": "…", "option_id": "…"}]`. 은행의 `elicitation`/`heldout` 분리는 선택 단계에서 강제한다.
+- 공개 함수: `load_question_bank(path=None) -> dict`, `interview_state(answers, strategy="adaptive", seed=0, budget=8, question_bank=None) -> dict`.
+- 응답 기록: `[{"question_id": "…", "option_id": "…"}]`. v2는 원문 `text`와 선택적 `option_id`도 받는다. 원문만 기록한 답변은 예측에 반영하지 않으며 모델이 해석한 경우 그 결과를 별도 기록한다. 은행의 `elicitation`/`heldout` 분리는 선택 단계에서 강제한다.
 - 결과: `next_question`(없으면 null), `answered_count`, `budget`, `done`, `predicted_style`, `uncertainty`, `heldout_predictions`. 질문은 `id`, `scenario`, `options: [{id, text}]`로 노출한다.
 - 작은 가설 집합의 사전·관측 잡음·우도 가정을 명시한다. 모델이 가정한 사용자로만 평가한 결과는 현실 개인화의 증명이 아니다.
 
@@ -50,7 +50,7 @@
 
 ### 벤치마크·화면 모듈
 
-- `scripts/benchmark_research.py`: 명시적 오프라인 재현 명령. LLM 선택이나 provider adapter를 몰래 추가하지 않는다.
+- `scripts/benchmark_research.py`: 명시적 오프라인 재현 명령. 벤치마크는 네트워크 없는 합성 모드다. 별도 허가된 무료 모델 해석 경로와 호출 수를 섞지 않는다.
 - 결과에는 `synthetic/offline/template`의 실제 방법, 설정·버전·seed·입력 hash·조건별 표본수·실행시간을 포함한다.
 - `/research-api/catalog`, `/research-api/interview`, `/research-api/preview`는 합성 은행·사례만 허용하고 자유로운 환자 입력이나 원격 저장을 받지 않는다.
 - 서버 조건: `KOF5_RESEARCH_ENABLED=1`, Vercel 차단, loopback host/client, 동일 Origin, 작은 JSON body 제한. 기존 인증을 약화하지 않는다.
@@ -94,7 +94,7 @@ fixed/random/adaptive를 동일 모델·동일 질문 풀·동일 예산으로 �
 
 실제 환자·임상 음성·식별정보를 입력하거나 커밋하지 않는다. 연구 화면은 가상 예시만 사용한다. 실제 성인 자료 수집에는 별도 동의·보존·철회·음성 공개 범위가 필요하다. 현재 [Gate07](../delirium-familiar-voice/07-pre-patient-trial-safety-ethics-gate.md)의 미완료 상태를 변경하지 않는다. 건강한 성인의 개인화 선호·합성 벤치마크 성능은 섬망 감소의 근거가 아니다.
 
-**이번 작업은 유료 API·목소리 생성/복제·배포·실제 참여자 수집을 실행하지 않는다.** 네트워크 없는 코드와 도구, 프로토콜, 합성 검증까지가 자동 실행 범위다.
+**유료 API·목소리 생성/복제·배포·실제 참여자 수집을 실행하지 않는다. 후속 사용자 요청으로 OpenRouter 무료 모델의 직접 입력 해석 연결·가상 문장 연결 시험만 허용되었다.** 기본 벤치마크는 네트워크 없이 실행하며 실제 참여자·환자 자료 수집은 이번 자동 실행 범위가 아니다.
 
 ## 선행 근거
 

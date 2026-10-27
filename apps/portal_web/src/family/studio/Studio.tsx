@@ -13,20 +13,14 @@ import { Conversation } from './Conversation'
 import { conversationReadiness } from './readiness'
 import { VoiceWave } from '../components/VoiceWave'
 import { studioRequest, type StudioState, type Profile, type MemoryInput } from './api'
+import { FAMILY_TABS, FamilyNavigation, type FamilyTab } from '../components/FamilyNavigation'
 
-type Tab = 'home' | 'voice' | 'memory' | 'chat' | 'linked'
-const tabs = {
-  home: '함께 시작하기',
-  voice: '목소리 등록',
-  memory: '가족의 기억',
-  chat: '대화해보기',
-  linked: '병원 연결'
-} as const
+type Tab = Exclude<FamilyTab, 'personalize'>
 export function Studio() {
   const auth = useAuth()
   const [state, setState] = useState<StudioState | null>(null)
   const initialTab = new URLSearchParams(window.location.search).get('tab')
-  const [tab, setTabState] = useState<Tab>(initialTab && initialTab in tabs ? initialTab as Tab : 'home')
+  const [tab, setTabState] = useState<Tab>(initialTab && initialTab !== 'personalize' && initialTab in FAMILY_TABS ? initialTab as Tab : 'home')
   function setTab(next: Tab) {
     setTabState(next)
     const url = new URL(window.location.href)
@@ -119,22 +113,10 @@ export function Studio() {
       area="보호자"
       homeHref="/studio"
       title="가족의 공간"
-      current={tabs[tab]}
+      current={FAMILY_TABS[tab]}
       navigation={
         <>
-          {(Object.keys(tabs) as Tab[]).map((key) => (
-            <button
-              key={key}
-              aria-current={tab === key ? 'page' : undefined}
-              onClick={() => setTab(key)}
-            >
-              <Icon name={key === 'linked' ? 'shield' : key} />
-              {tabs[key]}
-              {key === 'memory' && state && (
-                <span className="nav-count">{state.memories.length}</span>
-              )}
-            </button>
-          ))}
+          <FamilyNavigation current={tab} onNavigate={setTab} memoryCount={state?.memories.length} />
           <button onClick={auth.signOut}>로그아웃</button>
         </>
       }
@@ -201,6 +183,8 @@ export function Studio() {
           )}
           {tab === 'memory' && (
             <MemoryLibrary
+              profile={state.profile}
+              editProfile={() => setProfileOpen(true)}
               memories={state.memories}
               busy={busy}
               save={(data: MemoryInput, id?: string) =>

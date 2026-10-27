@@ -13,9 +13,9 @@ import re
 
 BANK_PATH = Path(__file__).resolve().parents[3] / "configs/research/interview.json"
 STYLE_VALUES = {
-    "address": ["neutral", "familiar"],
-    "ending": ["polite", "casual"],
     "support": ["acknowledge", "plain"],
+    "initiative": ["ask", "offer"],
+    "detail": ["brief", "elaborate"],
 }
 STRATEGIES = ("fixed", "random", "adaptive")
 
@@ -36,7 +36,7 @@ def _style(value, *, complete=False) -> bool:
 
 
 def validate_question_bank(bank: dict) -> None:
-    if (not isinstance(bank, dict) or bank.get("version") != "kof5-interview-v1"
+    if (not isinstance(bank, dict) or bank.get("version") != "kof5-interview-v2"
             or bank.get("dimensions") != STYLE_VALUES):
         raise ValueError("지원하지 않는 질문 은행 형식입니다.")
     model = bank.get("model")
@@ -71,7 +71,10 @@ def validate_question_bank(bank: dict) -> None:
         for option in options:
             if (not isinstance(option, dict) or not _identifier(option.get("id"))
                     or option["id"] in option_ids or not isinstance(option.get("text"), str)
-                    or not 1 <= len(option["text"]) <= 500 or not _style(option.get("style"))):
+                    or not 1 <= len(option["text"]) <= 500
+                    or any(not isinstance(option.get(key), str) or not 1 <= len(option[key]) <= 500
+                           for key in ("casual_text", "mixed_text"))
+                    or not _style(option.get("style"))):
                 raise ValueError("유효하지 않거나 중복된 선택지입니다.")
             option_ids.add(option["id"])
         question_ids.add(question["id"])
@@ -140,7 +143,7 @@ def _select_question(bank: dict, posterior: dict[str, float], answered: set[str]
 
 
 def interview_state(answers: list[dict], strategy: str = "adaptive", seed: int = 0,
-                    budget: int = 5, question_bank: dict | None = None) -> dict:
+                    budget: int = 8, question_bank: dict | None = None) -> dict:
     bank = load_question_bank() if question_bank is None else question_bank
     validate_question_bank(bank)
     if strategy not in STRATEGIES:
@@ -155,14 +158,26 @@ def interview_state(answers: list[dict], strategy: str = "adaptive", seed: int =
     if strategy == "random":
         random.Random(seed).shuffle(order)
     posterior, answered = initial_posterior(bank), set()
+    written_answers, reflected_count = [], 0
     for answer in answers:
-        if (not isinstance(answer, dict) or set(answer) != {"question_id", "option_id"}
-                or not _identifier(answer.get("question_id")) or not _identifier(answer.get("option_id"))):
-            raise ValueError("응답에는 유효한 질문 ID와 선택지 ID만 필요합니다.")
+        if (not isinstance(answer, dict)
+                or set(answer) not in ({"question_id", "option_id"}, {"question_id", "text"},
+                                      {"question_id", "text", "option_id"})
+                or not _identifier(answer.get("question_id"))
+                or ("option_id" in answer and not _identifier(answer["option_id"]))
+                or ("text" in answer and (not isinstance(answer["text"], str)
+                                         or not 1 <= len(answer["text"]) <= 500 or not answer["text"].strip()))):
+            raise ValueError("질문 ID와 선택지 또는 500자 이내의 답변을 확인해주세요.")
         question = _select_question(bank, posterior, answered, strategy, order)
         if question is None or question["id"] != answer["question_id"]:
             raise ValueError("응답 순서가 선택된 인터뷰 질문과 다릅니다.")
-        posterior = update_posterior(bank, posterior, question, answer["option_id"])
+        if "option_id" in answer:
+            posterior = update_posterior(bank, posterior, question, answer["option_id"])
+            reflected_count += 1
+        if "text" in answer:
+            # Free text needs explicit user annotation; never infer a style from keywords.
+            written_answers.append({"question_id": question["id"], "scenario": question["scenario"],
+                                    "text": answer["text"], "reflected": "option_id" in answer})
         answered.add(question["id"])
     done = len(answers) == budget
     question = None if done else _select_question(bank, posterior, answered, strategy, order)
@@ -177,15 +192,17 @@ def interview_state(answers: list[dict], strategy: str = "adaptive", seed: int =
         probabilities = question_probabilities(bank, posterior, heldout_question)
         option = max(heldout_question["options"], key=lambda item: probabilities[item["id"]])
         heldout.append({"question_id": heldout_question["id"], "scenario": heldout_question["scenario"],
-                        "option_id": option["id"], "text": option["text"], "probabilities": probabilities})
+                        "option_id": option["id"], "text": option["text"], "casual_text": option["casual_text"],
+                        "mixed_text": option["mixed_text"], "probabilities": probabilities})
     bits = entropy(posterior)
     return {
-        "method": "discrete-bayesian-synthetic-v1", "bank_version": bank["version"],
+        "method": "discrete-bayesian-synthetic-v2", "bank_version": bank["version"],
         "strategy": strategy, "seed": seed, "answered_count": len(answers), "budget": budget, "done": done,
         "next_question": ({"id": question["id"], "scenario": question["scenario"],
-                           "options": [{"id": option["id"], "text": option["text"]} for option in question["options"]]}
+                           "options": [{key: option[key] for key in ("id", "text", "casual_text", "mixed_text")} for option in question["options"]]}
                           if question else None),
         "predicted_style": style, "posterior": posterior, "entropy_bits": bits,
         "uncertainty": bits / math.log2(len(posterior)) if len(posterior) > 1 else 0.0,
         "heldout_predictions": heldout,
+        "written_answers": written_answers, "reflected_count": reflected_count,
     }
