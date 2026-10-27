@@ -258,7 +258,7 @@ export function Research() {
     navigation={<FamilyNavigation current="personalize" />}>
     <div className="research-workspace">
       <div className="research-heading">
-        <div><h1>대화 맞춤</h1><p>가족에게 건네는 말을 골라보거나 직접 적어주세요.</p></div>
+        <h1>대화 맞춤</h1>
         <div className="research-actions">
           <button type="button" onClick={exportResults} disabled={!interview || interviewBusy || previewBusy}>결과 내보내기</button>
           <button type="button" onClick={() => { clearResults(); setConsent(false); setProviderConsent(false) }}>다시 시작</button>
@@ -277,7 +277,7 @@ export function Research() {
             document.getElementById(`personalize-tab-${next}`)?.focus()
           }}>{key === 'interview' ? '말투 인터뷰' : '답변 확인'}</button>)}
       </div>
-      <p className="research-boundary">AI 대화에 사용할 표현을 살펴봅니다. 실제 가족의 답변이나 의료 조언을 대신하지 않습니다.</p>
+      {!interview && <p className="research-boundary">AI 대화에 사용할 표현을 살펴봅니다. 실제 가족의 답변이나 의료 조언을 대신하지 않습니다.</p>}
       {!catalog && !catalogError && <p role="status">저장된 가족 자료와 질문을 확인하고 있어요…</p>}
       {catalogError && <section className="research-blocker" role="alert">
         <h2>대화 맞춤을 불러오지 못했어요</h2><p>{catalogError}</p>
@@ -306,79 +306,79 @@ export function Research() {
         </>}
       </Panel>}
       {catalog && prepared && <>
-        <div className="research-family-context"><span>{[family!.profile.address_as, ...(family!.profile.address_aliases ?? [])].join(' · ')} / {SPEECH_STYLE_LABELS[family!.profile.speech_style!]}</span><a href="/studio?tab=memory">호칭·말투 수정</a></div>
-        <label className="research-consent"><input type="checkbox" checked={consent} onChange={event => { clearResults(); setConsent(event.target.checked) }} />
-          <span>가상 상황으로 답하며 실제 환자 정보는 입력하지 않습니다.</span>
-        </label>
         <section id="personalize-panel-interview" role="tabpanel" aria-labelledby="personalize-tab-interview" hidden={tab !== 'interview'}>
-          <Panel title={interview?.done ? '선택한 말투로 이렇게 답할 수 있어요' : '평소라면 어떻게 말하시겠어요?'}>
-            {!interview && <p className="research-intro">호칭과 존댓말 여부는 저장한 설정을 씁니다. 상황별로 설명하고 위로하는 방식이 다른 네 표현 중 고르거나, 직접 답해보세요.</p>}
-            <details className="research-details">
-              <summary>질문 설정 · {budget}개</summary>
-              <div className="research-settings">
-                <Select label="질문 선택 방식" value={strategy} onValueChange={value => { clearResults(); setStrategy(value as Strategy) }}>
-                  {catalog.strategies.map(value => <option key={value} value={value}>{STRATEGY_LABELS[value]}</option>)}
-                </Select>
-                <Select label="질문 수" value={String(budget)} onValueChange={value => { clearResults(); setBudget(Number(value)) }}>
-                  {Array.from({ length: catalog.max_budget - catalog.default_budget + 1 }, (_, index) => index + catalog.default_budget).map(value => <option key={value} value={value}>{value}개</option>)}
-                </Select>
-              </div>
-              <p>응답에 맞춰 다음 질문을 고르거나, 정해진 순서 또는 무작위 순서로 진행할 수 있어요. 설정을 바꾸면 현재 응답이 지워집니다.</p>
-            </details>
-            {!interview && <button type="button" className="primary" disabled={!consent || interviewBusy} onClick={() => void requestInterview([])}>{interviewBusy ? '질문을 준비하고 있어요…' : '질문 시작'}</button>}
+          <Panel title={interview?.done ? '선택한 말투로 이렇게 답할 수 있어요' : interview ? '말투 인터뷰' : '인터뷰를 시작할까요?'} className={interview?.next_question ? 'research-interview-active' : ''}>
+            {!interview && <>
+              <p className="research-intro">가족에게 건넬 말을 직접 쓰거나 네 가지 예시에서 고릅니다. 기본 {budget}개 질문에 답해보세요.</p>
+              <div className="research-family-context"><span>{[family!.profile.address_as, ...(family!.profile.address_aliases ?? [])].join(' · ')} / {SPEECH_STYLE_LABELS[family!.profile.speech_style!]}</span><a href="/studio?tab=memory">호칭·말투 수정</a></div>
+              <details className="research-details">
+                <summary>질문 설정 · {budget}개</summary>
+                <div className="research-settings">
+                  <Select label="질문 선택 방식" value={strategy} onValueChange={value => { clearResults(); setStrategy(value as Strategy) }}>
+                    {catalog.strategies.map(value => <option key={value} value={value}>{STRATEGY_LABELS[value]}</option>)}
+                  </Select>
+                  <Select label="질문 수" value={String(budget)} onValueChange={value => { clearResults(); setBudget(Number(value)) }}>
+                    {Array.from({ length: catalog.max_budget - catalog.default_budget + 1 }, (_, index) => index + catalog.default_budget).map(value => <option key={value} value={value}>{value}개</option>)}
+                  </Select>
+                  <Select label="먼저 사용할 무료 모델" value={selectedModel} onValueChange={setSelectedModel} disabled={!catalog.direct_input.available}>
+                    {catalog.direct_input.models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
+                  </Select>
+                </div>
+                <p>기본은 응답에 맞춘 질문입니다. 무료 모델은 직접 입력을 해석할 때만 사용하며, 전송 전 별도로 동의합니다.</p>
+              </details>
+              <label className="research-consent"><input type="checkbox" checked={consent} onChange={event => { clearResults(); setConsent(event.target.checked) }} />
+                <span>가상 상황으로 답하며 실제 환자 정보는 입력하지 않습니다.</span>
+              </label>
+              <button type="button" className="primary" disabled={!consent || interviewBusy} onClick={() => void requestInterview([])}>{interviewBusy ? '질문을 준비하고 있어요…' : '질문 시작'}</button>
+            </>}
             {interviewError && <p role="alert" className="research-error">{interviewError} 현재 선택은 유지됩니다. 다시 시도해주세요.</p>}
             {interview && <>
-              <div className="research-progress"><span>{interview.answered_count} / {interview.budget}개 응답</span><progress max={interview.budget} value={interview.answered_count} aria-label="인터뷰 진행" /></div>
+              <div className="research-progress"><span>{interview.done ? `${interview.budget}개 응답 완료` : `질문 ${interview.answered_count + 1} / ${interview.budget}`}</span><progress max={interview.budget} value={interview.answered_count} aria-label="인터뷰 진행" /></div>
               {interview.next_question && <fieldset className="research-question" disabled={interviewBusy}>
                 <legend ref={questionHeading} tabIndex={-1}>{contextualize(interview.next_question.scenario)}</legend>
-                <form className="research-written" onSubmit={event => {
-                  event.preventDefault()
-                  const text = draft.trim()
-                  if (!text) return
-                  if (providerConsent) {
-                    void requestInterview(answers, performance.now() - questionShownAt.current, text)
-                    return
-                  }
-                  void requestInterview([...answers, { question_id: interview.next_question!.id, text,
-                    ...(referenceOption ? { option_id: referenceOption } : {}) }], performance.now() - questionShownAt.current)
-                }}>
-                  <label className="field">내 말로 직접 답하기
-                    <textarea rows={3} maxLength={500} value={draft} required
-                      placeholder="실제로 가족에게 건네고 싶은 말을 적어주세요."
-                      onChange={event => { setDraft(event.target.value); setReferenceOption('') }} />
-                  </label>
-                  <label className="research-provider-consent"><input type="checkbox" checked={providerConsent} disabled={!catalog.direct_input.available}
-                    onChange={event => { setProviderConsent(event.target.checked); setReferenceOption('') }} />
-                    <span>입력한 문장과 질문·예시 표현을 OpenRouter 무료 모델로 보내 말투를 해석합니다. 공급자가 입력을 보관·학습에 사용할 수 있습니다.</span>
-                  </label>
-                  {!catalog.direct_input.available && <p className="research-boundary">무료 모델 키가 아직 연결되지 않았어요. 지금은 원문을 기록하거나 예시를 고를 수 있습니다.</p>}
-                  {providerConsent && <>
-                    <Select label="먼저 사용할 무료 모델" value={selectedModel} onValueChange={setSelectedModel}>
-                      {catalog.direct_input.models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-                    </Select>
-                    <p className="research-boundary">실패하면 다른 무료 모델로 바꿔 시도해요. 처음 호출과 대체 호출을 합쳐 최대 3회이며, 모두 실패하면 입력을 유지하고 오류를 표시합니다.</p>
-                  </>}
-                  {!providerConsent && <details className="research-details"><summary>가까운 표현을 직접 지정하기</summary>
-                  <Select label="쓴 문장과 가까운 표현 (선택)" value={referenceOption} onValueChange={setReferenceOption}>
-                    <option value="">원문만 기록하기</option>
-                    {interview.next_question.options.map((option, index) => <option key={option.id} value={option.id}>{index + 1}. {expression(option)}</option>)}
-                  </Select>
-                  <p className="research-boundary">직접 쓴 답변은 원문으로 남습니다. 가까운 표현을 지정한 경우에만 말투 예측에 반영해요. 문장의 의미를 자동 분석하지 않습니다.</p>
-                  </details>}
-                  <button type="submit" className="primary" disabled={!draft.trim() || interviewBusy}>{interviewBusy && providerConsent ? '문장을 해석하고 있어요…' : providerConsent ? 'AI로 해석하고 계속' : '내 답변으로 계속'}</button>
-                </form>
-                <p className="research-alternative">또는 가까운 표현을 골라주세요</p>
                 <div className="research-options">{interview.next_question.options.map(option => <button type="button" key={option.id} onClick={() => void requestInterview([...answers, { question_id: interview.next_question!.id, option_id: option.id }], performance.now() - questionShownAt.current)}>
                   {expression(option)}
                 </button>)}</div>
+                  <form className="research-written" onSubmit={event => {
+                    event.preventDefault()
+                    if (draft.trim() && providerConsent) void requestInterview(answers, performance.now() - questionShownAt.current, draft.trim())
+                  }}>
+                    <input aria-label="가족에게 건넬 말" type="text" maxLength={500} value={draft} required placeholder="내 말투로 직접 쓰기"
+                      onChange={event => { setDraft(event.target.value); setReferenceOption('') }} />
+                    {!!draft.trim() && <>
+                    <div className="research-input-meta"><span>{draft.length} / 500</span></div>
+                    <label className="research-provider-consent"><input type="checkbox" checked={providerConsent} disabled={!catalog.direct_input.available}
+                      onChange={event => { setProviderConsent(event.target.checked); setReferenceOption('') }} />
+                      <span>AI 해석을 위해 입력 문장을 전송합니다. 공급자가 보관·학습에 사용할 수 있어요.</span>
+                    </label>
+                    <details className="research-details"><summary>전송·보관 안내</summary>
+                      <p>동의하면 입력한 문장과 질문·예시 표현을 OpenRouter 무료 모델로 보냅니다. 저장된 가족 소개·기억 전체는 보내지 않아요. 공급자가 입력을 보관하거나 학습에 사용할 수 있습니다.</p>
+                      <p>먼저 사용할 모델: {catalog.direct_input.models.find(model => model.id === selectedModel)?.name}. 실패하면 다른 무료 모델로 바꿔 처음 호출과 대체 호출을 합쳐 최대 3회 시도합니다. 모두 실패하면 입력을 유지하고 오류를 표시합니다.</p>
+                    </details>
+                    {!catalog.direct_input.available && <p className="research-boundary">무료 모델 키가 연결되지 않았어요. 원문을 기록하거나 예시를 고를 수 있습니다.</p>}
+                    {!providerConsent && <details className="research-details"><summary>가까운 표현을 직접 지정하기</summary>
+                      <Select label="쓴 문장과 가까운 표현 (선택)" value={referenceOption} onValueChange={setReferenceOption}>
+                        <option value="">원문만 기록하기</option>
+                        {interview.next_question.options.map((option, index) => <option key={option.id} value={option.id}>{index + 1}. {expression(option)}</option>)}
+                      </Select>
+                      <p className="research-boundary">가까운 표현을 지정한 경우에만 말투 예측에 반영해요. 원문 기록만으로는 문장의 의미를 분석하지 않습니다.</p>
+                    </details>}
+                    <div className="research-answer-actions">
+                      <button type="button" disabled={!draft.trim() || interviewBusy} onClick={() => void requestInterview([...answers, {
+                        question_id: interview.next_question!.id, text: draft.trim(), ...(referenceOption ? { option_id: referenceOption } : {})
+                      }], performance.now() - questionShownAt.current)}>{referenceOption ? '지정한 표현으로 계속' : '원문만 기록'}</button>
+                      <button type="submit" className="primary" disabled={!draft.trim() || !providerConsent || interviewBusy}>{interviewBusy ? '해석하고 있어요…' : '해석하고 다음'}</button>
+                    </div>
+                    </>}
+                  </form>
               </fieldset>}
               {interviewBusy && <p role="status">선택을 반영하고 있어요…</p>}
-              {!!interpretations.length && <>
+              {!!interpretations.length && <details className="research-details"><summary>이전 답변의 해석</summary>
                 <p className="research-boundary" role="status">방금 입력한 답변의 해석: {interpretations[interpretations.length - 1].reason}</p>
                 <details className="research-details"><summary>모델 시도 내역 ({interpretations[interpretations.length - 1].attempts.length}회)</summary>
                   <ol>{interpretations[interpretations.length - 1].attempts.map(attempt => <li key={attempt.model}>{catalog.direct_input.models.find(model => model.id === attempt.model)?.name ?? attempt.model} · {attempt.status === 'success' ? '성공' : '실패'}</li>)}</ol>
                 </details>
-              </>}
+              </details>}
               {interview.done && <>
                 {interview.reflected_count > 0 && <p className="research-style">예측에 반영한 응답 {interview.reflected_count}개 · {Object.values(interview.predicted_style).map(value => STYLE_LABELS[value] ?? value).join(' · ')}</p>}
                 {interview.written_answers.length > 0 && <section className="research-heldout"><h3>내가 쓴 답변</h3>{interview.written_answers.map(item => <article key={item.question_id}><h4>{contextualize(item.scenario)}</h4><p>{item.text}</p><small>{item.reflected ? '말투 예측에 반영함' : '원문 기록 · 말투 미분류'}</small></article>)}</section>}
@@ -387,7 +387,7 @@ export function Research() {
                 </section> : <p>말투를 지정한 응답이 없어 다른 상황의 표현은 아직 예상하지 않았어요.</p>}
                 <button type="button" className="primary" onClick={() => { setTab('answers'); document.getElementById('personalize-tab-answers')?.focus() }}>상황별 답변 확인</button>
               </>}
-              {interview.reflected_count > 0 && <details className="research-details"><summary>예측 계산 상세</summary>
+              {interview.done && interview.reflected_count > 0 && <details className="research-details"><summary>예측 계산 상세</summary>
                 <p>현재 예상 말투: {Object.values(interview.predicted_style).map(value => STYLE_LABELS[value] ?? value).join(' · ')}</p>
                 <p>가설 불확실성 {Math.round(interview.uncertainty * 100)}%. 작은 가설 모형의 엔트로피로, 실제 예측 정확도가 아닙니다.</p>
               </details>}
@@ -398,6 +398,9 @@ export function Research() {
         <section id="personalize-panel-answers" role="tabpanel" aria-labelledby="personalize-tab-answers" hidden={tab !== 'answers'}>
           <Panel title="이 상황에 어떻게 답할까요?">
             <p className="research-intro">저장한 가족 자료와 별개인 가상 일정 예시입니다. 만료되거나 서로 다른 정보를 답변에서 어떻게 제외하는지 확인합니다.</p>
+            {!consent && <label className="research-consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} />
+              <span>가상 상황으로 답하며 실제 환자 정보는 입력하지 않습니다.</span>
+            </label>}
             <div className="research-compare-controls"><Select label="확인할 상황" value={caseId} onValueChange={value => { previewGeneration.current++; previewController.current?.abort(); setPreviewBusy(false); setPreviews([]); setPreviewError(''); setCaseId(value) }}>
               {catalog.cases.map(item => <option key={item.id} value={item.id}>{item.description ?? item.question}</option>)}
             </Select><button type="button" className="primary" disabled={!consent || previewBusy || interviewBusy} onClick={() => void compare()}>{previewBusy ? '확인하고 있어요…' : '답변 확인하기'}</button></div>

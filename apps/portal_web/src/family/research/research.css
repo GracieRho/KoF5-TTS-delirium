@@ -2,7 +2,6 @@
 .research-heading, .research-actions, .research-progress, .research-compare-controls { display: flex; align-items: center; gap: 16px; }
 .research-heading { justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; }
 .research-heading h1 { margin: 0; font-size: 28px; }
-.research-heading p { margin: 10px 0 0; color: var(--muted); line-height: 1.7; font-size: 15px; }
 .research-actions { gap: 8px; flex-wrap: wrap; }
 .research-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; max-width: 600px; margin: 20px 0; }
 .research-consent { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 24px; line-height: 1.7; font-size: 14px; }
@@ -14,10 +13,10 @@
 .research-details { margin: 20px 0; font-size: 14px; line-height: 1.8; }
 .research-details summary { width: fit-content; cursor: pointer; color: var(--brand); font-weight: 600; }
 .research-details > p { color: var(--muted); max-width: 70ch; }
-.research-progress { flex-wrap: wrap; justify-content: space-between; margin: 24px 0; font-size: 14px; }
-.research-progress progress { width: min(100%, 240px); height: 8px; accent-color: var(--brand); }
+.research-progress { justify-content: space-between; margin: 0 0 24px; font-size: 14px; color: var(--muted); }
+.research-progress progress { width: min(55%, 360px); height: 8px; accent-color: var(--brand); }
 .research-question { border: 0; padding: 0; margin: 0; min-width: 0; }
-.research-question legend { margin-bottom: 18px; padding: 0; font-size: 19px; font-weight: 600; line-height: 1.6; }
+.research-question legend { margin-bottom: 28px; padding: 0; font-size: 24px; font-weight: 650; line-height: 1.6; }
 .research-options { display: grid; gap: 10px; }
 .research-options button { justify-content: flex-start; text-align: left; white-space: normal; min-height: 64px; padding: 16px; line-height: 1.7; }
 .research-style { font-size: 15px; color: var(--brand); line-height: 1.7; }
@@ -51,22 +50,27 @@
   .research-heading h1 { font-size: 24px; }
   .research-settings { grid-template-columns: minmax(0, 1fr); }
   .research-compare-controls { flex-direction: column; align-items: stretch; }
-  .research-progress { align-items: flex-start; flex-direction: column; }
-  .research-progress progress { width: 100%; }
+  .research-progress { gap: 16px; }
+  .research-question legend { font-size: 20px; margin-bottom: 24px; }
+  .research-answer-actions > button { flex: 1; padding-inline: 12px; }
 }
 .research-family-context { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; font-size: 14px; line-height: 1.7; }
 .research-family-context span { color: var(--muted); }
-.research-written { margin: 0 0 28px; display: grid; gap: 16px; }
-.research-written > button { justify-self: start; }
+.research-written { display: grid; gap: 16px; margin-top: 10px; }
 .research-written .research-boundary { margin: 0; }
-.research-written textarea { resize: vertical; }
+.research-written input[type="text"] { min-height: 64px; padding: 16px; font-size: 16px; font-weight: 450; border-color: var(--line); }
 .research-heldout small { font-size: 14px; color: var(--muted); }
 
 .research-written .research-details { margin: 0; }
 .research-written .select-field { margin-block: 12px; }
-.research-alternative { color: var(--muted); font-size: 14px; margin: 24px 0 12px; }
 .research-provider-consent { display: flex; align-items: flex-start; gap: 10px; line-height: 1.7; font-size: 14px; }
 .research-provider-consent input { width: 18px; height: 18px; margin: 3px 0 0; flex-shrink: 0; }
 .research-setup { display: grid; gap: 18px; max-width: 420px; margin-top: 24px; }
 .research-setup > button { justify-self: start; }
 .research-setup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }
+
+.research-interview-active > .panel-heading { display: none; }
+.research-input-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 14px; margin-top: -8px; }
+.research-input-meta span:first-child { white-space: nowrap; }
+.research-answer-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 4px; }
+.research-interview-active .research-footnote { padding-top: 20px; border-top: 1px solid var(--line); }
