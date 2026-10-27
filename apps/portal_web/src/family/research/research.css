@@ -67,3 +67,6 @@
 .research-alternative { color: var(--muted); font-size: 14px; margin: 24px 0 12px; }
 .research-provider-consent { display: flex; align-items: flex-start; gap: 10px; line-height: 1.7; font-size: 14px; }
 .research-provider-consent input { width: 18px; height: 18px; margin: 3px 0 0; flex-shrink: 0; }
+.research-setup { display: grid; gap: 18px; max-width: 420px; margin-top: 24px; }
+.research-setup > button { justify-self: start; }
+.research-setup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }

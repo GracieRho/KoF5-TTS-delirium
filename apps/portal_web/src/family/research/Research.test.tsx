@@ -93,6 +93,7 @@ describe('대화 맞춤', () => {
     expect(calls).toHaveLength(1)
     expect(JSON.parse(calls[0][1].body)).toMatchObject({ text: '천천히 바꿔도 돼. 같이 다시 골라보자.', provider_processing_consent: true, answers: [] })
     expect(calls[0][1].headers.Authorization).toBe('Bearer synthetic-session')
+    expect(calls[0][1].headers['X-Kof5-Studio']).toBe('1')
     expect(screen.getByText(/방금 입력한 답변의 해석: 마음을 받아주고/)).toBeInTheDocument()
     sessionStorage.clear()
   })
@@ -100,9 +101,31 @@ describe('대화 맞춤', () => {
   it('저장 자료가 비었거나 피해야 할 기억만 있으면 먼저 가족의 기억으로 안내한다', async () => {
     prepare({ ...family, profile: { ...family.profile, speech_style: undefined }, memories: [{ ...family.memories[0], category: 'avoid' }] })
     render(<Research />)
-    expect(await screen.findByRole('heading', { name: '먼저 가족의 기억을 준비해주세요' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '가족의 기억 준비하기' })).toHaveAttribute('href', '/studio?tab=memory')
+    expect(await screen.findByRole('heading', { name: '인터뷰 전에 확인해주세요' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '부족한 내용 입력하기' })).toHaveAttribute('href', '/studio?tab=memory')
     expect(screen.queryByRole('button', { name: '질문 시작' })).not.toBeInTheDocument()
+  })
+
+  it('기억과 호칭이 있으면 말투만 이 화면에서 저장하고 나머지 자료를 보존한다', async () => {
+    const fetch = prepare({ ...family, profile: { ...family.profile, speech_style: undefined } })
+    render(<Research />)
+    expect(await screen.findByRole('heading', { name: '평소 말투만 알려주세요' })).toBeInTheDocument()
+    expect(screen.getByText(/대화에 쓸 기억 1개/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '부족한 내용 입력하기' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '말투 저장하고 계속' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('combobox', { name: '평소 말투' }))
+    fireEvent.click(screen.getByRole('option', { name: '반존대' }))
+    fetch.mockResolvedValueOnce(response({ detail: '저장 연결 실패' }, false))
+    fireEvent.click(screen.getByRole('button', { name: '말투 저장하고 계속' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('저장 연결 실패')
+    expect(screen.queryByRole('button', { name: '질문 시작' })).not.toBeInTheDocument()
+    fetch.mockResolvedValueOnce(response({ ...family, profile: { ...family.profile, speech_style: 'mixed' } }))
+    fireEvent.click(screen.getByRole('button', { name: '말투 저장하고 계속' }))
+    expect(await screen.findByRole('button', { name: '질문 시작' })).toBeInTheDocument()
+    const save = fetch.mock.calls.find(([url]) => url === '/local-studio/profile')!
+    expect(save[1].method).toBe('PUT')
+    expect(JSON.parse(save[1].body)).toEqual({ ...family.profile, speech_style: 'mixed' })
+    expect(fetch.mock.calls.some(([url]) => url.includes('/memories'))).toBe(false)
   })
 
   it('저장 자료 조회 실패를 빈 자료로 간주하지 않는다', async () => {
@@ -112,7 +135,7 @@ describe('대화 맞춤', () => {
     })
     render(<Research />)
     expect(await screen.findByRole('alert')).toHaveTextContent('보호자 로그인이 필요합니다.')
-    expect(screen.queryByRole('heading', { name: '먼저 가족의 기억을 준비해주세요' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '인터뷰 전에 확인해주세요' })).not.toBeInTheDocument()
   })
 
   it('저장된 반말 설정을 모든 선택지에 공통 적용하고 네 표현을 제공한다', async () => {

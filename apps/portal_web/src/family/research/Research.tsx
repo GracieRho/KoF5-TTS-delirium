@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { profileReady } from '../studio/readiness'
-import { studioRequest, SPEECH_STYLE_LABELS, type StudioState } from '../studio/api'
+import { studioRequest, SPEECH_STYLE_LABELS, type Profile, type StudioState } from '../studio/api'
 import { FamilyNavigation } from '../components/FamilyNavigation'
 import { WorkspaceShell } from '../../shared/components/WorkspaceShell'
 import { Panel } from '../../shared/components/Panel'
@@ -30,6 +30,9 @@ export function Research() {
   const [strategy, setStrategy] = useState<Strategy>('adaptive')
   const [budget, setBudget] = useState(8)
   const [family, setFamily] = useState<StudioState | null>(null)
+  const [speechStyle, setSpeechStyle] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileError, setProfileError] = useState('')
   const [draft, setDraft] = useState('')
   const [referenceOption, setReferenceOption] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
@@ -225,7 +228,21 @@ export function Research() {
   }
 
   const usableMemories = family?.memories.filter(memory => memory.category !== 'avoid') ?? []
-  const prepared = Boolean(family && profileReady(family.profile) && family.profile.speech_style && family.profile.speech_style in SPEECH_STYLE_LABELS && usableMemories.length)
+  const hasProfile = Boolean(family && profileReady(family.profile))
+  const hasSpeechStyle = Boolean(family?.profile.speech_style && family.profile.speech_style in SPEECH_STYLE_LABELS)
+  const onlySpeechStyleMissing = hasProfile && usableMemories.length > 0 && !hasSpeechStyle
+  const prepared = hasProfile && hasSpeechStyle && usableMemories.length > 0
+  async function saveSpeechStyle() {
+    if (!family || !onlySpeechStyleMissing || !speechStyle || profileBusy) return
+    setProfileBusy(true)
+    setProfileError('')
+    try {
+      const saved = await studioRequest<StudioState>('/profile', 'PUT', { ...family.profile, speech_style: speechStyle as Profile['speech_style'] })
+      setFamily(saved)
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : '말투를 저장하지 못했어요. 다시 시도해주세요.')
+    } finally { setProfileBusy(false) }
+  }
   function expression(item: { text: string; casual_text: string; mixed_text: string }) {
     const text = family?.profile.speech_style === 'casual' ? item.casual_text
       : family?.profile.speech_style === 'mixed' ? item.mixed_text : item.text
@@ -266,13 +283,27 @@ export function Research() {
         <h2>대화 맞춤을 불러오지 못했어요</h2><p>{catalogError}</p>
         <button type="button" onClick={() => setCatalogVersion(version => version + 1)}>다시 연결</button><a href="/studio?tab=memory">가족의 기억으로 이동</a>
       </section>}
-      {catalog && !prepared && <Panel title="먼저 가족의 기억을 준비해주세요">
-        <p>평소 부르는 호칭과 말투, 대화에 쓸 기억이 필요합니다. 이미 입력한 내용은 다시 묻지 않아요.</p>
-        <ul>{(!family || !profileReady(family.profile)) && <li>가족 소개와 주로 부르는 호칭</li>}
-          {!family?.profile.speech_style && <li>평소 말투: 존댓말 · 반말 · 반존대</li>}
-          {!usableMemories.length && <li>피해야 할 이야기를 제외한 가족 기억 1개 이상</li>}</ul>
-        <a href="/studio?tab=memory">가족의 기억 준비하기</a>
-        <button type="button" onClick={() => setCatalogVersion(version => version + 1)}>입력한 내용 다시 확인</button>
+      {catalog && !prepared && <Panel title={onlySpeechStyleMissing ? '평소 말투만 알려주세요' : '인터뷰 전에 확인해주세요'}>
+        {onlySpeechStyleMissing ? <>
+          <p>저장된 호칭 ‘{family!.profile.address_as}’과 대화에 쓸 기억 {usableMemories.length}개를 불러왔어요. 평소 말투를 고르면 바로 시작할 수 있어요.</p>
+          <form className="research-setup" onSubmit={event => { event.preventDefault(); void saveSpeechStyle() }}>
+            <Select label="평소 말투" required disabled={profileBusy} value={speechStyle} onValueChange={setSpeechStyle}>
+              <option value="" disabled>말투를 골라주세요</option>
+              {Object.entries(SPEECH_STYLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            {profileError && <p role="alert" className="research-error">{profileError}</p>}
+            <button className="primary" disabled={!speechStyle || profileBusy}>{profileBusy ? '저장하고 있어요…' : '말투 저장하고 계속'}</button>
+          </form>
+        </> : <>
+          <p>인터뷰에 필요한 내용 중 아래 항목만 추가해주세요.</p>
+          <ul>{!hasProfile && <li>가족 소개와 주로 부르는 호칭</li>}
+            {!hasSpeechStyle && <li>평소 말투</li>}
+            {!usableMemories.length && <li>대화에 쓸 가족 기억 1개 이상 (피해야 할 이야기 제외)</li>}</ul>
+          <div className="research-setup-actions">
+            <a className="button primary" href="/studio?tab=memory">부족한 내용 입력하기</a>
+            <button type="button" onClick={() => setCatalogVersion(version => version + 1)}>저장한 내용 새로고침</button>
+          </div>
+        </>}
       </Panel>}
       {catalog && prepared && <>
         <div className="research-family-context"><span>{[family!.profile.address_as, ...(family!.profile.address_aliases ?? [])].join(' · ')} / {SPEECH_STYLE_LABELS[family!.profile.speech_style!]}</span><a href="/studio?tab=memory">호칭·말투 수정</a></div>

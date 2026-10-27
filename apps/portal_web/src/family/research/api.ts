@@ -45,7 +45,7 @@ export async function researchRequest<T>(path: '/catalog' | '/interview' | '/pre
   const response = await fetch(`/research-api${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json',
-      ...(path === '/interpret' ? { Authorization: `Bearer ${sessionStorage.getItem('favilium.session') ?? ''}` } : {}) },
+      ...(path === '/interpret' ? { 'X-Kof5-Studio': '1', Authorization: `Bearer ${sessionStorage.getItem('favilium.session') ?? ''}` } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
     cache: 'no-store',
