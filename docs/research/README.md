@@ -86,3 +86,16 @@ git diff --check
 ```
 
 API tests는 외부 socket 연결을 차단하고 합성 자료만 사용한다. 실제 환자 시험은 기존 Gate07의 미완료 상태를 유지한다.
+
+## 실제 인증 경로의 자유문장 평가
+
+화면은 전송 동의 후 입력 한 건을 자동 해석하며 오류 시 무료 모델을 최대 3회 시도한다. 정확도 평가 배치는 자동 실행하지 않는다. 다음 명령은 기존 로컬 보호자 계정으로 로그인해 저장 자료를 조회한 후 **실제 `/research-api/interpret`** 경로를 사용한다. 비밀번호는 프롬프트로 입력한다. 출력 폴더는 새 경로여야 한다.
+
+```sh
+python scripts/evaluate_written_answers.py --email guardian@email.com \
+  --consent-free-provider --output runs/research/written-evaluation-새실행
+```
+
+현재 설정은 정답을 사전 작성한 가상 문장 24개다. 계정·DB를 생성/수정하지 않으며 기존 가족 소개·말투·기억이 준비되어 있어야 한다. 전용 로컬 Auth만 허용하며 계정 세션은 실행 후 로그아웃한다. 비밀은 출력하지 않는다. 실제 호출·분류 보류·호출 오류를 구분해 분모와 시도 수·비용을 기록한다. 호출 오류를 정답 null로 세지 않는다. 무료 모델의 데이터 보관/학습 가능성에 동의한 합성 자료만 사용한다.
+
+[실제 인증 및 24문장 결과와 한계](validation-authenticated.md)
