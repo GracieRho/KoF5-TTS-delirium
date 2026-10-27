@@ -15,13 +15,21 @@ flowchart LR
     layer_api["api (1)"]
     layer_cloud_prototype["cloud_prototype (1)"]
     layer_companion["companion (1)"]
+    layer_environment["environment (1)"]
     layer_local_studio["local_studio (1)"]
     layer_preprocessing["preprocessing (3)"]
+    layer_research["research (8)"]
     layer_root["root (1)"]
     layer_api --> layer_cloud_prototype
     layer_api --> layer_companion
     layer_api --> layer_local_studio
+    layer_api --> layer_research
     layer_cloud_prototype --> layer_companion
     layer_local_studio --> layer_api
     layer_local_studio --> layer_cloud_prototype
+    layer_preprocessing --> layer_environment
+    layer_research --> layer_api
+    layer_research --> layer_companion
+    layer_research --> layer_environment
+    layer_research --> layer_root
   end

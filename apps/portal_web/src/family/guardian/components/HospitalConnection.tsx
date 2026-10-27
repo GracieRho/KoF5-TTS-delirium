@@ -1,3 +1,4 @@
+import { profileReady } from '../../studio/readiness'
 import { useEffect, useRef, useState } from 'react'
 import { RequestEpoch } from '../../../shared/hooks/requestEpoch'
 import { HelpTooltip } from '../../../shared/components/HelpTooltip'
@@ -23,7 +24,7 @@ export function HospitalConnection({target,materials,busy,error,send,withdraw}:P
  async function submit(){if(!consent||!preview)return;if(await send(target))close()}
  async function revoke(material:FamilyMaterial){if(await withdraw(material.material_id))close()}
  function materialSummary(material:FamilyMaterial){return <><div className="connection-result-heading"><strong>버전 {material.revision}</strong><span className="connection-status">{MATERIAL_LABELS[material.status]}</span></div><p className="connection-meta">기억 {material.memories.length}개 · {submittedAt(material.submitted_at)}</p>{material.review_note&&<div className="connection-review"><span>병원 검토 의견</span><p>{material.review_note}</p></div>}</>}
- const ready=Boolean(preview&&Object.values(preview.profile).every(v=>v.trim())&&preview.memories.length)
+ const ready=Boolean(preview&&profileReady(preview.profile)&&preview.memories.length)
  return <Panel title={target.patient_name} className="hospital-connection" actions={<span className="connection-status">가족 연결 확인됨</span>}>
  <p className="connection-relationship">보호자 관계 · {target.relationship}</p>
  <details className="connection-identity"><summary>연결 정보</summary><p>병원 식별 코드 · {target.hospital_ref}</p></details>

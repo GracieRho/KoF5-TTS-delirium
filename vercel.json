@@ -21,5 +21,11 @@
         "service": "app"
       }
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "feat/adaptive-care-research": false,
+      "main": false
+    }
+  }
 }

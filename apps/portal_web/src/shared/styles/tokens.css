@@ -324,6 +324,10 @@ input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; padding: 0
   .studio-nav nav { display: flex; gap: 3px; justify-content: space-between }
   .studio-nav nav button, .studio-nav nav a { flex: 1; min-height: 56px; flex-direction: column; gap: 5px; padding: 8px 5px; font-size: .65rem; border-radius: 10px }
   .studio-nav nav button svg { width: 18px; height: 18px }
+  .family-theme .studio-nav nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .family-theme .studio-nav nav :is(a, button) { min-width: 0; font-size: 14px; }
+  .family-theme .studio-nav nav > button { grid-column: 1 / -1; min-height: 32px; }
+  .family-theme .studio-nav nav a svg { width: 18px; height: 18px; }
   .studio-space, .studio-nav-bottom, .nav-count { display: none }
   .studio-workspace { margin: 0; min-height: calc(100dvh - 138px); border-left: 0; border-radius: 18px 18px 0 0 }
   .studio-topbar { min-height: 54px; padding: 15px 22px; font-size: .68rem }
@@ -398,3 +402,6 @@ button.select-trigger[aria-invalid="true"] { border-color:var(--danger) }
 
 .conversation-requirements { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:20px 0;font-size:.78rem;color:var(--muted) }
 .conversation-requirements button { font-size:.78rem;min-height:36px }
+.memory-profile { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 0; margin-bottom: 20px; border-block: 1px solid var(--line); }
+.memory-profile h2 { font-size: 16px; margin: 0 0 8px; }
+.memory-profile p { font-size: 14px; margin: 0; color: var(--muted); }

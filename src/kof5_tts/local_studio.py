@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import sqlite3
 from threading import RLock
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 import httpx
@@ -189,6 +190,8 @@ class Profile(StudioInput):
     patient_alias: str = Field(min_length=1, max_length=40)
     relationship: str = Field(min_length=1, max_length=40)
     address_as: str = Field(min_length=1, max_length=40)
+    address_aliases: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(default_factory=list, max_length=6)
+    speech_style: Literal['polite', 'casual', 'mixed'] | None = None
 
 
 class Memory(StudioInput):
@@ -223,7 +226,7 @@ def state():
 def profile(payload: Profile):
     with LOCK:
         current = load()
-        current['profile'] = payload.model_dump()
+        current['profile'] = payload.model_dump(exclude_unset=True)
         save(current)
         return public_state(current)
 
@@ -274,7 +277,7 @@ def enroll(payload: Enrollment):
         raise HTTPException(422, 'PCM16 WAV 20~30초 샘플 세 개가 필요합니다.') from None
     with LOCK:
         current = load()
-        if not all(current['profile'].values()):
+        if not all(current['profile'].get(key) for key in ('guardian_name', 'patient_alias', 'relationship', 'address_as')):
             raise HTTPException(409, '가족 소개를 먼저 저장하세요.')
         if current['voice']['status'] not in {'none', 'failed', 'deleted'}:
             raise HTTPException(409, '기존 음성 상태를 확인하세요. 중복 생성하지 않습니다.')
@@ -405,7 +408,7 @@ def submit_hospital_material(payload: MaterialSubmission, request: Request):
         raise HTTPException(422, '병원에 소개·기억·음성 등록 상태를 보내는 데 동의하세요.')
     with LOCK:
         current = load()
-        if not all(current['profile'].values()) or not current['memories']:
+        if not all(current['profile'].get(key) for key in ('guardian_name', 'patient_alias', 'relationship', 'address_as')) or not current['memories']:
             raise HTTPException(409, '가족 소개와 기억을 먼저 저장하세요.')
         # Only an opaque revision leaves the voice store, never the provider voice ID.
         revision = sha256(json.dumps(current['voice'], sort_keys=True).encode()).hexdigest()

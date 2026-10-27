@@ -2,6 +2,10 @@
 
 운영 도메인은 `https://kof5-tts-delirium.vercel.app`, 전용 Supabase 프로젝트는 `mvqwzraiganchlkmnegj`입니다. 도커 없이 Management API와 Vercel API로 설정합니다.
 
+## 현재 자동 배포 제한
+
+PR9의 검토·병합은 배포 승인과 별개다. 사용자의 배포 금지 요청에 따라 `vercel.json`의 `git.deploymentEnabled`에서 `feat/adaptive-care-research`와 `main`을 false로 둔다. 현재 운영 배포는 유지하며 새 main 커밋의 자동 배포를 막는다. 추후 명시적인 배포 승인 때 해당 설정을 재검토한다. 수동 배포도 이번 작업에서 실행하지 않는다.
+
 ## 환경변수
 
 Vercel Production에 다음 값을 설정한 뒤 재배포합니다. Supabase 연동이 자동 생성하는 `SUPABASE_*` 이름만으로는 서버 설정이 채워지지 않습니다.

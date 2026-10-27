@@ -10,6 +10,7 @@ Thumbs.db
 # Local worktrees
 .worktrees/
 .vercel/
+.omx/
 
 # Secrets and local configuration
 .env
