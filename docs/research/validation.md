@@ -18,7 +18,51 @@
 - 아키텍처 생성·`--check`, 생성기 단위 테스트 7개, `git diff --check` 통과.
 - 기존 테스트 경고: Starlette의 httpx TestClient 지원 폐기 예정 안내, 기존 FamilyMaterialReview의 p/div 중첩 및 Select key 경고. 이번 연구 변경과 무관한 경고이며 수정 범위를 확대하지 않았다.
 
-최종 벤치마크·실험 CLI·화면 캡처의 실제 결과는 후속 검증에서 이 문서에 추가한다. 실행 여부를 추정하거나 합성 수치를 사람·LLM의 실측으로 기재하지 않는다.
+## 최종 오프라인 실행
+
+실행 소스는 `0e8dc937e7c37cb390af1cbe20e3962e5062c182`이며 실행 시작 시 Git dirty=false였다. 문서·화면 캡처만 이후 추가했다. 공급자 key 없이 외부 socket 연결을 막은 실행에서 아래 명령을 완료했다.
+
+```bash
+python3 scripts/benchmark_research.py --output runs/research/final-20261027/benchmark
+python3 scripts/benchmark_research.py --export-inputs runs/research/final-20261027/generation-inputs.jsonl
+python3 scripts/prepare_research_study.py --output runs/research/final-20261027/study --participants 12 --seed 7
+```
+
+Python 3.15.0, macOS arm64, seed=7, seeds=3, budget=1–5, bootstrap=1000, latency repeats=3. 인터뷰 720회·근거 비교 132행. 실행 시간 1.286초는 이 작은 로컬 계산 전체의 경과 시간이며 공급자·음성 지연이 아니다. 원시 산출물은 Git 제외 경로에 보관했다.
+
+### 질문 5개 예산의 가상 응답자 결과
+
+| 응답자 가정 | 고정 | 무작위 | 적응형 |
+| --- | ---: | ---: | ---: |
+| 인터뷰 엔진과 같은 우도 모형 | 80.21% | 72.92% | 86.46% |
+| 질문 맥락에 따라 일부 선호를 반전한 모형 불일치 검사 | 67.71% | 64.58% | 65.63% |
+
+각 셀은 8개 가상 프로필×3 seeds의 24 trials이며, 프로필 안에서 seed를 평균한 후 차이를 비교한다. 같은 모형으로 만든 응답자에서는 적응형이 높았지만 **모형 불일치에서는 고정 질문보다 낮았다**. 실제 보호자·독립 평가셋에서의 이득을 입증하지 않는다. 질문 signal/lapse와 선호 반전 규칙은 연구자가 정한 가정이다.
+
+### 수동 라벨 개발 사례 33개
+
+| 추출 규칙 | 전체 기대 동작·근거 일치 | 답변 가능 사례의 유효 응답률 | 답변한 사례의 오류율 |
+| --- | ---: | ---: | ---: |
+| 전체 문맥의 첫 승인 근거 | 22/33 | 7/10 | 11/18 |
+| 키워드 순위 | 23/33 | 8/10 | 10/18 |
+| 시간 처리 제거 | 26/33 | 8/10 | 7/15 |
+| 출처·시간·철회·상충 적용 | 33/33 | 10/10 | 0/10 |
+
+제안 규칙은 답변 가능 10개에 모두 답하고 나머지는 정책 응답 또는 abstention이었다. 이 33개는 로직을 개발하며 작성한 **회귀 사례**다. 첫 근거 선택·키워드 순위는 강한 LLM baseline이 아니며, 33/33이나 오류 0을 실제 LLM 안전성으로 일반화하지 않는다.
+
+### 실험·음성 도구 실행
+
+빈 양식은 가상 자리표시자 12명에 대한 배정표일 뿐 실제 참여자가 아니다. `study/synthetic-example/`의 명시적 합성 숫자만 사용해 `analyze_research_study.py`의 preferences/pairwise/voice/audio/critical 다섯 분석을 모두 실행했다. 결과는 각각 `runs/research/final-20261027/*-synthetic.json`에 있다. 실제 성인 선호·음성 파일·실제 첫 청취음 측정은 수행하지 않았다.
+
+## 실제 화면 확인
+
+연구 서버는 공급자 key와 관리 토큰 없이 `127.0.0.1:8767`에 띄웠다. 5개 적응형 질문 완료·예측 변경·heldout 표시, 1개 예산, 만료 일정의 네 조건 비교를 실제 브라우저에서 확인했다. 새로고침 시 응답 초기화도 확인했다. 같은 문장인 사례는 한국어 설명으로 구분한다.
+
+- [데스크톱 전체 화면](../validation/adaptive-care-research/desktop.png)
+- [390px 모바일 전체 화면](../validation/adaptive-care-research/mobile.png): viewport=390px, document scrollWidth=390px로 가로 넘침 없음.
+- [만료 정보 처리 비교](../validation/adaptive-care-research/comparison.png)
+
+일시적인 모바일 viewport는 복원했다. UI는 실제 연구 API만 호출하며 로그인을 요구하지 않는다. export·reset·설정 변경·실패·늦은 응답 폐기는 웹 회귀 테스트로도 검증했다.
 
 ## 해석 경계
 
