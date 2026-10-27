@@ -5,4 +5,7 @@ import { AuthProvider } from './shared/auth/AuthContext'
 import { ToastProvider } from './shared/components/StatusMessage'
 import './shared/styles/tokens.css'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><ToastProvider><AuthProvider><App/></AuthProvider></ToastProvider></StrictMode>)
+const research = window.location.pathname.replace(/\/$/, '') === '/research'
+createRoot(document.getElementById('root')!).render(
+  <StrictMode><ToastProvider>{research ? <App /> : <AuthProvider><App /></AuthProvider>}</ToastProvider></StrictMode>
+)
