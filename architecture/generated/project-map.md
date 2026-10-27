@@ -23,7 +23,7 @@ flowchart LR
     layer_environment["environment (1)"]
     layer_local_studio["local_studio (1)"]
     layer_preprocessing["preprocessing (3)"]
-    layer_research["research (7)"]
+    layer_research["research (8)"]
     layer_root["root (1)"]
     layer_api --> layer_cloud_prototype
     layer_api --> layer_companion
@@ -42,9 +42,9 @@ flowchart LR
 
 ## 현재 카탈로그
 
-- Python 모듈: **16**
-- 설정 파일: **2**
-- 프로젝트 실행 스크립트: **12**
+- Python 모듈: **17**
+- 설정 파일: **3**
+- 프로젝트 실행 스크립트: **13**
 
 ### Python 모듈
 
@@ -64,6 +64,7 @@ flowchart LR
 | `kof5_tts.research.benchmark` | research | `src/kof5_tts/research/benchmark.py` | `kof5_tts.research.grounding`<br>`kof5_tts.research.interview` |
 | `kof5_tts.research.experiment` | research | `src/kof5_tts/research/experiment.py` | — |
 | `kof5_tts.research.grounding` | research | `src/kof5_tts/research/grounding.py` | `kof5_tts.companion` |
+| `kof5_tts.research.interpretation_evaluation` | research | `src/kof5_tts/research/interpretation_evaluation.py` | `kof5_tts.research.interview`<br>`kof5_tts.research.openrouter` |
 | `kof5_tts.research.interview` | research | `src/kof5_tts/research/interview.py` | — |
 | `kof5_tts.research.openrouter` | research | `src/kof5_tts/research/openrouter.py` | — |
 
@@ -73,6 +74,7 @@ flowchart LR
 | --- | --- |
 | research | `configs/research/grounding_cases.json` |
 | research | `configs/research/interview.json` |
+| research | `configs/research/written-answer-evaluation.json` |
 
 ### 실행 스크립트
 
@@ -85,6 +87,7 @@ flowchart LR
 | `scripts/demo_companion_text.py` |
 | `scripts/demo_voice_enrollment.py` |
 | `scripts/download_aihub.py` |
+| `scripts/evaluate_written_answers.py` |
 | `scripts/prepare_research_study.py` |
 | `scripts/run_backend.py` |
 | `scripts/run_local_portal.py` |

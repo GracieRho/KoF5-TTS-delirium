@@ -152,6 +152,15 @@
         ]
       },
       {
+        "module": "kof5_tts.research.interpretation_evaluation",
+        "path": "src/kof5_tts/research/interpretation_evaluation.py",
+        "layer": "research",
+        "imports": [
+          "kof5_tts.research.interview",
+          "kof5_tts.research.openrouter"
+        ]
+      },
+      {
         "module": "kof5_tts.research.interview",
         "path": "src/kof5_tts/research/interview.py",
         "layer": "research",
@@ -173,6 +182,10 @@
     {
       "path": "configs/research/interview.json",
       "group": "research"
+    },
+    {
+      "path": "configs/research/written-answer-evaluation.json",
+      "group": "research"
     }
   ],
   "scripts": [
@@ -183,6 +196,7 @@
     "scripts/demo_companion_text.py",
     "scripts/demo_voice_enrollment.py",
     "scripts/download_aihub.py",
+    "scripts/evaluate_written_answers.py",
     "scripts/prepare_research_study.py",
     "scripts/run_backend.py",
     "scripts/run_local_portal.py",
