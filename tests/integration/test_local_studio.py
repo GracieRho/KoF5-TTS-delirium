@@ -54,6 +54,17 @@ class LocalStudioTests(unittest.TestCase):
     def setup_profile(self):
         return self.client.put('/local-studio/profile', json={'guardian_name': '시험자', 'patient_alias': '가상 가족', 'relationship': '딸', 'address_as': '아빠'})
 
+    def test_speech_style_and_multiple_addresses_roundtrip_without_provider_calls(self):
+        self.setup_profile()
+        payload = {**self.client.get('/local-studio/state').json()['profile'],
+                   'speech_style': 'mixed', 'address_aliases': ['아버지', '우리 아빠']}
+        self.assertEqual(self.client.put('/local-studio/profile', json=payload).status_code, 200)
+        self.assertEqual(self.client.get('/local-studio/state').json()['profile'], payload)
+        for invalid in [{'speech_style': 'guessed'}, {'address_aliases': ['x' * 41]},
+                        {'address_aliases': ['호칭'] * 7}]:
+            self.assertEqual(self.client.put('/local-studio/profile', json={**payload, **invalid}).status_code, 422)
+        self.assertEqual(self.client.get('/local-studio/state').json()['profile'], payload)
+
     def setup_voice(self, status='created'):
         self.setup_profile()
         state = studio.load()

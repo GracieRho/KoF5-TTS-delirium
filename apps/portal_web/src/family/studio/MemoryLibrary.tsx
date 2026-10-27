@@ -2,7 +2,7 @@ import { Select } from '../../shared/components/Select'
 import { useState, type FormEvent } from 'react'
 import { ResponsiveSheet } from '../../shared/components/ResponsiveSheet'
 import { Icon } from '../../shared/components/Icon'
-import type { Memory, MemoryInput } from './api'
+import { SPEECH_STYLE_LABELS, type Memory, type MemoryInput, type Profile } from './api'
 
 export const categories = {
   family: '가족과 일상',
@@ -14,12 +14,16 @@ export function MemoryLibrary({
   memories,
   busy,
   save,
-  remove
+  remove,
+  profile,
+  editProfile
 }: {
   memories: Memory[]
   busy: boolean
   save: (input: MemoryInput, id?: string) => Promise<boolean>
   remove: (id: string) => Promise<boolean>
+  profile?: Profile
+  editProfile?: () => void
 }) {
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(false)
@@ -46,6 +50,11 @@ export function MemoryLibrary({
           <Icon name="plus" size={17} /> 기억 추가
         </button>
       </div>
+      {profile && <div className="memory-profile">
+        <div><h2>호칭과 평소 말투</h2>
+          <p>{[profile.address_as, ...(profile.address_aliases ?? [])].filter(Boolean).join(' · ') || '호칭을 알려주세요'} / {profile.speech_style ? SPEECH_STYLE_LABELS[profile.speech_style] : '말투를 선택해주세요'}</p>
+        </div><button type="button" onClick={editProfile}>호칭·말투 수정</button>
+      </div>}
       <div className="memory-filters" aria-label="기억 분류">
         {[['all', '전체'], ...Object.entries(categories)].map(([value, label]) => (
           <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>

@@ -1,8 +1,12 @@
-import type { StudioState } from './api'
+import type { Profile, StudioState } from './api'
+
+export function profileReady(profile: Profile) {
+  return [profile.guardian_name, profile.patient_alias, profile.relationship, profile.address_as].every(value => Boolean(value.trim()))
+}
 
 export function conversationReadiness(state: StudioState) {
   const steps = [
-    Object.values(state.profile).every((value) => Boolean(value.trim())),
+    profileReady(state.profile),
     state.voice.status === 'created',
     state.memories.some((memory) => memory.category !== 'avoid')
   ]

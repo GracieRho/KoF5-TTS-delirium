@@ -60,7 +60,7 @@ class RemoteStudioTests(unittest.TestCase):
         return revision + 1
 
     def test_persists_per_verified_guardian_and_hides_provider_metadata(self):
-        profile = {'guardian_name': '가상 보호자', 'patient_alias': '가상 가족', 'relationship': '딸', 'address_as': '아빠'}
+        profile = {'guardian_name': '가상 보호자', 'patient_alias': '가상 가족', 'relationship': '딸', 'address_as': '아빠', 'address_aliases': ['아버지'], 'speech_style': 'mixed'}
         self.assertEqual(self.client.put('/local-studio/profile', json=profile).status_code, 200)
         self.rows[OWNER]['body']['voice'] = {'status': 'pending', 'voice_id': 'private-provider-id', 'name': 'private-name'}
         result = self.client.get('/local-studio/state')

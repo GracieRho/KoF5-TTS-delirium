@@ -3,7 +3,10 @@ export type Profile = {
   patient_alias: string
   relationship: string
   address_as: string
+  address_aliases?: string[]
+  speech_style?: 'polite' | 'casual' | 'mixed'
 }
+export const SPEECH_STYLE_LABELS = { polite: '존댓말', casual: '반말', mixed: '반존대' } as const
 export type MemoryInput = {
   title: string
   category: 'family' | 'story' | 'comfort' | 'avoid'
