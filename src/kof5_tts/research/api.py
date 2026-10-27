@@ -62,7 +62,7 @@ class Answer(ResearchInput):
 class InterviewInput(ResearchInput):
     answers: list[Answer] = Field(default_factory=list, max_length=12)
     strategy: Literal["fixed", "random", "adaptive"] = "adaptive"
-    seed: int = Field(default=0, ge=0, le=4_294_967_295, strict=True)
+    seed: int = Field(default=0, ge=0, le=2_147_483_647, strict=True)
     budget: int = Field(default=8, ge=8, le=12, strict=True)
 
 
@@ -143,7 +143,7 @@ async def interpret(payload: WrittenInput, request: Request):
     try:
         interpretation = await run_in_threadpool(classify_answer, question, payload.text, model=payload.model)
     except OpenRouterError as error:
-        raise HTTPException(503, {"message": str(error), "attempts": error.attempts}) from None
+        raise HTTPException(503, {"message": str(error), "attempts": error.attempts, "fatal": error.fatal}) from None
     answer = {"question_id": question["id"], "text": payload.text}
     if interpretation["option_id"] is not None:
         answer["option_id"] = interpretation["option_id"]

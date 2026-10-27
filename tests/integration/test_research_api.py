@@ -41,6 +41,7 @@ class ResearchApiTests(unittest.TestCase):
             result = self.client.post('/research-api/interview', json={'budget': 8, 'answers': answers})
             self.assertEqual(result.status_code, 200)
             question = result.json()['next_question']
+        self.assertEqual(self.client.post('/research-api/interview', json={'seed': 2**31 - 1}).status_code, 200)
         self.assertTrue(result.json()['done'])
         self.assertEqual(result.json()['reflected_count'], 8)
         self.assertTrue(result.json()['heldout_predictions'])
@@ -105,7 +106,11 @@ class ResearchApiTests(unittest.TestCase):
             response = self.client.post('/research-api/interpret', json={'text': '가상 답변', 'provider_processing_consent': True})
             self.assertEqual(response.status_code, 503)
             self.assertEqual(response.json()['detail']['attempts'], attempts)
+            self.assertFalse(response.json()['detail']['fatal'])
             self.assertEqual(classify.call_count, 1)
+            classify.side_effect = OpenRouterError('비용 초과로 중단했습니다.', attempts=attempts, fatal=True)
+            response = self.client.post('/research-api/interpret', json={'text': '가상 답변', 'provider_processing_consent': True})
+            self.assertTrue(response.json()['detail']['fatal'])
             classify.reset_mock()
             response = self.client.post('/research-api/interpret', json={'text': '가상 답변', 'provider_processing_consent': True, 'model': 'paid/model'})
             self.assertEqual(response.status_code, 422)
@@ -141,7 +146,7 @@ class ResearchApiTests(unittest.TestCase):
 
     def test_invalid_replays_bounds_and_oversized_body_fail_closed(self):
         for body in [
-            {"budget": 0}, {"budget": 5}, {"budget": 13}, {"budget": True}, {"seed": -1},
+            {"budget": 0}, {"budget": 5}, {"budget": 13}, {"budget": True}, {"seed": -1}, {"seed": 2**31},
             {"strategy": "other"}, {"answers": [{"question_id": "unknown", "option_id": "a"}]},
         ]:
             self.assertEqual(self.client.post("/research-api/interview", json=body).status_code, 422)

@@ -93,7 +93,7 @@ def evaluate(base_url: str, email: str, password: str, cases_path: Path, output:
                 elif response.status_code == 503:
                     detail = response.json().get('detail', {})
                     attempts = detail.get('attempts', []) if isinstance(detail, dict) else []
-                    if len(attempts) != 3:
+                    if not isinstance(detail, dict) or detail.get('fatal') is not False or len(attempts) != 3:
                         raise ValueError('공통 연결·비용 오류로 배치를 중단했습니다.')
                     row.update(status='error', attempts=attempts)
                 else:

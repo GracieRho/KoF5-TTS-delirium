@@ -252,8 +252,8 @@ def run_benchmark(
     ]:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
             raise ValueError(f"{name} must be between 1 and {maximum}")
-    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 2**32 - seeds:
-        raise ValueError("seed and all repeat seeds must fit an unsigned 32-bit integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 2**31 - seeds:
+        raise ValueError("seed and all repeat seeds must fit a nonnegative signed 32-bit integer")
     bank = question_bank if question_bank is not None else load_question_bank()
     cases = grounding_cases if grounding_cases is not None else load_grounding_cases()
     if not cases:

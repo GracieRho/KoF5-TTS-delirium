@@ -46,13 +46,15 @@ def _zero(value) -> bool:
 
 def _provider_failure(error: Exception) -> OpenRouterError:
     if isinstance(error, httpx.HTTPStatusError):
+        if error.response.status_code in (401, 402):
+            return OpenRouterError("OpenRouter 키와 계정 사용 권한을 확인해주세요.", fatal=True)
         if error.response.status_code == 404:
             try:
                 detail = error.response.json().get("error", {}).get("message", "")
             except (ValueError, AttributeError):
                 detail = ""
             if isinstance(detail, str) and "Free model training" in detail:
-                return OpenRouterError("OpenRouter의 무료 모델 데이터 사용 설정이 요청을 차단했습니다. 계정 개인정보 설정을 확인해주세요.")
+                return OpenRouterError("OpenRouter의 무료 모델 데이터 사용 설정이 요청을 차단했습니다. 계정 개인정보 설정을 확인해주세요.", fatal=True)
         if error.response.status_code == 429:
             return OpenRouterError("무료 모델의 요청 한도에 도달했습니다.")
     return OpenRouterError("무료 모델 응답을 확인하지 못했습니다.")

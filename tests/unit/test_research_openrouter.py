@@ -251,6 +251,25 @@ class ResearchOpenRouterTests(unittest.TestCase):
         self.assertEqual(len(raised.exception.attempts), 1)
         self.assertEqual(sum(request.method == "POST" for request in self.calls), 1)
 
+    def test_authentication_failure_stops_before_trying_another_model(self):
+        for status in (401, 402):
+            self.calls.clear()
+            with self.subTest(status=status), self.assertRaises(OpenRouterError) as raised:
+                self.call(catalog=self.full_catalog(), post_status=status)
+            self.assertTrue(raised.exception.fatal)
+            self.assertEqual(len(raised.exception.attempts), 1)
+            self.assertEqual(sum(request.method == 'POST' for request in self.calls), 1)
+
+    def test_third_attempt_positive_cost_remains_fatal(self):
+        models = list(FREE_MODELS)
+        charged = {**RESULT, 'model': models[2], 'usage': {'cost': 0.0001}}
+        with self.assertRaises(OpenRouterError) as raised:
+            self.call(catalog=self.full_catalog(), outcomes={
+                models[0]: (500, {}), models[1]: (429, {}), models[2]: (200, charged)})
+        self.assertTrue(raised.exception.fatal)
+        self.assertEqual(len(raised.exception.attempts), 3)
+        self.assertEqual(sum(request.method == 'POST' for request in self.calls), 3)
+
     def test_missing_cost_can_fall_back_but_valid_null_result_does_not(self):
         models = list(FREE_MODELS)
         missing = deepcopy(RESULT)

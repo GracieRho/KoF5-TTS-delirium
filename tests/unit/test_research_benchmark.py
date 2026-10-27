@@ -103,7 +103,7 @@ class ResearchBenchmarkTests(unittest.TestCase):
             self.assertEqual((output / "results.json").read_bytes(), before)
 
     def test_invalid_bounds_fail_before_work(self):
-        for kwargs in [{"seeds": 0}, {"max_budget": True}, {"bootstrap_samples": 10001}, {"latency_repeats": 0}, {"seed": -1}]:
+        for kwargs in [{"seeds": 0}, {"max_budget": True}, {"bootstrap_samples": 10001}, {"latency_repeats": 0}, {"seed": -1}, {"seed": 2**31}, {"seed": 2**31 - 1, "seeds": 2}]:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 run_benchmark(**kwargs)
 
