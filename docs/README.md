@@ -19,6 +19,7 @@
 ## AI 학회 연구
 
 - [적응형 보호자 인터뷰·근거 기반 개인화 연구 계획](research/adaptive-care-plan.md)
+- [연구 도구 실행·벤치마크·검증 안내](research/README.md)
 
 ## 작성 원칙
 

@@ -22,51 +22,68 @@ flowchart LR
     layer_companion["companion (1)"]
     layer_local_studio["local_studio (1)"]
     layer_preprocessing["preprocessing (3)"]
+    layer_research["research (6)"]
     layer_root["root (1)"]
     layer_api --> layer_cloud_prototype
     layer_api --> layer_companion
     layer_api --> layer_local_studio
+    layer_api --> layer_research
     layer_cloud_prototype --> layer_companion
     layer_local_studio --> layer_api
     layer_local_studio --> layer_cloud_prototype
+    layer_research --> layer_api
+    layer_research --> layer_companion
   end
 ```
 
 ## 현재 카탈로그
 
-- Python 모듈: **8**
-- 설정 파일: **0**
-- 프로젝트 실행 스크립트: **8**
+- Python 모듈: **14**
+- 설정 파일: **2**
+- 프로젝트 실행 스크립트: **12**
 
 ### Python 모듈
 
 | Module | Layer | Path | Internal imports |
 | --- | --- | --- | --- |
 | `kof5_tts` | root | `src/kof5_tts/__init__.py` | — |
-| `kof5_tts.api` | api | `src/kof5_tts/api.py` | `kof5_tts.cloud_prototype`<br>`kof5_tts.companion`<br>`kof5_tts.local_studio` |
+| `kof5_tts.api` | api | `src/kof5_tts/api.py` | `kof5_tts.cloud_prototype`<br>`kof5_tts.companion`<br>`kof5_tts.local_studio`<br>`kof5_tts.research.api` |
 | `kof5_tts.cloud_prototype` | cloud_prototype | `src/kof5_tts/cloud_prototype.py` | `kof5_tts.companion` |
 | `kof5_tts.companion` | companion | `src/kof5_tts/companion.py` | — |
 | `kof5_tts.local_studio` | local_studio | `src/kof5_tts/local_studio.py` | `kof5_tts.api`<br>`kof5_tts.cloud_prototype` |
 | `kof5_tts.preprocessing` | preprocessing | `src/kof5_tts/preprocessing/__init__.py` | `kof5_tts.preprocessing.audio` |
 | `kof5_tts.preprocessing.aihub` | preprocessing | `src/kof5_tts/preprocessing/aihub.py` | — |
 | `kof5_tts.preprocessing.audio` | preprocessing | `src/kof5_tts/preprocessing/audio.py` | — |
+| `kof5_tts.research` | research | `src/kof5_tts/research/__init__.py` | — |
+| `kof5_tts.research.api` | research | `src/kof5_tts/research/api.py` | `kof5_tts.api`<br>`kof5_tts.research.grounding`<br>`kof5_tts.research.interview` |
+| `kof5_tts.research.benchmark` | research | `src/kof5_tts/research/benchmark.py` | `kof5_tts.research.grounding`<br>`kof5_tts.research.interview` |
+| `kof5_tts.research.experiment` | research | `src/kof5_tts/research/experiment.py` | — |
+| `kof5_tts.research.grounding` | research | `src/kof5_tts/research/grounding.py` | `kof5_tts.companion` |
+| `kof5_tts.research.interview` | research | `src/kof5_tts/research/interview.py` | — |
 
 ### 설정 파일
 
-아직 확정된 설정 파일이 없습니다.
+| Group | Path |
+| --- | --- |
+| research | `configs/research/grounding_cases.json` |
+| research | `configs/research/interview.json` |
 
 ### 실행 스크립트
 
 | Path |
 | --- |
+| `scripts/analyze_research_study.py` |
+| `scripts/benchmark_research.py` |
 | `scripts/convert_wav_to_flac.py` |
 | `scripts/demo_cloud_pipeline.py` |
 | `scripts/demo_companion_text.py` |
 | `scripts/demo_voice_enrollment.py` |
 | `scripts/download_aihub.py` |
+| `scripts/prepare_research_study.py` |
 | `scripts/run_backend.py` |
 | `scripts/run_local_portal.py` |
 | `scripts/run_preprocessing_pipeline.py` |
+| `scripts/run_research.py` |
 
 ## 분석 한계
 
