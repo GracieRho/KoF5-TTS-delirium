@@ -24,7 +24,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "feat/adaptive-care-research": false
+      "feat/adaptive-care-research": false,
+      "main": false
     }
   }
 }
