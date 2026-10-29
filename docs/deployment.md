@@ -2,6 +2,8 @@
 
 운영 도메인은 `https://kof5-tts-delirium.vercel.app`, 전용 Supabase 프로젝트는 `mvqwzraiganchlkmnegj`입니다. 도커 없이 Management API와 Vercel API로 설정합니다.
 
+로컬 관리용 `VERCEL_TOKEN`은 서버가 자동으로 읽지 않는다. 관리 명령에는 별도로 주입하며, 로컬 파일 변경만으로 Vercel 환경변수 변경이나 배포가 실행되지는 않는다.
+
 ## 현재 자동 배포 제한
 
 PR9의 검토·병합은 배포 승인과 별개다. 사용자의 배포 금지 요청에 따라 `vercel.json`의 `git.deploymentEnabled`에서 `feat/adaptive-care-research`와 `main`을 false로 둔다. 현재 운영 배포는 유지하며 새 main 커밋의 자동 배포를 막는다. 추후 명시적인 배포 승인 때 해당 설정을 재검토한다. 수동 배포도 이번 작업에서 실행하지 않는다.
