@@ -29,8 +29,11 @@ from kof5_tts.cloud_prototype import (
     validate_test_voice_samples,
 )
 from kof5_tts.companion import ConversationSession, Fact, policy_reply, relevant_facts
+from kof5_tts.environment import load_server_env
 from kof5_tts.local_studio import router as local_studio_router
 from kof5_tts.research.api import router as research_router
+
+load_server_env(keys=("OPENAI_API_KEY", "ELEVENLABS_API_KEY", "DEEPGRAM_API_KEY"))
 
 SYNTHETIC_PATIENT = "synthetic_patient"
 SYNTHETIC_DB_PATIENT = "00000000-0000-4000-8000-000000000975"

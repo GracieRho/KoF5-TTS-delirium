@@ -54,6 +54,7 @@
         "imports": [
           "kof5_tts.cloud_prototype",
           "kof5_tts.companion",
+          "kof5_tts.environment",
           "kof5_tts.local_studio",
           "kof5_tts.research.api"
         ]

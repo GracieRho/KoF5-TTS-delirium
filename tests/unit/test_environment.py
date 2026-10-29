@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -71,6 +72,30 @@ class ServerEnvironmentTests(unittest.TestCase):
         os.environ["VERCEL"] = "1"
         load_server_env(self.root)
         self.assertNotIn("OPENAI_API_KEY", os.environ)
+
+    def test_api_startup_loads_provider_keys_only_for_local_server(self):
+        (self.root / ".env").write_text(
+            "OPENAI_API_KEY=file-openai\nELEVENLABS_API_KEY=file-eleven\n"
+            "DEEPGRAM_API_KEY=file-deepgram\nOPENROUTER_API_KEY=research-only\nVERCEL_TOKEN=management\n"
+        )
+        script = """
+import os, sys
+from pathlib import Path
+from unittest.mock import patch
+from kof5_tts.environment import load_server_env
+with patch('kof5_tts.environment.load_server_env', side_effect=lambda **kw: load_server_env(Path(sys.argv[1]), **kw)):
+    import kof5_tts.api
+assert os.environ.get('OPENAI_API_KEY') == ('process-key' if not os.environ.get('VERCEL') else None)
+assert os.environ.get('ELEVENLABS_API_KEY') == ('file-eleven' if not os.environ.get('VERCEL') else None)
+assert os.environ.get('DEEPGRAM_API_KEY') == ('file-deepgram' if not os.environ.get('VERCEL') else None)
+assert 'VERCEL_TOKEN' not in os.environ
+assert 'OPENROUTER_API_KEY' not in os.environ
+"""
+        for vercel in (False, True):
+            env = {'PYTHONPATH': str(Path(__file__).resolve().parents[2] / 'src')}
+            env.update({'VERCEL': '1'} if vercel else {'OPENAI_API_KEY': 'process-key'})
+            result = subprocess.run([sys.executable, '-c', script, str(self.root)], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

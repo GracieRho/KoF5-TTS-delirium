@@ -27,6 +27,7 @@ flowchart LR
     layer_root["root (1)"]
     layer_api --> layer_cloud_prototype
     layer_api --> layer_companion
+    layer_api --> layer_environment
     layer_api --> layer_local_studio
     layer_api --> layer_research
     layer_cloud_prototype --> layer_companion
@@ -51,7 +52,7 @@ flowchart LR
 | Module | Layer | Path | Internal imports |
 | --- | --- | --- | --- |
 | `kof5_tts` | root | `src/kof5_tts/__init__.py` | — |
-| `kof5_tts.api` | api | `src/kof5_tts/api.py` | `kof5_tts.cloud_prototype`<br>`kof5_tts.companion`<br>`kof5_tts.local_studio`<br>`kof5_tts.research.api` |
+| `kof5_tts.api` | api | `src/kof5_tts/api.py` | `kof5_tts.cloud_prototype`<br>`kof5_tts.companion`<br>`kof5_tts.environment`<br>`kof5_tts.local_studio`<br>`kof5_tts.research.api` |
 | `kof5_tts.cloud_prototype` | cloud_prototype | `src/kof5_tts/cloud_prototype.py` | `kof5_tts.companion` |
 | `kof5_tts.companion` | companion | `src/kof5_tts/companion.py` | — |
 | `kof5_tts.environment` | environment | `src/kof5_tts/environment.py` | — |
