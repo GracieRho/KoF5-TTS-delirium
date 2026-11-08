@@ -1,19 +1,16 @@
-"""Run the synthetic companion API on loopback only."""
-
-from __future__ import annotations
+"""Serve the Favilium voice workspace on the loopback interface."""
 
 import argparse
+from pathlib import Path
 
-import _bootstrap  # noqa: F401
 import uvicorn
 
 
-def main() -> None:
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
-    uvicorn.run("kof5_tts.api:app", host="127.0.0.1", port=args.port)
-
-
-if __name__ == "__main__":
-    main()
+    arguments = parser.parse_args()
+    uvicorn.run(
+        "app:app", host="127.0.0.1", port=arguments.port,
+        app_dir=str(Path(__file__).resolve().parents[1]),
+    )

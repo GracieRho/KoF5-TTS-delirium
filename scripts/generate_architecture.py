@@ -24,36 +24,8 @@ SCRIPTS_ROOT = ROOT / "scripts"
 GENERATED_FILENAMES = ("catalog.json", "project-map.md", "project-map.mmd")
 CONFIG_SUFFIXES = {".json", ".toml", ".yaml", ".yml"}
 PIPELINE_STAGES = (
-    {
-        "id": "voice_enrollment",
-        "label": "보호자 음성 등록",
-        "input": "동의된 보호자 음성",
-        "output": "Hosted voice_id",
-    },
-    {
-        "id": "speech_detection",
-        "label": "환자 발화 감지",
-        "input": "태블릿 마이크·임시 버퍼",
-        "output": "발화 후보",
-    },
-    {
-        "id": "transcription",
-        "label": "Hosted STT",
-        "input": "발화 후보",
-        "output": "대화 발화문",
-    },
-    {
-        "id": "conversation",
-        "label": "맥락·안전·짧은 응답",
-        "input": "발화문 + 보호자·병원 정보",
-        "output": "검증된 응답",
-    },
-    {
-        "id": "synthesis",
-        "label": "Hosted 음성 복제 TTS",
-        "input": "검증된 응답 + voice_id",
-        "output": "태블릿 재생",
-    },
+    {"id": "voice_enrollment", "label": "본인 음성 등록", "input": "동의한 보호자의 녹음", "output": "등록 상태"},
+    {"id": "synthesis", "label": "문장 음성 합성", "input": "연구자가 입력한 문장과 등록된 목소리", "output": "MP3"},
 )
 
 
@@ -199,17 +171,11 @@ def markdown_table(headers: list[str], rows: Iterable[list[str]]) -> str:
 def render_mermaid(catalog: dict[str, Any]) -> str:
     lines = [
         "flowchart LR",
-        '  mic["태블릿 마이크"] --> vad["임시 버퍼·기기 내 VAD 후보"]',
-        '  vad --> stt["발화 후보·Hosted STT"]',
-        '  stt --> activation["활성화·대화 상태"]',
-        '  family["보호자 기억"] --> context["분리된 맥락·안전 정책"]',
-        '  hospital["병원 승인 정보"] --> context',
-        '  activation --> context',
-        '  context --> llm["Hosted LLM"]',
-        '  llm --> response["검증된 짧은 응답"]',
-        '  guardian["동의된 보호자 음성"] --> voice["Hosted 음성 복제 TTS"]',
-        '  response --> voice',
-        '  voice --> tablet["태블릿 재생"]',
+        '  mic["보호자 녹음"] --> enroll["ElevenLabs 목소리 등록"]',
+        '  enroll --> voice["등록된 목소리"]',
+        '  voice --> tts["ElevenLabs 음성 합성"]',
+        '  text["입력한 문장"] --> tts',
+        '  tts --> mp3["재생 및 MP3 저장"]',
     ]
     modules = catalog["python"]["modules"]
     layers: dict[str, int] = defaultdict(int)

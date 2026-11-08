@@ -94,3 +94,10 @@ compile_commands.json
 *.hex
 *.uf2
 *.map
+
+# Voice workspace session state
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*

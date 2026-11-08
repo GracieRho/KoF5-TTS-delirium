@@ -1,0 +1,56 @@
+/* Retain the guardian studio's shell, palette, wordmark and seven-bar waveform. */
+.family-theme .studio-nav nav a[aria-current="page"] { box-shadow: inset 3px 0 var(--brand), 0 2px 5px rgb(43 59 23 / .03) }
+.voice-hero { min-height: 244px }
+.voice-hero p { margin: 0; line-height: 1.8 }
+.signout { font-size: 13px; min-height: 34px; padding: 5px 12px; color: var(--muted); border-color: var(--line) }
+.voice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start }
+.voice-card { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); padding: clamp(20px, 2.2vw, 32px) }
+.card-heading { display: flex; align-items: center; gap: 12px }
+.card-heading h2 { margin: 0; font-size: 1.19rem }
+.feature-icon, .mic-indicator { display: inline-grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; color: var(--brand); border-radius: 11px; background: var(--brand-soft) }
+.card-copy { color: var(--muted); font-size: .9rem; margin: 17px 0 20px; line-height: 1.7 }
+.access-card { max-width: 650px }
+.login-row, .speech-actions, .voice-actions, .output-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.login-row input { flex: 1 1 190px }
+.login-row button { min-height: 44px }
+.speech-label, .sample-preview label { display: block; margin-bottom: 8px; font-size: .88rem; font-weight: 650 }
+.speech-actions { justify-content: space-between; margin-top: 10px }
+.speech-actions span, .time-readout, .speech-output small { color: var(--muted); font-size: .8rem }
+.voice-card textarea:disabled { background: #f8faf6; cursor: not-allowed }
+.voice-card textarea:not(:disabled) { background: #fcfdfb }
+.voice-consent { display: flex; align-items: flex-start; gap: 10px; margin: 15px 0 20px; font-size: .87rem; line-height: 1.7 }
+.voice-consent input { margin: 3px 0 0 }
+.reading-example { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #f8faf5; font-size: .87rem }
+.reading-example summary { cursor: pointer; color: var(--brand); font-weight: 600 }
+.reading-example p { margin: 10px 0 0 }
+.capture-area { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 18px }
+.capture-area button { margin-left: auto; min-height: 42px }
+.capture-area strong { font-size: .88rem }
+.time-readout { display: block; font-variant-numeric: tabular-nums; margin-top: 3px }
+.is-recording { color: var(--danger); background: var(--danger-soft) }
+.sample-preview, .speech-output { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 18px }
+.voice-card audio { display: block; width: 100%; height: 42px; margin: 10px 0 15px }
+.output-heading { justify-content: space-between; font-size: .9rem }
+.output-heading a { color: var(--brand); font-weight: 650 }
+.speech-output p { white-space: pre-wrap; font-size: .9rem; margin: 12px 0 0 }
+.feedback { margin: 22px 0 0; font-size: .88rem; color: var(--brand) }
+.feedback:not(:empty) { margin-bottom: 16px }
+.notice, .delete-confirm { padding: 14px 16px; background: var(--warning-soft); color: var(--warning); border-radius: 10px; font-size: .88rem; line-height: 1.7; margin: 0 0 16px }
+.error-notice { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; color: var(--danger); background: var(--danger-soft) }
+.error-copy { color: var(--danger); margin-top: 14px; font-size: .88rem }
+.delete-confirm { margin: 14px 0 0; background: #faf7f5; color: var(--ink) }
+.delete-confirm p { margin-bottom: 12px }
+.voice-ref { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: .8rem }
+.voice-ref code { font-size: .76rem; overflow-wrap: anywhere }
+.loading-note { color: var(--muted); font-size: .9rem }
+@media (max-width: 1100px) { .voice-grid { grid-template-columns: 1fr } }
+@media (max-width: 760px) {
+  .family-theme .studio-nav nav { display: flex }
+  .family-theme .studio-nav nav a[aria-current="page"] { min-height: 38px; flex-direction: row; justify-content: flex-start; flex: none; padding: 8px 14px }
+  .voice-hero { min-height: 212px }
+  .studio-topbar { gap: 8px; flex-wrap: wrap }
+}
+@media (max-width: 390px) {
+  .login-row button { width: 100% }
+  .mic-indicator { display: none }
+}

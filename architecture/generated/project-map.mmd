@@ -1,36 +1,13 @@
 flowchart LR
-  mic["태블릿 마이크"] --> vad["임시 버퍼·기기 내 VAD 후보"]
-  vad --> stt["발화 후보·Hosted STT"]
-  stt --> activation["활성화·대화 상태"]
-  family["보호자 기억"] --> context["분리된 맥락·안전 정책"]
-  hospital["병원 승인 정보"] --> context
-  activation --> context
-  context --> llm["Hosted LLM"]
-  llm --> response["검증된 짧은 응답"]
-  guardian["동의된 보호자 음성"] --> voice["Hosted 음성 복제 TTS"]
-  response --> voice
-  voice --> tablet["태블릿 재생"]
+  mic["보호자 녹음"] --> enroll["ElevenLabs 목소리 등록"]
+  enroll --> voice["등록된 목소리"]
+  voice --> tts["ElevenLabs 음성 합성"]
+  text["입력한 문장"] --> tts
+  tts --> mp3["재생 및 MP3 저장"]
 
   subgraph code["코드 레이어"]
-    layer_api["api (1)"]
-    layer_cloud_prototype["cloud_prototype (1)"]
-    layer_companion["companion (1)"]
-    layer_environment["environment (1)"]
-    layer_local_studio["local_studio (1)"]
-    layer_preprocessing["preprocessing (3)"]
-    layer_research["research (8)"]
     layer_root["root (1)"]
-    layer_api --> layer_cloud_prototype
-    layer_api --> layer_companion
-    layer_api --> layer_environment
-    layer_api --> layer_local_studio
-    layer_api --> layer_research
-    layer_cloud_prototype --> layer_companion
-    layer_local_studio --> layer_api
-    layer_local_studio --> layer_cloud_prototype
-    layer_preprocessing --> layer_environment
-    layer_research --> layer_api
-    layer_research --> layer_companion
-    layer_research --> layer_environment
-    layer_research --> layer_root
+    layer_voice_only["voice_only (1)"]
+    layer_voice_store["voice_store (1)"]
+    layer_voice_only --> layer_voice_store
   end
