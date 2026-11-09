@@ -13,7 +13,7 @@ type Props = {
   perform: Perform
 }
 
-function Recording({ disabled, perform }: { disabled: boolean; perform: Perform }) {
+function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boolean; perform: Perform }) {
   const recorder = useRecorder()
   const [consent, setConsent] = useState(false)
   const sampleUrl = useObjectUrl(recorder.sample)
@@ -21,7 +21,7 @@ function Recording({ disabled, perform }: { disabled: boolean; perform: Perform 
 
   function enroll() {
     const sample = recorder.sample
-    if (!consent || !sample) return
+    if (!canEnroll || busy || !consent || !sample) return
     void perform('목소리를 등록하고 있습니다.', async () => {
       await request('voice', {
         method: 'POST',
@@ -38,7 +38,7 @@ function Recording({ disabled, perform }: { disabled: boolean; perform: Perform 
       <details className="reading-example"><summary>녹음할 때 읽을 예문</summary>
         <p>오늘은 함께 산책하던 길이 떠올랐어요. 바람이 불면 나뭇잎이 사각사각 소리를 냈지요. 다음에 같이 걸을 때도 이렇게 천천히 이야기를 나눠요.</p>
       </details>
-      <label className="voice-consent"><input type="checkbox" checked={consent} disabled={disabled} onChange={event => {
+      <label className="voice-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => {
         setConsent(event.target.checked)
         if (!event.target.checked) recorder.discard()
       }} /><span>제가 직접 말한 음성입니다. 녹음이 ElevenLabs로 전송되고, 제 목소리를 복제하여 입력한 문장을 읽는 데 동의합니다.</span></label>
@@ -49,11 +49,11 @@ function Recording({ disabled, perform }: { disabled: boolean; perform: Perform 
         </div>
         {capturing
           ? <button type="button" onClick={recorder.mode === 'requesting' ? recorder.discard : recorder.stop}>{recorder.mode === 'requesting' ? '취소' : '녹음 마치기'}</button>
-          : <button type="button" className={recorder.sample ? '' : 'primary'} disabled={disabled || !consent} onClick={() => void recorder.start()}>{recorder.sample ? '다시 녹음' : '녹음 시작'}</button>}
+          : <button type="button" className={recorder.sample ? '' : 'primary'} disabled={busy || !consent} onClick={() => void recorder.start()}>{recorder.sample ? '다시 녹음' : '녹음 시작'}</button>}
       </div>
       {recorder.error && <p role="alert" className="error-copy">{recorder.error}</p>}
       {sampleUrl && <div className="sample-preview"><label>녹음한 목소리</label><audio controls src={sampleUrl} aria-label="녹음한 보호자 목소리 미리 듣기" />
-        <button type="button" className="primary" disabled={disabled || !consent} onClick={enroll}>이 녹음으로 목소리 등록</button></div>}
+        <button type="button" className="primary" disabled={busy || !canEnroll || !consent} onClick={enroll}>이 녹음으로 목소리 등록</button></div>}
     </section>
   )
 }
@@ -92,10 +92,10 @@ function Registered({ status, busy, locked, perform }: Props) {
       {status.reference && <p className="voice-ref">목소리 참조 <code>{status.reference}</code></p>}
       <div className="voice-actions">
         {state !== 'ready' && <button type="button" disabled={busy} onClick={() => void perform('등록 상태를 확인하고 있습니다.', async () => {})}>상태 다시 확인</button>}
-        {!confirmDelete && <button type="button" className="danger" disabled={busy || locked} onClick={() => setConfirmDelete(true)}>{state === 'deleting' ? '삭제 다시 시도' : '등록한 목소리 삭제'}</button>}
+        {!confirmDelete && <button type="button" className="danger" disabled={busy || locked || !status.configured} onClick={() => setConfirmDelete(true)}>{state === 'deleting' ? '삭제 다시 시도' : '등록한 목소리 삭제'}</button>}
       </div>
       {confirmDelete && <div className="delete-confirm"><p>등록한 목소리를 ElevenLabs에서 삭제할까요? 이미 다운로드한 음성 파일은 별도로 보관됩니다.</p>
-        <div className="voice-actions"><button type="button" onClick={() => setConfirmDelete(false)}>취소</button><button type="button" className="danger" disabled={busy || locked} onClick={remove}>삭제 확인</button></div>
+        <div className="voice-actions"><button type="button" onClick={() => setConfirmDelete(false)}>취소</button><button type="button" className="danger" disabled={busy || locked || !status.configured} onClick={remove}>삭제 확인</button></div>
       </div>}
     </section>
   )
@@ -136,7 +136,7 @@ function Speech({ status, busy, locked, perform }: Props) {
 export function VoiceWorkspace(props: Props) {
   const { status, busy, locked, perform } = props
   return <div className="voice-grid">
-    {status.voice_state === 'empty' ? <Recording disabled={busy || locked || !status.configured} perform={perform} /> : <Registered {...props} />}
+    {status.voice_state === 'empty' ? <Recording busy={busy} canEnroll={!locked && status.configured} perform={perform} /> : <Registered {...props} />}
     <Speech key={status.reference ?? status.voice_state} {...props} />
   </div>
 }

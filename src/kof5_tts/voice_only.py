@@ -17,16 +17,14 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .voice_store import StoreUnavailable, get_store
+from .voice_store import StoreNotConfigured, StoreUnavailable, get_store
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 DIST = Path(__file__).resolve().parents[2] / "apps/portal_web/dist"
 API = "https://api.elevenlabs.io"
 MAX_WAV = 4 * 1024 * 1024
 MAX_TEXT = 1000
-LOGIN = "favilium_access"
 WORKSPACE = "favilium_workspace"
-LOGIN_TTL = 12 * 3600
 OWNER_TTL = 30 * 24 * 3600
 SETTLE_TIME = 600  # Never clear an in-flight creation after an inconclusive lookup.
 VOICE_ID = re.compile(r"[A-Za-z0-9_-]{1,100}")
@@ -54,17 +52,11 @@ async def protect_responses(request, call_next):
     return response
 
 
-def access_code():
-    value = os.getenv("FAVILIUM_ACCESS_CODE", "").strip()
-    return value if len(value) >= 16 else ""
-
-
 def provider_key():
     return os.getenv("ELEVENLABS_API_KEY", "").strip()
 
 
 def session_key():
-    # The shared login code is known to researchers; it cannot sign ownership.
     explicit = os.getenv("FAVILIUM_SESSION_SECRET", "").strip()
     if explicit:
         return explicit if len(explicit) >= 32 else ""
@@ -82,58 +74,52 @@ def check_origin(request):
         fail(403, "같은 Favilium 화면에서 다시 시도해 주세요.")
 
 
-def signature(kind, owner, expires):
-    # Changing the shared code revokes logins without losing voice ownership.
-    login_version = access_code() if kind == LOGIN else ""
-    msg = f"{kind}:{owner}:{expires}:{login_version}".encode()
-    return hmac.new(session_key().encode(), msg, hashlib.sha256).hexdigest()
+def signature(owner, expires):
+    # Preserve the signed workspace cookie format already used by this branch.
+    message = f"{WORKSPACE}:{owner}:{expires}:".encode()
+    return hmac.new(session_key().encode(), message, hashlib.sha256).hexdigest()
 
 
-def signed_cookie(kind, owner, ttl):
-    expires = int(time.time()) + ttl
-    return f"{owner}.{expires}.{signature(kind, owner, expires)}"
+def signed_cookie(owner):
+    expires = int(time.time()) + OWNER_TTL
+    return f"{owner}.{expires}.{signature(owner, expires)}"
 
 
-def cookie_owner(request, kind):
-    parts = request.cookies.get(kind, "").split(".")
-    if not access_code() or not session_key() or len(parts) != 3:
+def cookie_owner(request):
+    if not session_key():
+        fail(503, "작업 공간을 열 수 없습니다. 연구 담당자가 서버의 세션 키 설정을 확인해 주세요.")
+    raw = request.cookies.get(WORKSPACE)
+    if raw is None:
         return None
-    owner, expires, mac = parts
-    if not OWNER_ID.fullmatch(owner) or not re.fullmatch(r"[0-9]{1,12}", expires):
-        return None
-    if int(expires) <= time.time() or not re.fullmatch(r"[0-9a-f]{64}", mac):
-        return None
-    return owner if hmac.compare_digest(signature(kind, owner, expires), mac) else None
-
-
-def authenticated(request):
-    owner = cookie_owner(request, WORKSPACE)
-    return owner if owner and cookie_owner(request, LOGIN) == owner else None
+    parts = raw.split(".")
+    if len(parts) == 3:
+        owner, expires, mac = parts
+        if (OWNER_ID.fullmatch(owner) and re.fullmatch(r"[0-9]{1,12}", expires)
+                and int(expires) > time.time() and re.fullmatch(r"[0-9a-f]{64}", mac)
+                and hmac.compare_digest(signature(owner, expires), mac)):
+            return owner
+    # Avoid silently replacing an existing workspace when the signing key changed.
+    fail(401, "이 브라우저의 작업 공간을 확인할 수 없습니다. 연구 담당자에게 문의해 주세요.")
 
 
 def require_owner(request):
     check_origin(request)
-    owner = authenticated(request)
+    owner = cookie_owner(request)
     if not owner:
-        fail(401, "연구 접근 코드를 입력해 주세요.")
+        fail(401, "작업 공간을 다시 열어 주세요. 브라우저에서 쿠키를 허용해야 합니다.")
+    if not provider_key():
+        fail(503, "ElevenLabs API 키가 설정되지 않았습니다.")
     return owner
 
 
 def status_for(owner, *, reconcile=False):
-    configured = bool(access_code() and provider_key() and session_key())
-    try:
-        store = get_store()
-    except StoreUnavailable:
-        if owner:
-            raise
-        configured = False
-    record = store.get(owner) if owner else None
+    store = get_store()
+    record = store.get(owner)
     if record and reconcile and provider_key() and record.state in ("creating", "verification"):
         with provider() as client:
             recover(store, record, client)
         record = store.get(owner)
-    return {"authenticated": bool(owner), "configured": configured,
-            "voice_state": record.state if record else "empty",
+    return {"configured": bool(provider_key()), "voice_state": record.state if record else "empty",
             "reference": record.reference if record else None}
 
 
@@ -164,31 +150,29 @@ async def string_field(request, field, limit):
 
 @app.get("/api/status")
 def status(request: Request):
-    return status_for(authenticated(request), reconcile=True)
+    owner = cookie_owner(request)
+    if not owner:
+        fail(401, "이 브라우저에서 먼저 작업 공간을 열어 주세요.")
+    return status_for(owner)
 
 
-@app.post("/api/login")
-async def login(request: Request):
+@app.post("/api/workspace")
+def workspace(request: Request):
     check_origin(request)
-    if not access_code() or not session_key():
-        fail(503, "연구 접근 코드와 서버 키 설정을 확인해 주세요.")
-    code = await string_field(request, "code", 2048)
-    if not hmac.compare_digest(code.encode(), access_code().encode()):
-        fail(401, "연구 접근 코드가 일치하지 않습니다.")
-    owner = cookie_owner(request, WORKSPACE) or secrets.token_hex(24)
-    response = JSONResponse(await run_in_threadpool(status_for, owner))
-    for kind, ttl in ((WORKSPACE, OWNER_TTL), (LOGIN, LOGIN_TTL)):
-        response.set_cookie(kind, signed_cookie(kind, owner, ttl), max_age=ttl,
-                            httponly=True, samesite="strict", path="/",
-                            secure=request.url.scheme == "https" or bool(os.getenv("VERCEL")))
-    return response
-
-
-@app.post("/api/logout")
-def logout(request: Request):
-    check_origin(request)
-    response = JSONResponse(status_for(None))
-    response.delete_cookie(LOGIN, path="/")
+    fresh = WORKSPACE not in request.cookies
+    unconfigured = {"configured": False, "voice_state": "empty", "reference": None}
+    if fresh and (not session_key() or not provider_key()):
+        return unconfigured
+    owner = cookie_owner(request) or secrets.token_hex(24)
+    try:
+        state = status_for(owner, reconcile=True)
+    except StoreNotConfigured:
+        if fresh:
+            return unconfigured
+        raise
+    response = JSONResponse(state)
+    response.set_cookie(WORKSPACE, signed_cookie(owner), max_age=OWNER_TTL, httponly=True,
+                        samesite="strict", path="/", secure=request.url.scheme == "https" or bool(os.getenv("VERCEL")))
     return response
 
 

@@ -17,6 +17,10 @@ class StoreUnavailable(RuntimeError):
     """설정이나 저장소 문제를 공급자 응답·접속 정보 없이 전달한다."""
 
 
+class StoreNotConfigured(StoreUnavailable):
+    """No storage backend has been configured yet."""
+
+
 @dataclass(frozen=True)
 class VoiceRecord:
     session_id: str
@@ -172,6 +176,8 @@ def get_store() -> SQLiteStore | SupabaseStore:
     url = os.environ.get("FAVILIUM_SUPABASE_URL", "").strip()
     key = os.environ.get("FAVILIUM_SUPABASE_SERVICE_KEY", "").strip()
     if url or key or os.getenv("VERCEL"):
+        if not url and not key:
+            raise StoreNotConfigured("서버에 전용 Supabase 설정이 필요합니다.")
         parts = urlsplit(url)
         if (
             not key or parts.scheme != "https" or not parts.hostname or parts.username
@@ -180,6 +186,8 @@ def get_store() -> SQLiteStore | SupabaseStore:
             raise StoreUnavailable("서버에 전용 Supabase 설정이 필요합니다.")
         return SupabaseStore(url, key)
     path = os.environ.get("FAVILIUM_DB_PATH", "").strip()
-    if not path or path == ":memory:":
+    if not path:
+        raise StoreNotConfigured("서버에 영구 저장소 경로를 설정해 주세요.")
+    if path == ":memory:":
         raise StoreUnavailable("서버에 영구 저장소 경로를 설정해 주세요.")
     return SQLiteStore(Path(path).expanduser())

@@ -1,10 +1,13 @@
 """Voice workspace integration tests. No network, credentials or human recordings."""
+import hashlib
+import hmac
 import io
 import json
 import os
 from pathlib import Path
 import re
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import wave
@@ -16,7 +19,6 @@ from app import app
 from kof5_tts import voice_only as api
 
 ORIGIN = "https://favilium.test"
-CODE = "synthetic-test-access-code"
 
 
 def recording(seconds=10):
@@ -73,7 +75,7 @@ class VoiceAPITest(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        env = patch.dict(os.environ, {"FAVILIUM_ACCESS_CODE": CODE, "ELEVENLABS_API_KEY": "synthetic-key",
+        env = patch.dict(os.environ, {"ELEVENLABS_API_KEY": "synthetic-key",
                                       "FAVILIUM_DB_PATH": str(Path(directory.name) / "store.db"),
                                       "FAVILIUM_SESSION_SECRET": "a" * 36,
                                       "FAVILIUM_SUPABASE_URL": "", "FAVILIUM_SUPABASE_SERVICE_KEY": "",
@@ -93,8 +95,8 @@ class VoiceAPITest(unittest.TestCase):
         self.addCleanup(browser.close)
         return browser
 
-    def login(self, browser=None):
-        response = (browser or self.browser).post("/api/login", json={"code": CODE})
+    def open_workspace(self, browser=None):
+        response = (browser or self.browser).post("/api/workspace")
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
@@ -102,10 +104,10 @@ class VoiceAPITest(unittest.TestCase):
         return self.browser.post("/api/voice", content=recording() if sample is None else sample,
                                  headers={"Content-Type": "audio/wav", "X-Voice-Consent": consent})
 
-    def test_full_flow_isolated_sessions_verbatim_text_delete_and_logout(self):
-        self.assertFalse(self.browser.get("/api/status").json()["authenticated"])
+    def test_full_flow_isolated_workspaces_verbatim_text_delete(self):
+        self.assertEqual(self.browser.get("/api/status").status_code, 401)
         self.assertEqual(self.enroll().status_code, 401)
-        self.login()
+        self.open_workspace()
         dirty = recording() + b"private trailing metadata"
         created = self.enroll(dirty)
         self.assertEqual(created.status_code, 200, created.text)
@@ -123,20 +125,22 @@ class VoiceAPITest(unittest.TestCase):
         self.assertIn("no-store", audio.headers["Cache-Control"])
         self.assertEqual(self.upstream.speech_payload, {"text": text, "model_id": "eleven_multilingual_v2"})
         other = self.new_browser()
-        self.assertEqual(self.login(other)["voice_state"], "empty")
+        self.assertEqual(self.open_workspace(other)["voice_state"], "empty")
         self.assertEqual(other.post("/api/speech", json={"text": text}, headers=headers).status_code, 409)
         self.assertEqual(self.browser.delete("/api/voice", headers={"X-Voice-Reference": "old"}).status_code, 409)
         self.assertEqual(self.browser.post("/api/speech", json={"text": text}).status_code, 409)
-        self.browser.post("/api/logout")
-        self.assertEqual(self.browser.post("/api/speech", json={"text": text}, headers=headers).status_code, 401)
-        self.assertEqual(self.login()["reference"], reference)
+        self.assertEqual(self.open_workspace()["reference"], reference)
         self.assertEqual(self.browser.delete("/api/voice", headers=headers).json()["voice_state"], "empty")
         self.assertFalse(self.upstream.voices)
 
     def test_bounds_consent_csrf_and_removed_routes(self):
-        self.assertEqual(self.browser.post("/api/login", json={"code": CODE}, headers={"Origin": "https://other"}).status_code, 403)
-        self.assertEqual(self.browser.post("/api/login", json={"code": "wrong"}).status_code, 401)
-        self.login()
+        for unsafe in ({"Origin": "https://other"}, {"Sec-Fetch-Site": "cross-site"}, {"Origin": "null"}):
+            response = self.browser.post("/api/workspace", headers=unsafe)
+            self.assertEqual(response.status_code, 403)
+            self.assertNotIn("set-cookie", response.headers)
+        self.assertEqual(self.browser.post("/api/login").status_code, 404)
+        self.assertEqual(self.browser.post("/api/logout").status_code, 404)
+        self.open_workspace()
         self.assertEqual(self.enroll(consent="no").status_code, 403)
         self.assertEqual(self.enroll(sample=recording(9)).status_code, 422)
         self.assertEqual(self.enroll(sample=recording()[:-2]).status_code, 422)
@@ -149,7 +153,7 @@ class VoiceAPITest(unittest.TestCase):
         self.assertFalse(self.upstream.calls)
 
     def test_provider_rejection_permits_corrected_sample(self):
-        self.login()
+        self.open_workspace()
         self.upstream.reject_sample = True
         self.assertEqual(self.enroll().status_code, 422)
         self.assertEqual(self.browser.get("/api/status").json()["voice_state"], "empty")
@@ -157,11 +161,12 @@ class VoiceAPITest(unittest.TestCase):
         self.assertEqual(self.enroll().json()["voice_state"], "ready")
 
     def test_uncertain_create_recovery_and_delete_retry(self):
-        self.login()
+        self.open_workspace()
         self.upstream.timeout_after_create = True
         self.assertEqual(self.enroll().status_code, 502)
         self.assertEqual(self.enroll().status_code, 409)
-        result = self.browser.get("/api/status").json()
+        self.assertEqual(self.browser.get("/api/status").json()["voice_state"], "creating")
+        result = self.open_workspace()
         self.assertEqual(result["voice_state"], "ready")
         self.assertEqual(self.upstream.calls.count(("POST", "/v1/voices/add")), 1)
         headers = {"X-Voice-Reference": result["reference"]}
@@ -174,7 +179,7 @@ class VoiceAPITest(unittest.TestCase):
         self.assertEqual(self.browser.delete("/api/voice", headers=headers).json()["voice_state"], "empty")
 
     def test_speech_rejects_unexpected_media_and_supports_binary_mp3(self):
-        self.login()
+        self.open_workspace()
         ref = self.enroll().json()["reference"]
         def speech():
             return self.browser.post("/api/speech", json={"text": "안녕하세요."},
@@ -191,7 +196,7 @@ class VoiceAPITest(unittest.TestCase):
         self.assertEqual(speech().status_code, 502)
 
     def test_verification_stays_blocked_until_verified(self):
-        self.login()
+        self.open_workspace()
         self.upstream.verify = True
         result = self.enroll().json()
         self.assertEqual(result["voice_state"], "verification")
@@ -199,18 +204,93 @@ class VoiceAPITest(unittest.TestCase):
         self.assertEqual(self.browser.post("/api/speech", json={"text": "글"}, headers=headers).status_code, 409)
         self.assertEqual(self.browser.get("/api/status").json()["voice_state"], "verification")
         self.upstream.voices["mockVoiceId"]["voice_verification"]["is_verified"] = True
-        self.assertEqual(self.browser.get("/api/status").json()["voice_state"], "ready")
+        self.assertEqual(self.open_workspace()["voice_state"], "ready")
 
-    def test_missing_access_code_and_cookie_tampering(self):
-        with patch.dict(os.environ, {"FAVILIUM_ACCESS_CODE": "bad"}):
-            self.assertFalse(self.browser.get("/api/status").json()["configured"])
-            self.assertEqual(self.browser.post("/api/login", json={"code": "bad"}).status_code, 503)
-        self.login()
-        cookie = self.browser.cookies.get(api.LOGIN)
+    def test_direct_entry_cookie_scope_and_refresh(self):
+        self.assertEqual(self.browser.get("/api/status").status_code, 401)
+        response = self.browser.post("/api/workspace")
+        self.assertEqual(response.json(), {"configured": True, "voice_state": "empty", "reference": None})
+        cookie = response.headers["Set-Cookie"]
+        for attribute in ("HttpOnly", "Secure", "SameSite=strict", "Path=/"):
+            self.assertIn(attribute, cookie)
+        owner = self.browser.cookies[api.WORKSPACE].split(".")[0]
+        self.open_workspace()
+        self.assertEqual(self.browser.cookies[api.WORKSPACE].split(".")[0], owner)
+        self.assertEqual(self.browser.get("/api/status").json(), response.json())
+        self.assertFalse(self.upstream.calls)
+
+    def test_valid_previous_release_workspace_recovers_clone_without_login_cookie(self):
+        owner = "f" * 48
+        expires = str(int(time.time()) + 3600)
+        # Construct the old cookie independently, so regressions in compatibility are visible.
+        mac = hmac.new(("a" * 36).encode(), f"favilium_workspace:{owner}:{expires}:".encode(),
+                       hashlib.sha256).hexdigest()
+        self.browser.cookies.set(api.WORKSPACE, f"{owner}.{expires}.{mac}", domain="favilium.test", path="/")
+        store = api.get_store()
+        store.create(owner, "old-reference")
+        store.transition(owner, "old-reference", ("creating",), "ready", "oldVoiceId")
+        self.assertEqual(self.open_workspace()["reference"], "old-reference")
+        self.assertEqual(self.browser.cookies.get(api.WORKSPACE).split(".")[0], owner)
+        self.assertEqual(self.open_workspace()["voice_state"], "ready")
+        self.assertFalse(self.upstream.calls)
+
+    def test_tampered_workspace_cannot_read_or_replace_owner(self):
+        self.open_workspace()
+        valid = self.browser.cookies.get(api.WORKSPACE)
         self.browser.cookies.clear()
-        self.browser.cookies.set(api.LOGIN, cookie[:-1] + ("1" if cookie[-1] != "1" else "2"))
-        self.assertFalse(self.browser.get("/api/status").json()["authenticated"])
+        forged = valid[:-1] + ("0" if valid[-1] != "0" else "1")
+        self.browser.cookies.set(api.WORKSPACE, forged, domain="favilium.test", path="/")
+        self.assertEqual(self.browser.get("/api/status").status_code, 401)
         self.assertEqual(self.enroll().status_code, 401)
+        response = self.browser.post("/api/workspace")
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("Set-Cookie", response.headers)
+        self.assertFalse(self.upstream.calls)
+
+    def test_unconfigured_fresh_browser_can_display_workspace_without_minting_cookie(self):
+        for settings in ({"FAVILIUM_DB_PATH": ""},
+                         {"FAVILIUM_SESSION_SECRET": "", "ELEVENLABS_API_KEY": ""},
+                         {"VERCEL": "1", "FAVILIUM_SUPABASE_URL": "", "FAVILIUM_SUPABASE_SERVICE_KEY": ""},
+                         {"ELEVENLABS_API_KEY": ""},
+                         {"FAVILIUM_SESSION_SECRET": "too-short"}):
+            with self.subTest(settings=settings), patch.dict(os.environ, settings):
+                response = self.browser.post("/api/workspace")
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("Set-Cookie", response.headers)
+                self.assertEqual(response.json(), {"configured": False, "voice_state": "empty", "reference": None})
+        self.assertFalse(self.upstream.calls)
+
+    def test_existing_workspace_survives_configuration_failures(self):
+        self.open_workspace()
+        reference = self.enroll().json()["reference"]
+        cookie = self.browser.cookies.get(api.WORKSPACE)
+        for settings in ({"FAVILIUM_DB_PATH": ""}, {"FAVILIUM_SESSION_SECRET": "short"}):
+            with self.subTest(settings=settings), patch.dict(os.environ, settings):
+                response = self.browser.post("/api/workspace")
+                self.assertEqual(response.status_code, 503)
+                self.assertNotIn("Set-Cookie", response.headers)
+                self.assertEqual(self.browser.cookies.get(api.WORKSPACE), cookie)
+        self.assertEqual(self.open_workspace()["reference"], reference)
+
+    def test_operational_store_failure_is_visible_even_for_first_visit(self):
+        with patch.dict(os.environ, {"FAVILIUM_DB_PATH": ":memory:"}):
+            response = self.browser.post("/api/workspace")
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn("Set-Cookie", response.headers)
+
+    def test_missing_provider_key_shows_true_state_and_prevents_submission(self):
+        self.open_workspace()
+        reference = self.enroll().json()["reference"]
+        previous_calls = list(self.upstream.calls)
+        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": ""}):
+            self.assertEqual(self.open_workspace(), {
+                "configured": False, "voice_state": "ready", "reference": reference,
+            })
+            self.assertEqual(self.enroll().status_code, 503)
+            headers = {"X-Voice-Reference": reference}
+            self.assertEqual(self.browser.post("/api/speech", json={"text": "글"}, headers=headers).status_code, 503)
+            self.assertEqual(self.browser.delete("/api/voice", headers=headers).status_code, 503)
+        self.assertEqual(self.upstream.calls, previous_calls)
 
 
 if __name__ == "__main__":

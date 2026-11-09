@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { VoiceStatus } from './api'
+import * as capture from './useRecorder'
 import { VoiceWorkspace, type Perform } from './VoiceWorkspace'
 
 const perform: Perform = async (_label, action) => { await action() }
-const status: VoiceStatus = { authenticated: true, configured: true, reference: 'voice-reference', voice_state: 'empty' }
+const status: VoiceStatus = { configured: true, reference: 'voice-reference', voice_state: 'empty' }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 it('requires recording consent and a confirmed voice before synthesis', () => {
   render(<VoiceWorkspace status={status} busy={false} locked={false} perform={perform} />)
@@ -49,4 +50,20 @@ it('requires confirmation and binds deletion to the voice shown in the studio', 
   expect(fetch).toHaveBeenCalledWith('/api/voice', expect.objectContaining({
     method: 'DELETE', headers: { 'X-Voice-Reference': 'voice-reference' },
   }))
+})
+
+it.each([
+  { configured: false, locked: false },
+  { configured: true, locked: true },
+])('allows local preview but blocks sending the sample while $configured/$locked', ({ configured, locked }) => {
+  vi.spyOn(capture, 'useRecorder').mockReturnValue({
+    sample: new Blob([new Uint8Array(320044)]), mode: 'idle', seconds: 10, error: '',
+    start: vi.fn(), stop: vi.fn(), discard: vi.fn(),
+  })
+  vi.stubGlobal('URL', { createObjectURL: () => 'blob:sample', revokeObjectURL: () => {} })
+  render(<VoiceWorkspace status={{ ...status, configured }} busy={false} locked={locked} perform={perform} />)
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByLabelText('녹음한 보호자 목소리 미리 듣기')).toBeVisible()
+  expect(screen.getByRole('button', { name: '다시 녹음' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '이 녹음으로 목소리 등록' })).toBeDisabled()
 })

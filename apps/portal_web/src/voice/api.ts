@@ -1,5 +1,4 @@
 export type VoiceStatus = {
-  authenticated: boolean
   configured: boolean
   voice_state: 'empty' | 'creating' | 'ready' | 'verification' | 'deleting'
   reference?: string | null
@@ -19,8 +18,16 @@ export async function request(path: string, options: RequestInit = {}): Promise<
   return response
 }
 
-export async function readStatus(): Promise<VoiceStatus> {
-  return (await request('status')).json()
+let pendingWorkspace: Promise<VoiceStatus> | null = null
+
+export function openWorkspace(): Promise<VoiceStatus> {
+  // An overlapping initial POST could otherwise assign two cookies to the same browser.
+  if (!pendingWorkspace) {
+    const read = async (): Promise<VoiceStatus> => (await request('workspace', { method: 'POST' })).json()
+    const response = navigator.locks ? navigator.locks.request('favilium-workspace', read) : read()
+    pendingWorkspace = response.finally(() => { pendingWorkspace = null })
+  }
+  return pendingWorkspace
 }
 
 export function jsonPost(data: unknown): RequestInit {
