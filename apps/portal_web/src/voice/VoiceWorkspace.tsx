@@ -35,17 +35,16 @@ function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boo
   return (
     <section className="voice-card" aria-labelledby="record-heading">
       <div className="card-heading"><span className="feature-icon"><Icon name="voice" /></span><h2 id="record-heading">보호자 목소리 등록</h2></div>
-      <p className="card-copy">조용한 곳에서 평소 목소리로 10초 이상 말씀해 주세요. 목소리를 더 잘 담으려면 1~2분을 권장합니다.</p>
-      <details className="reading-example"><summary>녹음할 때 읽을 예문</summary>
-        <p>가족에게 이야기하듯 편하게 읽어 주세요. 사투리나 말끝은 평소 쓰는 대로 바꿔도 좋아요. 날짜와 병실 상황은 녹음 연습용입니다.</p>
+      <p className="card-copy">조용한 곳에서 평소 목소리로 10초 이상 말씀해 주세요.</p>
+      <details className="reading-example" open><summary>녹음할 때 읽을 예문</summary>
+        <p>가족에게 이야기하듯 편하게 읽어 주세요.</p>
         <blockquote className="recording-script">
-          <p>내 목소리 잘 들려요?</p>
-          <p>오늘은 11월 12일 목요일이고, 지금은 오전 10시예요.</p>
-          <p>조금 전에 간호사 선생님이 병실에 오셔서 혈압이랑 체온을 재고 가셨어요.</p>
-          <p>창밖에 햇살이 비치니까, 우리 둘이 같이 걷던 산책길이 생각나네요.</p>
-          <p>다음에 만나면 우리 또 도란도란 얘기해요.</p>
+          <p>빵집 앞을 지나는데 고소한 냄새가 솔솔 나서, 저도 모르게 걸음이 느려졌어요.</p>
+          <p>종이비행기의 한쪽 날개를 살짝 접으면, 이번에는 어느 쪽으로 날아갈까요?</p>
+          <p>비가 그친 뒤에 우산을 가볍게 털었더니, 작은 빗방울이 바닥에 톡톡 떨어졌어요.</p>
+          <p>한참을 찾아도 안 보이던 줄무늬 양말 한 짝이 수건 사이에 쏙 숨어 있었네요.</p>
+          <p>새로 깎은 연필로 종이에 동그라미를 몇 개 그려 보니, 사각사각 나는 소리가 참 듣기 좋더라고요.</p>
         </blockquote>
-        <p>조금 더 녹음하고 싶으면 오늘 날씨 이야기를 같은 말투로 이어 가세요.</p>
       </details>
       <label className="voice-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => {
         setConsent(event.target.checked)
