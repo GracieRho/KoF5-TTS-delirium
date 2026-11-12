@@ -7,7 +7,7 @@
 .card-heading { display: flex; align-items: center; gap: 12px }
 .card-heading h2 { margin: 0; font-size: 1.19rem }
 .feature-icon, .mic-indicator { display: inline-grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; color: var(--brand); border-radius: 11px; background: var(--brand-soft) }
-.card-copy { color: var(--muted); font-size: .9rem; margin: 17px 0 20px; line-height: 1.7 }
+.card-copy { color: var(--muted); margin: 17px 0 20px; line-height: 1.7 }
 .speech-actions, .voice-actions, .output-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
 .speech-label, .sample-preview label { display: block; margin-bottom: 8px; font-size: .88rem; font-weight: 650 }
 .speech-actions { justify-content: space-between; margin-top: 10px }
@@ -17,9 +17,10 @@
 .voice-consent { display: flex; align-items: flex-start; gap: 10px; margin: 15px 0 20px; font-size: .87rem; line-height: 1.7 }
 .voice-consent input { margin: 3px 0 0 }
 .reading-example { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #f8faf5; font-size: .87rem }
+.card-copy, .recording-prompt { font-size: .9rem }
 .reading-example summary { cursor: pointer; color: var(--brand); font-weight: 600 }
 .reading-example p { margin: 10px 0 0 }
-.recording-script { margin: 14px 0; padding-inline-start: 14px; border-inline-start: 3px solid var(--brand); font-size: 1rem; line-height: 1.65; word-break: keep-all; overflow-wrap: anywhere }
+.recording-script { margin: 14px 0; padding-inline-start: 14px; border-inline-start: 3px solid var(--brand); line-height: 1.65; word-break: keep-all; overflow-wrap: anywhere }
 .recording-script p:first-child { margin-top: 0 }
 .capture-area { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 18px }
 .capture-area button { margin-left: auto; min-height: 42px }

@@ -36,12 +36,11 @@ function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boo
     <section className="voice-card" aria-labelledby="record-heading">
       <div className="card-heading"><span className="feature-icon"><Icon name="voice" /></span><h2 id="record-heading">보호자 목소리 등록</h2></div>
       <p className="card-copy">조용한 곳에서 평소 목소리로 10초 이상 말씀해 주세요.</p>
-      <details className="reading-example" open><summary>녹음할 때 읽을 예문</summary>
-        <p>가족에게 이야기하듯 편하게 읽어 주세요.</p>
+      <details className="reading-example recording-prompt" open><summary>녹음할 때 읽을 예문</summary>
+        <p>가족에게 이야기하듯 평소 속도로 한 문장씩 또렷하게 읽어 주세요.</p>
         <blockquote className="recording-script">
           <p>빵집 앞을 지나는데 고소한 냄새가 솔솔 나서, 저도 모르게 걸음이 느려졌어요.</p>
           <p>종이비행기의 한쪽 날개를 살짝 접으면, 이번에는 어느 쪽으로 날아갈까요?</p>
-          <p>비가 그친 뒤에 우산을 가볍게 털었더니, 작은 빗방울이 바닥에 톡톡 떨어졌어요.</p>
           <p>한참을 찾아도 안 보이던 줄무늬 양말 한 짝이 수건 사이에 쏙 숨어 있었네요.</p>
           <p>새로 깎은 연필로 종이에 동그라미를 몇 개 그려 보니, 사각사각 나는 소리가 참 듣기 좋더라고요.</p>
         </blockquote>
