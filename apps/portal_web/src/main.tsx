@@ -4,7 +4,7 @@ import { App } from './App'
 import './shared/styles/tokens.css'
 import './voice/workspace.css'
 
-const research = /^\/research\/?$/.test(window.location.pathname)
+const research = document.documentElement.dataset.workspace === 'research' || /^\/research\/?$/.test(window.location.pathname)
 const Research = lazy(() => import('./research/Research'))
 if (research) document.title = 'Favilium · 연구 음성 보관함'
 createRoot(document.getElementById('root')!).render(<StrictMode>{research

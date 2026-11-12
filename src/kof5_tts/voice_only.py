@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .http_utils import bounded_body, check_origin, fail
-from .research import require_researcher, research
+from .research import require_manager, research
 from .voice_store import StoreNotConfigured, StoreUnavailable, VoiceRecord, get_store
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -343,7 +343,7 @@ def remove_record(store, record):
 
 
 
-@app.delete("/api/research/voices/{reference}", dependencies=[Depends(require_researcher)])
+@app.delete("/api/research/voices/{reference}", dependencies=[Depends(require_manager)])
 def researcher_remove(reference: str, request: Request):
     check_origin(request)
     store = get_store()
@@ -438,7 +438,7 @@ async def speech(request: Request):
     return await run_in_threadpool(synthesize, owner, await speech_text(request), request.headers.get("x-voice-reference"))
 
 
-@app.post("/api/research/voices/{reference}/speech", dependencies=[Depends(require_researcher)])
+@app.post("/api/research/voices/{reference}/speech", dependencies=[Depends(require_manager)])
 async def researcher_speech(reference: str, request: Request):
     check_origin(request)
     text = await speech_text(request)
@@ -456,8 +456,9 @@ async def researcher_speech(reference: str, request: Request):
 @app.get("/studio/")
 @app.get("/research")
 @app.get("/research/")
-def studio():
-    path = DIST / "index.html"
+def studio(request: Request):
+    page = "research.html" if request.url.path.rstrip("/") == "/research" else "index.html"
+    path = DIST / page
     if not path.is_file() or not (DIST / "assets").is_dir():
         fail(503, "Favilium 웹 화면을 먼저 빌드해 주세요.")
     return FileResponse(path, media_type="text/html")

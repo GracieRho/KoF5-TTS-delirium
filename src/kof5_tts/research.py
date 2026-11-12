@@ -1,161 +1,89 @@
-"""Supabase Auth의 검증된 연구자 계정으로 보호되는 자료 열람 API."""
+"""연구팀 링크에 지정된 권한으로 자료를 열람하거나 관리한다."""
 import hashlib
 import hmac
-import json
 import os
 import re
-from urllib.parse import parse_qs, urlsplit
+import secrets
+import time
 from uuid import UUID
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
-from fastapi.concurrency import run_in_threadpool
 
-from .http_utils import bounded_body, check_origin, fail
+from .http_utils import check_origin, fail
 from .research_store import PAGE_SIZE
 from .voice_store import get_store
 
 research = APIRouter(prefix="/api/research")
 COOKIE = "favilium_research"
 COOKIE_PATH = "/api/research"
-DENIED = "연구팀에 등록한 이메일을 확인해 주세요."
+SESSION_SECONDS = 3600
+LINK_SETTINGS = {"view": "FAVILIUM_RESEARCH_VIEW_HASH", "manage": "FAVILIUM_RESEARCH_MANAGE_HASH"}
 
 
-def allowed(email):
-    entries = os.getenv("FAVILIUM_RESEARCHER_EMAILS", "").lower().split(",")
-    return bool(email) and email.lower() in {entry.strip() for entry in entries if entry.strip()}
+def link_digest(scope):
+    value = os.getenv(LINK_SETTINGS[scope], "").strip().lower()
+    return value if re.fullmatch(r"[0-9a-f]{64}", value) else ""
 
 
-def auth_request(method, path, *, token=None, body=None):
-    url = os.getenv("FAVILIUM_SUPABASE_URL", "").strip().rstrip("/")
-    key = os.getenv("FAVILIUM_SUPABASE_PUBLISHABLE_KEY", "").strip()
-    if not url.startswith("https://") or not key or not os.getenv("FAVILIUM_RESEARCHER_EMAILS", "").strip():
-        fail(503, "연구자 계정 연결 설정을 확인해 주세요.")
-    headers = {"apikey": key}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    try:
-        response = httpx.request(method, f"{url}/auth/v1/{path}", headers=headers, json=body, timeout=8)
-    except httpx.RequestError:
-        fail(503, "연구자 인증 서비스에 연결할 수 없습니다.")
-    if response.status_code == 429:
-        fail(429, "로그인 요청이 많습니다. 잠시 뒤 다시 시도해 주세요.")
-    if response.status_code >= 500:
-        fail(503, "연구자 인증 서비스에 연결할 수 없습니다.")
-    return response
-
-
-def verified(user):
-    return isinstance(user, dict) and bool(user.get("email_confirmed_at")) and allowed(user.get("email", ""))
-
-
-def cookie_mac(token):
-    key = os.getenv("FAVILIUM_SESSION_SECRET", "").strip()
-    if len(key) < 32:
-        fail(503, "연구자 세션 서명 설정을 확인해 주세요.")
-    return hmac.new(key.encode(), ("research-v1:" + token).encode(), hashlib.sha256).hexdigest()
-
-
-def cookie_token(request):
-    raw = request.cookies.get(COOKIE, "")
-    mac, _, token = raw.partition(".")
-    if (not token or len(raw) > 4000 or not re.fullmatch(r"[A-Za-z0-9._-]+", token)
-            or not re.fullmatch(r"[a-f0-9]{64}", mac) or not hmac.compare_digest(mac, cookie_mac(token))):
-        return None
-    return token
+def session_mac(scope, digest, expires, nonce):
+    secret = os.getenv("FAVILIUM_SESSION_SECRET", "").strip()
+    if len(secret) < 32:
+        fail(503, "연구 보관함의 서버 설정을 확인해 주세요.")
+    message = f"research-link-v2:{scope}:{digest}:{expires}:{nonce}".encode()
+    return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
 def require_researcher(request: Request):
-    token = cookie_token(request)
-    if not token:
-        fail(401, "연구자 로그인이 필요합니다.")
-    response = auth_request("GET", "user", token=token)
-    user = response.json() if response.is_success else None
-    if not verified(user):
-        fail(401, "로그인 시간이 만료되었거나 접근 권한이 없습니다. 다시 로그인해 주세요.")
-    return user["email"]
+    raw = request.cookies.get(COOKIE, "")
+    # Former Supabase login cookies and studio cookies do not authorize link access.
+    parts = raw.split(".") if len(raw) <= 160 else []
+    if len(parts) == 4:
+        scope, expires, nonce, signature = parts
+        if (scope in LINK_SETTINGS and re.fullmatch(r"[0-9]{1,12}", expires)
+                and 0 < int(expires) - time.time() <= SESSION_SECONDS + 1
+                and re.fullmatch(r"[0-9a-f]{24}", nonce) and re.fullmatch(r"[0-9a-f]{64}", signature)):
+            digest = link_digest(scope)
+            if digest and hmac.compare_digest(signature, session_mac(scope, digest, expires, nonce)):
+                return scope
+    fail(401, "연구팀에서 공유한 링크로 열어 주세요.")
 
 
-async def login_fields(request):
+def require_manager(scope: str = Depends(require_researcher)):
+    if scope != "manage":
+        fail(403, "음성 합성과 삭제는 연구팀의 관리 링크에서 이용할 수 있습니다.")
+
+
+@research.post("/session")
+def open_link(request: Request):
     check_origin(request)
-    if request.headers.get("content-type", "").partition(";")[0] != "application/json":
-        fail(415, "로그인 입력 형식을 확인해 주세요.")
-    try:
-        body = json.loads(await bounded_body(request, 6000))
-    except (ValueError, UnicodeDecodeError, RecursionError):
-        fail(400, "로그인 입력 형식을 확인해 주세요.")
-    if not isinstance(body, dict) or not isinstance(body.get("email"), str):
-        fail(400, "이메일을 입력해 주세요.")
-    email = body["email"].strip().lower()
-    if not allowed(email):
-        fail(403, DENIED)
-    return email, body
-
-
-@research.post("/login/email")
-async def email_login(request: Request):
-    email, _ = await login_fields(request)
-    auth = await run_in_threadpool(auth_request, "POST", "otp", body={"email": email, "create_user": True})
-    if not auth.is_success:
-        fail(400, "인증 메일을 보내지 못했습니다. 연구팀 등록 주소와 메일 발송 설정을 확인해 주세요.")
-    return Response(status_code=204)
-
-
-def email_proof(email, proof):
-    proof = proof.strip()
-    if re.fullmatch(r"[0-9]{6,10}", proof):
-        return {"type": "email", "email": email, "token": proof}
-    try:
-        link = urlsplit(proof)
-        project = urlsplit(os.getenv("FAVILIUM_SUPABASE_URL", ""))
-        query = parse_qs(link.query, max_num_fields=12)
-    except ValueError:
-        fail(422, "인증 메일의 버튼 주소나 인증 코드를 확인해 주세요.")
-    kinds = query.get("type", [])
-    hashes = query.get("token", [])
-    if (link.scheme != "https" or link.netloc != project.netloc or link.path != "/auth/v1/verify"
-            or len(kinds) != 1 or kinds[0] not in ("email", "signup", "magiclink") or len(hashes) != 1
-            or not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", hashes[0])):
-        fail(422, "인증 메일에 있는 버튼의 링크 주소 전체를 복사하거나 숫자 코드를 입력해 주세요.")
-    # Supabase's 'email' verification handles signup and returning magic-link users.
-    # Only the proof goes to our configured Auth endpoint. The supplied URL is never fetched.
-    return {"type": "email", "token_hash": hashes[0]}
-
-
-@research.post("/login/verify")
-async def verify_login(request: Request):
-    email, body = await login_fields(request)
-    if not isinstance(body.get("proof"), str):
-        fail(400, "인증 메일의 링크 주소나 코드를 입력해 주세요.")
-    auth = await run_in_threadpool(auth_request, "POST", "verify", body=email_proof(email, body["proof"]))
-    data = auth.json() if auth.is_success else {}
-    user = data.get("user")
-    if not verified(user) or user["email"].lower() != email or not data.get("access_token"):
-        fail(401, "인증 정보를 확인하지 못했습니다. 같은 이메일로 받은 최신 링크나 코드를 입력해 주세요.")
-    token = data["access_token"]
-    response = JSONResponse({"email": user["email"]})
-    response.set_cookie(COOKIE, f"{cookie_mac(token)}.{token}", max_age=min(3600, int(data["expires_in"])),
+    header = request.headers.get("authorization", "")
+    match = re.fullmatch(r"Bearer ([A-Za-z0-9_-]{43})", header)
+    if not match:
+        fail(403, "연구팀 링크가 올바르지 않습니다.")
+    candidate = hashlib.sha256(match[1].encode("ascii")).hexdigest()
+    scopes = [scope for scope in LINK_SETTINGS if hmac.compare_digest(candidate, link_digest(scope))]
+    if len(scopes) != 1:
+        fail(403, "유효한 연구팀 링크를 다시 열어 주세요.")
+    scope = scopes[0]
+    expires = str(int(time.time()) + SESSION_SECONDS)
+    nonce = secrets.token_hex(12)
+    signature = session_mac(scope, candidate, expires, nonce)
+    response = JSONResponse({"scope": scope})
+    response.set_cookie(COOKIE, f"{scope}.{expires}.{nonce}.{signature}", max_age=SESSION_SECONDS,
                         httponly=True, secure=request.url.scheme == "https" or bool(os.getenv("VERCEL")),
                         samesite="strict", path=COOKIE_PATH)
     return response
 
 
 @research.get("/session")
-def session(email: str = Depends(require_researcher)):
-    return {"email": email}
+def session(scope: str = Depends(require_researcher)):
+    return {"scope": scope}
 
 
 @research.post("/logout")
-def logout(request: Request):
+def close_link(request: Request):
     check_origin(request)
-    token = cookie_token(request)
-    if token:
-        # Always clear the browser cookie when upstream sign-out is unavailable.
-        try:
-            auth_request("POST", "logout?scope=local", token=token)
-        except HTTPException:
-            pass
     response = Response(status_code=204)
     response.delete_cookie(COOKIE, path=COOKIE_PATH, httponly=True, samesite="strict",
                            secure=request.url.scheme == "https" or bool(os.getenv("VERCEL")))

@@ -4,7 +4,7 @@
 - `apps/portal_web/`은 녹음실 진입, 보호자 녹음, 목소리 등록과 한국어 합성·재생을 담당합니다.
 - `src/kof5_tts/voice_only.py`는 서명된 쿠키로 브라우저별 작업실 구분, 원본 WAV 검증 및 ElevenLabs 요청을 처리합니다.
 - `src/kof5_tts/voice_store.py`, `clinical/voice_sessions.sql`은 복제 상태만 저장합니다.
-- `src/kof5_tts/research.py`는 연구자 로그인과 자료 열람, `research_store.py`와 `clinical/research_archive.sql`은 별도 동의 후 보관을 담당합니다. `apps/portal_web/src/research/`는 연구자 화면입니다.
+- `src/kof5_tts/research.py`는 연구팀 링크의 열람·관리 권한과 자료 열람, `research_store.py`와 `clinical/research_archive.sql`은 별도 동의 후 보관을 담당합니다. `apps/portal_web/src/research/`는 연구자 화면입니다.
 - `tests/`의 공급자 모의 테스트는 실제 참여자의 자료나 ElevenLabs 크레딧을 사용하지 않습니다.
 - `scripts/`에는 로컬 서버 실행과 구조도 생성 스크립트가 있습니다.
 

@@ -1,9 +1,10 @@
 """연구 보관 동의, 복구, 관리자 인증, 매체 재생, 철회 경로에 대한 통합 테스트."""
+import hashlib
 import os
+import secrets
 import unittest
 from unittest.mock import patch
 
-import httpx
 from tests import test_voice_only as studio
 from kof5_tts import research, voice_only
 from kof5_tts.research_store import PAGE_SIZE
@@ -13,32 +14,23 @@ from kof5_tts.voice_store import StoreUnavailable
 class ResearchTests(unittest.TestCase):
     def setUp(self):
         studio.VoiceAPITest.setUp(self)
-        env = patch.dict(os.environ, {"FAVILIUM_RESEARCHER_EMAILS": "researcher@example.invalid"})
+        self.links = {scope: secrets.token_urlsafe(32) for scope in research.LINK_SETTINGS}
+        env = patch.dict(os.environ, {
+            setting: hashlib.sha256(self.links[scope].encode()).hexdigest()
+            for scope, setting in research.LINK_SETTINGS.items()
+        })
         env.start()
         self.addCleanup(env.stop)
         self.staff = self.new_browser()
-        self.auth_calls = []
-        self.allowed_user = {"email": "researcher@example.invalid", "email_confirmed_at": "2026-01-01T00:00:00Z"}
-        self.auth_response_user = self.allowed_user
-        def auth(method, path, *, token=None, body=None):
-            self.auth_calls.append((method, path, body))
-            if path == "otp" or path.startswith("logout"):
-                return httpx.Response(200, json={})
-            if path == "verify" and body.get("token") == "123456":
-                return httpx.Response(200, json={"access_token": "test-otp-session", "expires_in": 3600, "user": self.auth_response_user})
-            if path == "user" and token == "test-otp-session":
-                return httpx.Response(200, json=self.auth_response_user)
-            return httpx.Response(403, json={})
-        mock = patch.object(research, "auth_request", side_effect=auth)
-        mock.start()
-        self.addCleanup(mock.stop)
 
     new_browser = studio.VoiceAPITest.new_browser
     open_workspace = studio.VoiceAPITest.open_workspace
 
-    def login(self):
-        response = self.staff.post("/api/research/login/verify", json={"email": self.allowed_user["email"], "proof":"123456"})
+    def open_link(self, scope="manage", browser=None):
+        response = (browser or self.staff).post("/api/research/session",
+                                              headers={"Authorization": f"Bearer {self.links[scope]}"})
         self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"scope": scope})
         return response
 
     def enroll(self, opt_in):
@@ -57,34 +49,47 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response
 
-    def test_gate_and_otp_session(self):
+    def test_link_gate_rotation_and_closing(self):
         self.enroll(True)
         for url in ("/api/research/session", "/api/research/voices", self.root + "/sample", self.root + "/speech"):
             self.assertEqual(self.browser.get(url).status_code, 401)
+        for url in ("/api/research/login/email", "/api/research/login/verify"):
+            self.assertEqual(self.browser.post(url).status_code, 404)
         self.assertEqual(self.browser.delete(self.root).status_code, 401)
-        self.assertEqual(self.browser.post(self.root + "/speech", json={"text":"테스트"}).status_code, 401)
-        self.staff.cookies.set(research.COOKIE, "test-otp-session", path=research.COOKIE_PATH)
-        self.assertEqual(self.staff.get("/api/research/session").status_code, 401)
-        self.staff.cookies.clear()
-        send = "/api/research/login/email"
-        for email, origin, status in (("outsider@example.invalid", studio.ORIGIN, 403),
-                                      (self.allowed_user["email"], "https://foreign.example", 403)):
-            self.assertEqual(self.staff.post(send, json={"email":email}, headers={"Origin":origin}).status_code,status)
-        self.assertFalse(self.auth_calls)
-        self.assertEqual(self.staff.post(send, json={"email":self.allowed_user["email"]}).status_code,204)
-        self.auth_response_user = {**self.allowed_user, "email_confirmed_at": None}
-        self.assertEqual(self.staff.post("/api/research/login/verify",json={"email":self.allowed_user["email"],"proof":"123456"}).status_code,401)
-        self.auth_response_user = self.allowed_user
-        cookie = self.login().headers["set-cookie"]
-        for term in ("HttpOnly","Secure","SameSite=strict","Path=/api/research"):
-            self.assertIn(term, cookie)
-        self.assertEqual(self.staff.get("/api/research/session").json(), {"email":self.allowed_user["email"]})
-        self.assertEqual(self.staff.post("/api/research/logout").status_code,204)
-        self.assertEqual(self.staff.get(self.root + "/sample").status_code,401)
+        route = "/api/research/session"
+        self.assertEqual(self.staff.post(route).status_code, 403)
+        self.assertEqual(self.staff.post(route, headers={"Authorization": "Bearer " + secrets.token_urlsafe(32)}).status_code, 403)
+        self.assertEqual(self.staff.post(route, headers={"Origin": "https://foreign.example",
+                         "Authorization": "Bearer " + self.links["manage"]}).status_code, 403)
+        cookie = self.open_link().headers["set-cookie"]
+        for attribute in ("HttpOnly", "Secure", "SameSite=strict", "Path=/api/research"):
+            self.assertIn(attribute, cookie)
+        self.assertNotIn(self.links["manage"], cookie)
+        self.assertEqual(self.staff.get(route).json(), {"scope": "manage"})
+        with patch.dict(os.environ, {research.LINK_SETTINGS["manage"]: "0"*64}):
+            self.assertEqual(self.staff.get(route).status_code, 401)
+        with patch.object(research.time, "time", return_value=research.time.time()+research.SESSION_SECONDS+10):
+            self.assertEqual(self.staff.get(route).status_code, 401)
+        self.assertEqual(self.staff.post("/api/research/logout").status_code, 204)
+        self.assertEqual(self.staff.get(self.root + "/sample").status_code, 401)
+
+    def test_viewer_can_play_and_download_but_cannot_create_or_delete(self):
+        self.enroll(True)
+        self.synth()
+        self.open_link("view")
+        self.assertEqual(self.staff.get("/api/research/voices").status_code, 200)
+        self.assertEqual(self.staff.get(self.root + "/sample").content, studio.recording())
+        item = self.staff.get(self.root + "/speech").json()["items"][0]
+        audio = self.staff.get(self.root + "/speech/" + item["id"] + "?download=true")
+        self.assertEqual(audio.content, self.upstream.audio)
+        calls = len(self.upstream.calls)
+        self.assertEqual(self.staff.post(self.root + "/speech", json={"text":"점검"}).status_code, 403)
+        self.assertEqual(self.staff.delete(self.root).status_code, 403)
+        self.assertEqual(len(self.upstream.calls), calls)
 
     def test_storage_off_by_default_and_prospective_for_existing_voices(self):
         self.enroll(False)
-        self.login()
+        self.open_link()
         self.assertEqual(self.synth().headers["X-Favilium-Archive"],"off")
         self.assertEqual(self.staff.get(self.root + "/sample").status_code,404)
         self.assertEqual(self.staff.get(self.root + "/speech").json()["items"],[])
@@ -99,7 +104,7 @@ class ResearchTests(unittest.TestCase):
 
     def test_archive_cross_device_and_delete(self):
         self.enroll(True)
-        self.login()
+        self.open_link()
         self.assertEqual(self.synth().headers["X-Favilium-Archive"],"saved")
         sample = self.staff.get(self.root + "/sample")
         self.assertEqual(sample.content,studio.recording())
@@ -133,7 +138,7 @@ class ResearchTests(unittest.TestCase):
 
     def test_studio_deletion_and_archive_failure_preserve_consistency(self):
         self.enroll(True)
-        self.login()
+        self.open_link()
         with patch("kof5_tts.research_store.SQLiteArchive.save_speech",side_effect=StoreUnavailable()):
             audio = self.synth()
             self.assertEqual(audio.headers["X-Favilium-Archive"],"failed")
@@ -142,8 +147,8 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(self.staff.get(self.root + "/sample").status_code,404)
         self.assertEqual(self.staff.get("/api/research/voices").json()["items"],[])
 
-    def test_pagination_search_and_proof_link(self):
-        self.login()
+    def test_pagination_and_search(self):
+        self.open_link()
         store=voice_only.get_store()
         for i in range(PAGE_SIZE+2):
             store.create(str(i), f"{i:024x}")
@@ -151,9 +156,3 @@ class ResearchTests(unittest.TestCase):
         self.assertTrue(first["has_more"]); self.assertEqual(len(first["items"]),PAGE_SIZE)
         self.assertEqual(len(self.staff.get(f"/api/research/voices?offset={PAGE_SIZE}").json()["items"]),2)
         self.assertEqual(len(self.staff.get("/api/research/voices?search=0f").json()["items"]),1)
-        with patch.dict(os.environ,{"FAVILIUM_SUPABASE_URL":"https://trial.supabase.co"}):
-            target="https://trial.supabase.co/auth/v1/verify?token="+"a"*56+"&type=magiclink"
-            self.assertEqual(research.email_proof("a",target),{"token_hash":"a"*56,"type":"email"})
-            for url in (target.replace("trial.supabase.co","example.invalid"),target.replace("magiclink","recovery")):
-                with self.assertRaises(research.HTTPException):
-                    research.email_proof("a",url)
