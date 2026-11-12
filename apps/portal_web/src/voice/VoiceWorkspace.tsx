@@ -37,7 +37,15 @@ function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boo
       <div className="card-heading"><span className="feature-icon"><Icon name="voice" /></span><h2 id="record-heading">보호자 목소리 등록</h2></div>
       <p className="card-copy">조용한 곳에서 평소 목소리로 10초 이상 말씀해 주세요. 목소리를 더 잘 담으려면 1~2분을 권장합니다.</p>
       <details className="reading-example"><summary>녹음할 때 읽을 예문</summary>
-        <p>오늘은 함께 산책하던 길이 떠올랐어요. 바람이 불면 나뭇잎이 사각사각 소리를 냈지요. 다음에 같이 걸을 때도 이렇게 천천히 이야기를 나눠요.</p>
+        <p>가족에게 이야기하듯 편하게 읽어 주세요. 사투리나 말끝은 평소 쓰는 대로 바꿔도 좋아요. 날짜와 병실 상황은 녹음 연습용입니다.</p>
+        <blockquote className="recording-script">
+          <p>내 목소리 잘 들려요?</p>
+          <p>오늘은 11월 12일 목요일이고, 지금은 오전 10시예요.</p>
+          <p>조금 전에 간호사 선생님이 병실에 오셔서 혈압이랑 체온을 재고 가셨어요.</p>
+          <p>창밖에 햇살이 비치니까, 우리 둘이 같이 걷던 산책길이 생각나네요.</p>
+          <p>다음에 만나면 우리 또 도란도란 얘기해요.</p>
+        </blockquote>
+        <p>조금 더 녹음하고 싶으면 오늘 날씨 이야기를 같은 말투로 이어 가세요.</p>
       </details>
       <label className="voice-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => {
         setConsent(event.target.checked)

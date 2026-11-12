@@ -19,6 +19,8 @@
 .reading-example { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #f8faf5; font-size: .87rem }
 .reading-example summary { cursor: pointer; color: var(--brand); font-weight: 600 }
 .reading-example p { margin: 10px 0 0 }
+.recording-script { margin: 14px 0; padding-inline-start: 14px; border-inline-start: 3px solid var(--brand); font-size: 1rem; line-height: 1.65; word-break: keep-all; overflow-wrap: anywhere }
+.recording-script p:first-child { margin-top: 0 }
 .capture-area { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 18px }
 .capture-area button { margin-left: auto; min-height: 42px }
 .capture-area strong { font-size: .88rem }
