@@ -2,7 +2,7 @@
 
 이 저장소에서 작업할 때는 [`AGENTS.md`](AGENTS.md)를 기본 작업 규칙으로 사용합니다.
 
-사용자가 명시적으로 요청한 긴급 핫픽스만 `main` 직접 작업을 허용합니다. 그 외 모든 변경은 최신 `origin/main`에서 만든 작업별 브랜치와 `.worktrees/<task-slug>/` 워크트리에서 진행하고, 검증 결과를 포함한 PR을 만든 뒤 리뷰를 거쳐 병합합니다. 병합된 동일 저장소의 원격 작업 브랜치는 GitHub Actions가 자동 삭제합니다. 자세한 순서는 [`docs/contributing.md`](docs/contributing.md)를 따릅니다.
+사용자가 명시적으로 요청한 긴급 핫픽스만 `main` 직접 작업을 허용합니다. 그 외 모든 변경은 최신 `origin/main`에서 만든 작업별 브랜치와 `.worktrees/<task-slug>/` 워크트리에서 진행하고, 검증 결과를 포함한 PR을 만들고, 병합은 사용자가 명시적으로 요청하고 필요한 리뷰 승인이 끝난 뒤에만 합니다. 병합된 동일 저장소의 원격 작업 브랜치는 GitHub Actions가 자동 삭제합니다. 자세한 순서는 [`docs/contributing.md`](docs/contributing.md)를 따릅니다.
 
 ## 빠른 경로 안내
 
