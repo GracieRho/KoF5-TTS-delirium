@@ -1,4 +1,5 @@
 export type VoiceStatus = {
+  research_consent?: boolean
   configured: boolean
   voice_state: 'empty' | 'creating' | 'ready' | 'verification' | 'deleting'
   reference?: string | null

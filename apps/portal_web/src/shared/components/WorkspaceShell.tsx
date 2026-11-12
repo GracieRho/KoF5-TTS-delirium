@@ -2,19 +2,22 @@ import type { ReactNode } from 'react'
 import { AppHeader } from './AppHeader'
 import { Icon } from './Icon'
 
-export function WorkspaceShell({ children }: { children: ReactNode }) {
+export function WorkspaceShell({ children, research = false, actions }: { children: ReactNode; research?: boolean; actions?: ReactNode }) {
+  const space = research ? '연구자 공간' : '보호자 음성 스튜디오'
+  const page = research ? '연구 음성 보관함' : '목소리 작업실'
   return (
     <div className="workspace-shell family-theme">
       <AppHeader />
       <aside className="studio-nav">
-        <div className="studio-space"><strong>보호자 음성 스튜디오</strong></div>
-        <nav aria-label="보호자 음성 스튜디오 메뉴">
-          <a aria-current="page" href="#workspace"><Icon name="voice" />목소리 작업실</a>
+        <div className="studio-space"><strong>{space}</strong></div>
+        <nav aria-label={space + ' 메뉴'}>
+          <a aria-current="page" href="#workspace"><Icon name={research ? 'memory' : 'voice'} />{page}</a>
         </nav>
       </aside>
       <main id="workspace" className="studio-workspace">
         <header className="studio-topbar">
-          <span>보호자 음성 스튜디오<span className="breadcrumb-separator">/</span>목소리 작업실</span>
+          <span>{space}<span className="breadcrumb-separator">/</span>{page}</span>
+          {actions}
         </header>
         <div className="studio-content">{children}</div>
       </main>

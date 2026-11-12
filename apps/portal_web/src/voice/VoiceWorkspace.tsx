@@ -16,6 +16,7 @@ type Props = {
 function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boolean; perform: Perform }) {
   const recorder = useRecorder()
   const [consent, setConsent] = useState(false)
+  const [archive, setArchive] = useState(false)
   const sampleUrl = useObjectUrl(recorder.sample)
   const capturing = recorder.mode !== 'idle'
 
@@ -25,7 +26,7 @@ function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boo
     void perform('목소리를 등록하고 있습니다.', async () => {
       await request('voice', {
         method: 'POST',
-        headers: { 'Content-Type': 'audio/wav', 'X-Voice-Consent': 'yes' },
+        headers: { 'Content-Type': 'audio/wav', 'X-Voice-Consent': 'yes', ...(archive ? { 'X-Research-Consent': 'archive-v1' } : {}) },
         body: sample,
       })
     })
@@ -40,8 +41,10 @@ function Recording({ busy, canEnroll, perform }: { busy: boolean; canEnroll: boo
       </details>
       <label className="voice-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={event => {
         setConsent(event.target.checked)
-        if (!event.target.checked) recorder.discard()
+        if (!event.target.checked) { recorder.discard(); setArchive(false) }
       }} /><span>제가 직접 말한 음성입니다. 녹음이 ElevenLabs로 전송되고, 제 목소리를 복제하여 입력한 문장을 읽는 데 동의합니다.</span></label>
+      {consent && <label className="voice-consent archive-choice"><input type="checkbox" checked={archive} disabled={busy} onChange={e => setArchive(e.target.checked)} />
+        <span><strong>연구 자료 보관에 동의합니다 (선택)</strong><br />원본 녹음과 앞으로 만들 문장·합성 음성을 연구용 서버에 보관합니다. 승인된 연구자는 이 목소리로 안내 문장을 만들고 녹음과 합성음을 듣거나 내려받을 수 있습니다. 선택하지 않아도 음성 합성은 가능합니다.</span></label>}
       <div className="capture-area">
         <span className={'mic-indicator' + (recorder.mode === 'recording' ? ' is-recording' : '')}><Icon name="voice" size={22} /></span>
         <div><strong>{recorder.mode === 'requesting' ? '마이크 권한 확인 중' : recorder.mode === 'recording' ? '녹음 중' : recorder.sample ? '녹음 완료' : '녹음 대기'}</strong>
@@ -72,13 +75,15 @@ const stateLabels = {
 
 const stateDetails = {
   creating: '결과를 확인하는 동안 같은 녹음을 다시 전송하지 마세요.',
-  ready: '등록한 보호자의 목소리로 여러 문장을 만들 수 있습니다. 다른 보호자의 녹음을 시작하려면 먼저 이 목소리를 삭제해 주세요.',
+  ready: '등록한 보호자의 목소리로 여러 안내 문장을 만들 수 있습니다.',
   verification: '연구 담당자가 ElevenLabs에서 본인 확인 절차를 마친 뒤 등록 상태를 다시 확인해 주세요.',
   deleting: 'ElevenLabs에서 삭제가 확인되기 전까지 새 목소리를 등록하거나 음성을 만들 수 없습니다.',
 }
 
 function Registered({ status, busy, locked, perform }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [next, setNext] = useState(false)
+  const [consent, setConsent] = useState(false)
   if (status.voice_state === 'empty') return null
   const state = status.voice_state
   function remove() {
@@ -90,11 +95,24 @@ function Registered({ status, busy, locked, perform }: Props) {
       <div className="card-heading"><span className="feature-icon"><Icon name={state === 'ready' ? 'check' : 'voice'} /></span><h2 id="record-heading">{stateLabels[state]}</h2></div>
       <p className="card-copy">{stateDetails[state]}</p>
       {status.reference && <p className="voice-ref">목소리 참조 <code>{status.reference}</code></p>}
+      {state === 'ready' && (status.research_consent
+        ? <p className="archive-state"><Icon name="shield" size={17} />연구 보관 동의 완료 · 새로 만드는 문장과 음성을 보관합니다.</p>
+        : <details className="reading-example archive-option"><summary>이 목소리로 만든 음성을 연구 자료로 보관하기</summary>
+          <label className="voice-consent"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />
+            <span>승인된 연구자가 이 목소리로 안내 문장을 만들고, 앞으로 생성할 문장·합성음을 연구용 서버에 보관해 듣거나 내려받는 데 동의합니다. 이전 녹음과 합성음은 포함되지 않습니다.</span></label>
+          <button disabled={!consent || busy || locked} onClick={() => void perform('연구 보관 동의를 저장하고 있습니다.', async () => {
+            await request('voice/archive-consent', { method: 'POST', headers: { 'X-Voice-Reference': status.reference ?? '', 'X-Research-Consent': 'archive-v1' } })
+          })}>연구 보관 시작</button></details>)}
       <div className="voice-actions">
+        {state === 'ready' && status.research_consent && <button disabled={busy || locked} onClick={() => { setNext(true); setConfirmDelete(false) }}>다음 보호자 녹음</button>}
         {state !== 'ready' && <button type="button" disabled={busy} onClick={() => void perform('등록 상태를 확인하고 있습니다.', async () => {})}>상태 다시 확인</button>}
-        {!confirmDelete && <button type="button" className="danger" disabled={busy || locked || !status.configured} onClick={() => setConfirmDelete(true)}>{state === 'deleting' ? '삭제 다시 시도' : '등록한 목소리 삭제'}</button>}
+        {!confirmDelete && <button type="button" className="danger" disabled={busy || locked || !status.configured} onClick={() => { setConfirmDelete(true); setNext(false) }}>{state === 'deleting' ? '삭제 다시 시도' : '등록한 목소리 삭제'}</button>}
       </div>
-      {confirmDelete && <div className="delete-confirm"><p>등록한 목소리를 ElevenLabs에서 삭제할까요? 이미 다운로드한 음성 파일은 별도로 보관됩니다.</p>
+      {next && <div className="delete-confirm"><p>이 보호자의 목소리와 연구 자료는 연구자가 계속 관리합니다. 이 기기에서 새 보호자의 녹음을 시작할까요?</p>
+        <div className="voice-actions"><button onClick={() => setNext(false)}>취소</button><button className="primary" disabled={busy || locked} onClick={() => void perform('새 녹음실을 열고 있습니다.', async () => {
+          await request('workspace/next', { method: 'POST', headers: { 'X-Voice-Reference': status.reference ?? '' } })
+        })}>새 녹음 시작</button></div></div>}
+      {confirmDelete && <div className="delete-confirm"><p>ElevenLabs의 등록 목소리를 삭제할까요? {status.research_consent && '연구용 서버의 원본 녹음, 문장, 합성 음성도 함께 삭제됩니다. '}이미 내려받은 파일은 기기에 남습니다.</p>
         <div className="voice-actions"><button type="button" onClick={() => setConfirmDelete(false)}>취소</button><button type="button" className="danger" disabled={busy || locked || !status.configured} onClick={remove}>삭제 확인</button></div>
       </div>}
     </section>
@@ -103,7 +121,7 @@ function Registered({ status, busy, locked, perform }: Props) {
 
 function Speech({ status, busy, locked, perform }: Props) {
   const [text, setText] = useState('')
-  const [result, setResult] = useState<{ audio: Blob; text: string } | null>(null)
+  const [result, setResult] = useState<{ audio: Blob; text: string; archive: string | null } | null>(null)
   const url = useObjectUrl(result?.audio ?? null)
   const ready = status.voice_state === 'ready' && status.configured && !locked
   function generate() {
@@ -114,7 +132,7 @@ function Speech({ status, busy, locked, perform }: Props) {
       const response = await request('speech', { ...body, headers: { ...body.headers, 'X-Voice-Reference': status.reference ?? '' } })
       const audio = await response.blob()
       if (!audio.size || !audio.type.toLowerCase().startsWith('audio/mpeg')) throw new Error('재생할 MP3를 받지 못했습니다. 다시 시도해 주세요.')
-      setResult({ audio, text })
+      setResult({ audio, text, archive: response.headers.get('X-Favilium-Archive') })
     })
   }
   return (
@@ -127,6 +145,8 @@ function Speech({ status, busy, locked, perform }: Props) {
         <div className="speech-actions"><span>{text.length} / 1,000자</span><button type="submit" className="primary" disabled={!ready || busy || !text.trim()}><Icon name="voice" size={17} />음성 만들기</button></div>
       </form>
       {ready && url && result && <div className="speech-output"><div className="output-heading"><strong>AI 합성 음성</strong><a href={url} download="favilium-message.mp3">MP3 다운로드</a></div>
+        {result.archive === 'saved' && <p className="archive-state">연구 자료로 보관했습니다.</p>}
+        {result.archive === 'failed' && <p className="error-copy" role="alert">연구용 서버에 저장했는지 확인할 수 없습니다. 이 MP3를 내려받아 보관하고 연구자 페이지를 확인해 주세요.</p>}
         <p>{result.text}</p><audio controls src={url} aria-label="입력한 문장의 AI 합성 음성" /><small>환자에게 재생하기 전에 연구자가 먼저 들어보세요.</small>
       </div>}
     </section>

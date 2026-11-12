@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .research_store import SQLITE_ARCHIVE, SQLiteArchive, SupabaseArchive
+
 
 class StoreUnavailable(RuntimeError):
     """설정이나 저장소 문제를 공급자 응답·접속 정보 없이 전달한다."""
@@ -61,16 +63,23 @@ class SQLiteStore:
             # Create the metadata file with owner-only access regardless of process umask.
             descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
             os.close(descriptor)
-            self._execute(_SQLITE_SCHEMA)
+            self._execute(_SQLITE_SCHEMA + ";" + SQLITE_ARCHIVE, script=True)
+            self.archive = SQLiteArchive(self)
         except OSError:
             raise StoreUnavailable("음성 상태 저장소를 열 수 없습니다.") from None
 
-    def _execute(self, query: str, params: tuple = (), *, fetch: bool = False):
+    def _execute(self, query: str, params: tuple = (), *, fetch: bool = False, many: bool = False, script: bool = False):
         try:
             with closing(sqlite3.connect(self.path, timeout=5)) as connection:
                 connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA foreign_keys = ON")
                 with connection:
+                    if script:
+                        connection.executescript(query)
+                        return
                     cursor = connection.execute(query, params)
+                    if many:
+                        return [dict(row) for row in cursor.fetchall()]
                     return cursor.fetchone() if fetch else cursor.rowcount
         except sqlite3.Error:
             raise StoreUnavailable("음성 상태 저장소에 연결할 수 없습니다.") from None
@@ -110,21 +119,24 @@ class SQLiteStore:
 
 class SupabaseStore:
     def __init__(self, url: str, key: str):
-        self.endpoint = f"{url.rstrip('/')}/rest/v1/favilium_voice_sessions"
+        self.rest = f"{url.rstrip('/')}/rest/v1"
+        self.endpoint = f"{self.rest}/favilium_voice_sessions"
+        self.archive = SupabaseArchive(self)
         # New sb_secret_ keys belong only in apikey. Legacy service_role is a JWT.
         self.headers = {"apikey": key}
         if not key.startswith("sb_secret_"):
             self.headers["Authorization"] = f"Bearer {key}"
 
-    def _rows(self, method: str, params: dict, *, body: dict | None = None, prefer: str = ""):
+    def _rows(self, method: str, params: dict, *, body: dict | None = None, prefer: str = "",
+              table: str = "favilium_voice_sessions", max_rows: int = 1):
         headers = {**self.headers, "Prefer": prefer} if prefer else self.headers
         try:
             response = httpx.request(
-                method, self.endpoint, params=params, headers=headers, json=body, timeout=8
+                method, f"{self.rest}/{table}", params=params, headers=headers, json=body, timeout=15
             )
             response.raise_for_status()
             rows = response.json()
-            if not isinstance(rows, list) or len(rows) > 1:
+            if not isinstance(rows, list) or len(rows) > max_rows:
                 raise ValueError
             return rows
         except (httpx.HTTPError, ValueError):

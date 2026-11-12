@@ -30,10 +30,34 @@
         "imports": []
       },
       {
+        "module": "kof5_tts.http_utils",
+        "path": "src/kof5_tts/http_utils.py",
+        "layer": "http_utils",
+        "imports": []
+      },
+      {
+        "module": "kof5_tts.research",
+        "path": "src/kof5_tts/research.py",
+        "layer": "research",
+        "imports": [
+          "kof5_tts.http_utils",
+          "kof5_tts.research_store",
+          "kof5_tts.voice_store"
+        ]
+      },
+      {
+        "module": "kof5_tts.research_store",
+        "path": "src/kof5_tts/research_store.py",
+        "layer": "research_store",
+        "imports": []
+      },
+      {
         "module": "kof5_tts.voice_only",
         "path": "src/kof5_tts/voice_only.py",
         "layer": "voice_only",
         "imports": [
+          "kof5_tts.http_utils",
+          "kof5_tts.research",
           "kof5_tts.voice_store"
         ]
       },
@@ -41,7 +65,9 @@
         "module": "kof5_tts.voice_store",
         "path": "src/kof5_tts/voice_store.py",
         "layer": "voice_store",
-        "imports": []
+        "imports": [
+          "kof5_tts.research_store"
+        ]
       }
     ]
   },

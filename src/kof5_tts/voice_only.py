@@ -1,4 +1,4 @@
-"""Favilium's single-speaker research workspace. Audio and text stay out of storage."""
+"""Favilium 보호자 녹음실 및 연구 보관 API."""
 
 import hashlib
 import hmac
@@ -12,14 +12,17 @@ import time
 import wave
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .voice_store import StoreNotConfigured, StoreUnavailable, get_store
+from .http_utils import bounded_body, check_origin, fail
+from .research import require_researcher, research
+from .voice_store import StoreNotConfigured, StoreUnavailable, VoiceRecord, get_store
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(research)
 DIST = Path(__file__).resolve().parents[2] / "apps/portal_web/dist"
 API = "https://api.elevenlabs.io"
 MAX_WAV = 4 * 1024 * 1024
@@ -29,10 +32,6 @@ OWNER_TTL = 30 * 24 * 3600
 SETTLE_TIME = 600  # Never clear an in-flight creation after an inconclusive lookup.
 VOICE_ID = re.compile(r"[A-Za-z0-9_-]{1,100}")
 OWNER_ID = re.compile(r"[0-9a-f]{48}")
-
-
-def fail(status, message):
-    raise HTTPException(status_code=status, detail=message)
 
 
 @app.exception_handler(StoreUnavailable)
@@ -61,17 +60,6 @@ def session_key():
     if explicit:
         return explicit if len(explicit) >= 32 else ""
     return provider_key()
-
-
-def check_origin(request):
-    # Fetch sends Origin on same-origin POST/DELETE requests. Local Vite proxies
-    # preserve Host. Vercel may terminate HTTPS ahead of the ASGI application.
-    scheme = "https" if os.getenv("VERCEL") else request.url.scheme
-    if scheme != "https" and request.url.hostname not in ("localhost", "127.0.0.1", "::1"):
-        fail(403, "HTTPS 연결로 연구 공간을 열어 주세요.")
-    origin = f"{scheme}://{request.url.netloc}"
-    if request.headers.get("origin") != origin or request.headers.get("sec-fetch-site") == "cross-site":
-        fail(403, "같은 Favilium 화면에서 다시 시도해 주세요.")
 
 
 def signature(owner, expires):
@@ -119,17 +107,11 @@ def status_for(owner, *, reconcile=False):
         with provider() as client:
             recover(store, record, client)
         record = store.get(owner)
-    return {"configured": bool(provider_key()), "voice_state": record.state if record else "empty",
-            "reference": record.reference if record else None}
-
-
-async def bounded_body(request, limit):
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > limit:
-            fail(413, "입력 크기가 허용 범위를 넘었습니다.")
-        body.extend(chunk)
-    return bytes(body)
+    status = {"configured": bool(provider_key()), "voice_state": record.state if record else "empty",
+              "reference": record.reference if record else None}
+    if record and store.archive.opted_in(record.reference):
+        status["research_consent"] = True
+    return status
 
 
 async def string_field(request, field, limit):
@@ -171,9 +153,13 @@ def workspace(request: Request):
             return unconfigured
         raise
     response = JSONResponse(state)
+    set_workspace_cookie(response, request, owner)
+    return response
+
+
+def set_workspace_cookie(response, request, owner):
     response.set_cookie(WORKSPACE, signed_cookie(owner), max_age=OWNER_TTL, httponly=True,
                         samesite="strict", path="/", secure=request.url.scheme == "https" or bool(os.getenv("VERCEL")))
-    return response
 
 
 def provider():
@@ -278,13 +264,20 @@ def validated_wav(raw):
     return output.getvalue()
 
 
-def create_voice(owner, raw):
+def create_voice(owner, raw, archive=False):
     wav = validated_wav(raw)
     store = get_store()
     reference = secrets.token_hex(12)
     with provider() as client:
         if not store.create(owner, reference):
             fail(409, "이미 목소리를 등록 중이거나 등록했습니다. 현재 상태를 확인해 주세요.")
+        if archive:
+            try:
+                store.archive.consent(reference, wav)
+            except StoreUnavailable:
+                # No provider request has been made. Retrying enrollment is safe.
+                store.clear(owner, reference, ("creating",))
+                raise
         # Reserve before sending. A lost response never triggers a second upload.
         response = client.post("/v1/voices/add", data={"name": voice_name(reference)},
                                files=[("files", ("sample.wav", wav, "audio/wav"))])
@@ -309,7 +302,8 @@ async def enroll(request: Request):
         fail(403, "녹음한 본인의 목소리 등록 및 외부 전송에 동의해 주세요.")
     if request.headers.get("content-type", "").split(";")[0].strip() != "audio/wav":
         fail(415, "WAV 음성 녹음이 필요합니다.")
-    return await run_in_threadpool(create_voice, owner, await bounded_body(request, MAX_WAV))
+    return await run_in_threadpool(create_voice, owner, await bounded_body(request, MAX_WAV),
+                                   request.headers.get("x-research-consent") == "archive-v1")
 
 
 @app.delete("/api/voice")
@@ -321,6 +315,12 @@ def delete_voice(request: Request):
         return status_for(owner)
     if request.headers.get("x-voice-reference") != record.reference:
         fail(409, "현재 등록된 목소리가 바뀌었습니다. 상태를 다시 확인해 주세요.")
+    remove_record(store, record)
+    return status_for(owner)
+
+
+def remove_record(store, record):
+    owner = record.session_id
     with provider() as client:
         voice_id = record.voice_id
         if not voice_id:
@@ -329,7 +329,7 @@ def delete_voice(request: Request):
                 if time.time() - record.updated_at.timestamp() < SETTLE_TIME:
                     fail(409, "등록 결과를 확인 중입니다. 잠시 뒤 다시 확인해 주세요.")
                 store.clear(owner, record.reference, (record.state,))
-                return status_for(owner)
+                return
         if record.state != "deleting" and not store.transition(
                 owner, record.reference, (record.state,), "deleting", voice_id):
             fail(409, "목소리 상태가 변경되었습니다. 새로 확인해 주세요.")
@@ -340,7 +340,46 @@ def delete_voice(request: Request):
         elif checked_json(response).get("status") != "ok":
             provider_failure()
         store.clear(owner, record.reference, ("deleting",))
-    return status_for(owner)
+
+
+
+@app.delete("/api/research/voices/{reference}", dependencies=[Depends(require_researcher)])
+def researcher_remove(reference: str, request: Request):
+    check_origin(request)
+    store = get_store()
+    row = store.archive.by_reference(reference)
+    if not row:
+        fail(404, "해당 목소리를 찾을 수 없습니다.")
+    remove_record(store, VoiceRecord.from_row(row))
+    return Response(status_code=204)
+
+
+def ready_record(request):
+    owner = require_owner(request)
+    store = get_store()
+    record = store.get(owner)
+    if not record or record.reference != request.headers.get("x-voice-reference") or record.state != "ready":
+        fail(409, "현재 등록된 목소리를 다시 확인해 주세요.")
+    return store, record
+
+
+@app.post("/api/voice/archive-consent")
+def consent_existing(request: Request):
+    store, record = ready_record(request)
+    if request.headers.get("x-research-consent") != "archive-v1":
+        fail(403, "연구 보관 동의를 확인해 주세요.")
+    store.archive.consent(record.reference)
+    return Response(status_code=204)
+
+
+@app.post("/api/workspace/next")
+def next_workspace(request: Request):
+    store, record = ready_record(request)
+    if not store.archive.opted_in(record.reference):
+        fail(409, "연구 보관에 동의한 목소리만 남겨 두고 다음 녹음을 시작할 수 있습니다.")
+    response = Response(status_code=204)
+    set_workspace_cookie(response, request, secrets.token_hex(24))
+    return response
 
 
 def synthesize(owner, text, reference):
@@ -350,6 +389,7 @@ def synthesize(owner, text, reference):
         fail(409, "사용할 수 있는 목소리를 먼저 등록해 주세요.")
     if reference != record.reference:
         fail(409, "현재 등록된 목소리가 바뀌었습니다. 상태를 다시 확인해 주세요.")
+    archive = store.archive.opted_in(reference)
     with provider() as client, client.stream(
         "POST", f"/v1/text-to-speech/{record.voice_id}", params={"output_format": "mp3_44100_128"},
         headers={"Accept": "audio/mpeg"}, json={"text": text, "model_id": "eleven_multilingual_v2"},
@@ -370,21 +410,52 @@ def synthesize(owner, text, reference):
     current = store.get(owner)
     if not current or current.reference != record.reference or current.state != "ready":
         fail(409, "목소리가 삭제되거나 변경되어 재생을 중단했습니다.")
-    return Response(bytes(audio), media_type="audio/mpeg")
+    payload = bytes(audio)
+    archive_status = "off"
+    if archive:
+        try:
+            store.archive.save_speech(reference, text, payload)
+            archive_status = "saved"
+        except StoreUnavailable:
+            # A storage failure must not silently discard a paid synthesis.
+            current = store.get(owner)
+            if not current or current.state != "ready" or current.reference != reference:
+                fail(409, "목소리가 삭제되거나 변경되었습니다.")
+            archive_status = "failed"
+    return Response(payload, media_type="audio/mpeg", headers={"X-Favilium-Archive": archive_status})
+
+
+async def speech_text(request):
+    text = await string_field(request, "text", 16 * 1024)
+    if not text.strip() or len(text) > MAX_TEXT:
+        fail(422, f"재생할 문장을 1~{MAX_TEXT}자 이내로 입력해 주세요.")
+    return text
 
 
 @app.post("/api/speech")
 async def speech(request: Request):
     owner = require_owner(request)
-    text = await string_field(request, "text", 16 * 1024)
-    if not text.strip() or len(text) > MAX_TEXT:
-        fail(422, f"재생할 문장을 1~{MAX_TEXT}자 이내로 입력해 주세요.")
-    return await run_in_threadpool(synthesize, owner, text, request.headers.get("x-voice-reference"))
+    return await run_in_threadpool(synthesize, owner, await speech_text(request), request.headers.get("x-voice-reference"))
+
+
+@app.post("/api/research/voices/{reference}/speech", dependencies=[Depends(require_researcher)])
+async def researcher_speech(reference: str, request: Request):
+    check_origin(request)
+    text = await speech_text(request)
+    def create():
+        store = get_store()
+        row = store.archive.by_reference(reference)
+        if not row or not store.archive.opted_in(reference):
+            fail(403, "연구 보관에 동의한 목소리로만 안내 문장을 만들 수 있습니다.")
+        return synthesize(row["session_id"], text, reference)
+    return await run_in_threadpool(create)
 
 
 @app.get("/")
 @app.get("/studio")
 @app.get("/studio/")
+@app.get("/research")
+@app.get("/research/")
 def studio():
     path = DIST / "index.html"
     if not path.is_file() or not (DIST / "assets").is_dir():

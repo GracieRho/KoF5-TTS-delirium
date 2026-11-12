@@ -11,16 +11,25 @@ flowchart LR
   tts --> mp3["재생 및 MP3 저장"]
 
   subgraph code["코드 레이어"]
+    layer_http_utils["http_utils (1)"]
+    layer_research["research (1)"]
+    layer_research_store["research_store (1)"]
     layer_root["root (1)"]
     layer_voice_only["voice_only (1)"]
     layer_voice_store["voice_store (1)"]
+    layer_research --> layer_http_utils
+    layer_research --> layer_research_store
+    layer_research --> layer_voice_store
+    layer_voice_only --> layer_http_utils
+    layer_voice_only --> layer_research
     layer_voice_only --> layer_voice_store
+    layer_voice_store --> layer_research_store
   end
 ```
 
 ## 현재 카탈로그
 
-- Python 모듈: **3**
+- Python 모듈: **6**
 - 설정 파일: **0**
 - 프로젝트 실행 스크립트: **1**
 
@@ -29,8 +38,11 @@ flowchart LR
 | Module | Layer | Path | Internal imports |
 | --- | --- | --- | --- |
 | `kof5_tts` | root | `src/kof5_tts/__init__.py` | — |
-| `kof5_tts.voice_only` | voice_only | `src/kof5_tts/voice_only.py` | `kof5_tts.voice_store` |
-| `kof5_tts.voice_store` | voice_store | `src/kof5_tts/voice_store.py` | — |
+| `kof5_tts.http_utils` | http_utils | `src/kof5_tts/http_utils.py` | — |
+| `kof5_tts.research` | research | `src/kof5_tts/research.py` | `kof5_tts.http_utils`<br>`kof5_tts.research_store`<br>`kof5_tts.voice_store` |
+| `kof5_tts.research_store` | research_store | `src/kof5_tts/research_store.py` | — |
+| `kof5_tts.voice_only` | voice_only | `src/kof5_tts/voice_only.py` | `kof5_tts.http_utils`<br>`kof5_tts.research`<br>`kof5_tts.voice_store` |
+| `kof5_tts.voice_store` | voice_store | `src/kof5_tts/voice_store.py` | `kof5_tts.research_store` |
 
 ### 설정 파일
 

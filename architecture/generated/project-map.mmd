@@ -6,8 +6,17 @@ flowchart LR
   tts --> mp3["재생 및 MP3 저장"]
 
   subgraph code["코드 레이어"]
+    layer_http_utils["http_utils (1)"]
+    layer_research["research (1)"]
+    layer_research_store["research_store (1)"]
     layer_root["root (1)"]
     layer_voice_only["voice_only (1)"]
     layer_voice_store["voice_store (1)"]
+    layer_research --> layer_http_utils
+    layer_research --> layer_research_store
+    layer_research --> layer_voice_store
+    layer_voice_only --> layer_http_utils
+    layer_voice_only --> layer_research
     layer_voice_only --> layer_voice_store
+    layer_voice_store --> layer_research_store
   end
